@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(php artisan wayfinder:generate --with-form --no-interaction 2>&1)",
+      "PowerShell(php artisan test --compact tests/Feature/Queries/QueryShowTest.php tests/Feature/Queries/QueryRunTest.php)",
+      "PowerShell(npx prettier --write resources/js/pages/queries/show.tsx resources/js/pages/queries/index.tsx resources/js/components/queries/results-table.tsx 2>&1)",
+      "PowerShell(\"---ESLINT---\")"
+    ]
+  }
+}

@@ -15,7 +15,11 @@ type QueryRow = {
     can: { update: boolean };
 };
 
-export default function QueriesIndex({ queries: rows }: { queries: QueryRow[] }) {
+export default function QueriesIndex({
+    queries: rows,
+}: {
+    queries: QueryRow[];
+}) {
     return (
         <>
             <Head title="Requêtes" />
@@ -50,7 +54,9 @@ export default function QueriesIndex({ queries: rows }: { queries: QueryRow[] })
                         <table className="w-full text-left text-sm">
                             <thead className="border-b bg-muted/50 text-muted-foreground">
                                 <tr>
-                                    <th className="px-4 py-3 font-medium">Nom</th>
+                                    <th className="px-4 py-3 font-medium">
+                                        Nom
+                                    </th>
                                     <th className="px-4 py-3 font-medium">
                                         Chemin REST
                                     </th>
@@ -60,11 +66,17 @@ export default function QueriesIndex({ queries: rows }: { queries: QueryRow[] })
                                     <th className="px-4 py-3 font-medium">
                                         Propriétaire
                                     </th>
+                                    <th className="px-4 py-3 text-right font-medium">
+                                        Actions
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
                                 {rows.map((query) => (
-                                    <tr key={query.id} className="hover:bg-muted/40">
+                                    <tr
+                                        key={query.id}
+                                        className="hover:bg-muted/40"
+                                    >
                                         <td className="px-4 py-3">
                                             <div className="font-medium">
                                                 {query.name}
@@ -83,7 +95,8 @@ export default function QueriesIndex({ queries: rows }: { queries: QueryRow[] })
                                         <td className="px-4 py-3">
                                             <Badge
                                                 variant={
-                                                    query.visibility === 'shared'
+                                                    query.visibility ===
+                                                    'shared'
                                                         ? 'default'
                                                         : 'secondary'
                                                 }
@@ -95,6 +108,21 @@ export default function QueriesIndex({ queries: rows }: { queries: QueryRow[] })
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground">
                                             {query.owner}
+                                        </td>
+                                        <td className="px-4 py-3 text-right">
+                                            <Button
+                                                asChild
+                                                size="sm"
+                                                variant="outline"
+                                            >
+                                                <Link
+                                                    href={queries.show(
+                                                        query.id,
+                                                    )}
+                                                >
+                                                    Exécuter
+                                                </Link>
+                                            </Button>
                                         </td>
                                     </tr>
                                 ))}
