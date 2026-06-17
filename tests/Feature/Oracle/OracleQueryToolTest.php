@@ -46,8 +46,18 @@ test('run() executes a single GET with fields, q and orderBy', function () {
     });
 });
 
-test('expand drops the restrictive fields so child resources are not masked', function () {
-    Http::fake(['*' => Http::response(['items' => []])]);
+test('with fields and expand, Oracle gets expand and the parent is projected to the requested fields', function () {
+    Http::fake(['*' => Http::response([
+        'items' => [[
+            'SupplierId' => 300,
+            'SupplierPartyId' => 301,
+            'Supplier' => 'Acme',
+            'SupplierNumber' => '28784',
+            'addresses' => ['items' => [['AddressLine1' => '1 rue']]],
+            'sites' => ['items' => [['SiteName' => 'HQ']]],
+        ]],
+        'count' => 1,
+    ])]);
 
     $result = app(OracleQueryTool::class)->run('client_x', [
         'resource' => 'suppliers',
@@ -55,13 +65,41 @@ test('expand drops the restrictive fields so child resources are not masked', fu
         'expand' => ['addresses', 'sites'],
     ]);
 
+    $item = $result['items'][0];
+
+    // Oracle interdit fields+expand : on envoie expand (enfants complets), pas fields.
     expect($result['params'])->toHaveKey('expand', 'addresses,sites')
-        ->and($result['params'])->not->toHaveKey('fields');
+        ->and($result['params'])->not->toHaveKey('fields')
+        // Projection serveur : parent restreint aux champs demandés, enfants conservés.
+        ->and(array_keys($item))->toEqualCanonicalizing(['Supplier', 'SupplierNumber', 'addresses', 'sites'])
+        ->and($item)->not->toHaveKey('SupplierId')
+        ->and($item['addresses']['items'][0])->toHaveKey('AddressLine1');
 
     Http::assertSent(function ($request) {
         parse_str(parse_url($request->url(), PHP_URL_QUERY) ?: '', $query);
 
         return $query['expand'] === 'addresses,sites' && ! isset($query['fields']);
+    });
+});
+
+test('fields without expand are sent to Oracle and the parent is projected', function () {
+    Http::fake(['*' => Http::response([
+        'items' => [['SupplierId' => 1, 'Supplier' => 'Acme', 'SupplierNumber' => 'S-100']],
+        'count' => 1,
+    ])]);
+
+    $item = app(OracleQueryTool::class)->run('client_x', [
+        'resource' => 'suppliers',
+        'fields' => ['Supplier', 'SupplierNumber'],
+    ])['items'][0];
+
+    expect(array_keys($item))->toEqualCanonicalizing(['Supplier', 'SupplierNumber'])
+        ->and($item)->not->toHaveKey('SupplierId');
+
+    Http::assertSent(function ($request) {
+        parse_str(parse_url($request->url(), PHP_URL_QUERY) ?: '', $query);
+
+        return $query['fields'] === 'Supplier,SupplierNumber';
     });
 });
 

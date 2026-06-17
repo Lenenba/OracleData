@@ -43,6 +43,15 @@ class OracleQueryTool
         /** @var array<int, mixed> $items */
         $items = self::withoutLinks($payload['items'] ?? []);
 
+        // Oracle interdit `fields` + `expand` : quand les deux sont demandés on
+        // envoie `expand` (enfants complets) et on restreint le parent ici, en
+        // ne gardant que les champs demandés + les enfants imbriqués.
+        $requestedFields = $this->normalizeList($query['fields'] ?? null);
+        if ($requestedFields !== []) {
+            $keep = array_merge($requestedFields, $this->normalizeList($query['expand'] ?? null));
+            $items = $this->project($items, $keep);
+        }
+
         return [
             'resource' => $this->catalog->toSuggestion($resource),
             'path' => $resource['path'],
@@ -79,13 +88,17 @@ class OracleQueryTool
             $params['expand'] = implode(',', $expand);
         }
 
-        // Oracle masque les ressources enfants (`expand`) dès qu'on restreint
-        // les attributs avec `fields` : on n'applique donc `fields` qu'en
-        // l'absence d'expand, sinon les enfants demandés disparaîtraient.
+        // `fields` est toujours validé contre le catalogue, mais n'est envoyé à
+        // Oracle qu'en l'absence d'`expand` (les deux sont incompatibles côté
+        // Oracle). Avec expand, la restriction du parent est faite par projection
+        // après réception (voir run()).
         $fields = $this->normalizeList($query['fields'] ?? null);
-        if ($fields !== [] && $expand === []) {
+        if ($fields !== []) {
             $this->assertKnown($fields, $allowedFields, 'champ', $resource['key']);
-            $params['fields'] = implode(',', $fields);
+
+            if ($expand === []) {
+                $params['fields'] = implode(',', $fields);
+            }
         }
 
         $orderBy = isset($query['orderBy']) ? trim((string) $query['orderBy']) : '';
@@ -165,6 +178,23 @@ class OracleQueryTool
                 throw new InvalidArgumentException("Le {$label} « {$value} » n'existe pas pour la ressource [{$resourceKey}].");
             }
         }
+    }
+
+    /**
+     * Restreint chaque ligne aux seules clés demandées (champs parent + enfants).
+     *
+     * @param  array<int, mixed>  $items
+     * @param  list<string>  $keep
+     * @return array<int, mixed>
+     */
+    protected function project(array $items, array $keep): array
+    {
+        $allowed = array_flip($keep);
+
+        return array_map(
+            fn ($item) => is_array($item) ? array_intersect_key($item, $allowed) : $item,
+            $items,
+        );
     }
 
     /**
