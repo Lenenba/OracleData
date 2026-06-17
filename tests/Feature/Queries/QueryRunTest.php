@@ -93,7 +93,9 @@ test('a single-resource request is resolved by the LLM and previewed', function 
 
         parse_str(parse_url($request->url(), PHP_URL_QUERY) ?: '', $query);
 
-        return $query['fields'] === 'Supplier,SupplierNumber'
+        // expand demandé → fields est volontairement abandonné (sinon Oracle
+        // masque les enfants contacts/sites).
+        return ! isset($query['fields'])
             && $query['expand'] === 'contacts,sites'
             && $query['q'] === "Status='ACTIVE'"
             && $query['limit'] === '5';

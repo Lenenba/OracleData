@@ -102,7 +102,9 @@ Réponds STRICTEMENT par un seul objet JSON, sans texte autour, selon l'un de ce
 1. Une seule ressource suffit (filtres, tri, sélection de champs, enfants imbriqués) :
 {"mode":"single","query":{"resource":"<clé>","fields":["..."],"q":"<finder Oracle>","orderBy":"Champ:asc","expand":["enfant"],"limit":<entier>,"offset":<entier>}}
 - "fields", "q", "orderBy", "expand", "offset" sont optionnels ; n'inclus que ce qui est demandé.
-- "q" suit la syntaxe finder Oracle, ex : Status='ACTIVE' AND Supplier LIKE '%Acme%'.
+- Données rattachées demandées (adresses, sites, contacts, lignes…) → mets-les dans "expand" et N'UTILISE PAS "fields" (sinon Oracle masque les enfants).
+- "q" suit la syntaxe finder Oracle. Mets TOUJOURS les valeurs entre apostrophes, y compris les numéros identifiants car ce sont des chaînes : SupplierNumber='28784', Status='ACTIVE', Supplier LIKE '%Acme%'.
+- Pour « le fournisseur 28784 » → q sur le numéro identifiant quoté, et expand des enfants demandés.
 - limite par défaut : {$defaultLimit}.
 
 2. La demande lie plusieurs ressources ou exige une analyse/agrégation :

@@ -173,7 +173,8 @@ class QueryController extends Controller
             return response()->json($this->basePayload($tenant, 'single', $e->getMessage()));
         }
 
-        $items = $payload['items'] ?? [];
+        /** @var array<int, mixed> $items */
+        $items = (array) OracleQueryTool::withoutLinks($payload['items'] ?? []);
 
         return response()->json(array_replace($this->basePayload($tenant, 'single'), [
             'items' => $items,

@@ -15,7 +15,7 @@ beforeEach(function () {
     ]);
 });
 
-test('run() executes a single GET with fields, expand, q and orderBy', function () {
+test('run() executes a single GET with fields, q and orderBy', function () {
     Http::fake(['*' => Http::response([
         'items' => [['Supplier' => 'Acme', 'SupplierNumber' => 'S-100']],
         'count' => 1,
@@ -25,7 +25,6 @@ test('run() executes a single GET with fields, expand, q and orderBy', function 
     $result = app(OracleQueryTool::class)->run('client_x', [
         'resource' => 'suppliers',
         'fields' => ['Supplier', 'SupplierNumber'],
-        'expand' => ['contacts', 'sites'],
         'q' => "Status='ACTIVE' AND Supplier LIKE '%Acme%'",
         'orderBy' => 'Supplier:asc',
         'limit' => 5,
@@ -34,19 +33,61 @@ test('run() executes a single GET with fields, expand, q and orderBy', function 
     expect($result['count'])->toBe(1)
         ->and($result['items'])->toHaveCount(1)
         ->and($result['resource']['key'])->toBe('suppliers')
-        ->and($result['params']['fields'])->toBe('Supplier,SupplierNumber')
-        ->and($result['params']['expand'])->toBe('contacts,sites');
+        ->and($result['params']['fields'])->toBe('Supplier,SupplierNumber');
 
     Http::assertSent(function ($request) {
         parse_str(parse_url($request->url(), PHP_URL_QUERY) ?: '', $query);
 
         return str_starts_with($request->url(), 'https://client-x.fa.oraclecloud.com/fscmRestApi/resources/11.13.18.05/suppliers')
             && $query['fields'] === 'Supplier,SupplierNumber'
-            && $query['expand'] === 'contacts,sites'
             && $query['q'] === "Status='ACTIVE' AND Supplier LIKE '%Acme%'"
             && $query['orderBy'] === 'Supplier:asc'
             && $query['limit'] === '5';
     });
+});
+
+test('expand drops the restrictive fields so child resources are not masked', function () {
+    Http::fake(['*' => Http::response(['items' => []])]);
+
+    $result = app(OracleQueryTool::class)->run('client_x', [
+        'resource' => 'suppliers',
+        'fields' => ['Supplier', 'SupplierNumber'],
+        'expand' => ['addresses', 'sites'],
+    ]);
+
+    expect($result['params'])->toHaveKey('expand', 'addresses,sites')
+        ->and($result['params'])->not->toHaveKey('fields');
+
+    Http::assertSent(function ($request) {
+        parse_str(parse_url($request->url(), PHP_URL_QUERY) ?: '', $query);
+
+        return $query['expand'] === 'addresses,sites' && ! isset($query['fields']);
+    });
+});
+
+test('run() strips Oracle HATEOAS links from items, including nested children', function () {
+    Http::fake(['*' => Http::response([
+        'items' => [[
+            'Supplier' => 'Acme',
+            'addresses' => [
+                'items' => [['AddressLine1' => '1 rue', 'links' => [['rel' => 'self']]]],
+                'links' => [['rel' => 'self']],
+            ],
+            'links' => [['rel' => 'self'], ['rel' => 'canonical']],
+        ]],
+        'count' => 1,
+    ])]);
+
+    $item = app(OracleQueryTool::class)->run('client_x', [
+        'resource' => 'suppliers',
+        'expand' => ['addresses'],
+    ])['items'][0];
+
+    expect($item)->not->toHaveKey('links')
+        ->and($item)->toHaveKey('Supplier')
+        ->and($item['addresses'])->not->toHaveKey('links')
+        ->and($item['addresses']['items'][0])->not->toHaveKey('links')
+        ->and($item['addresses']['items'][0])->toHaveKey('AddressLine1');
 });
 
 test('an unknown resource is rejected before any Oracle call', function () {

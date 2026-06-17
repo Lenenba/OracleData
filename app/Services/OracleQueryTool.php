@@ -39,7 +39,9 @@ class OracleQueryTool
         $params = $this->buildParameters($resource, $query);
 
         $payload = $this->fusion->tenant($tenantKey)->get($resource['path'], $params);
-        $items = $payload['items'] ?? [];
+
+        /** @var array<int, mixed> $items */
+        $items = self::withoutLinks($payload['items'] ?? []);
 
         return [
             'resource' => $this->catalog->toSuggestion($resource),
@@ -71,16 +73,19 @@ class OracleQueryTool
             $params['offset'] = max(0, (int) $query['offset']);
         }
 
-        $fields = $this->normalizeList($query['fields'] ?? null);
-        if ($fields !== []) {
-            $this->assertKnown($fields, $allowedFields, 'champ', $resource['key']);
-            $params['fields'] = implode(',', $fields);
-        }
-
         $expand = $this->normalizeList($query['expand'] ?? null);
         if ($expand !== []) {
             $this->assertKnown($expand, $allowedChildren, 'ressource enfant (expand)', $resource['key']);
             $params['expand'] = implode(',', $expand);
+        }
+
+        // Oracle masque les ressources enfants (`expand`) dès qu'on restreint
+        // les attributs avec `fields` : on n'applique donc `fields` qu'en
+        // l'absence d'expand, sinon les enfants demandés disparaîtraient.
+        $fields = $this->normalizeList($query['fields'] ?? null);
+        if ($fields !== [] && $expand === []) {
+            $this->assertKnown($fields, $allowedFields, 'champ', $resource['key']);
+            $params['fields'] = implode(',', $fields);
         }
 
         $orderBy = isset($query['orderBy']) ? trim((string) $query['orderBy']) : '';
@@ -160,5 +165,25 @@ class OracleQueryTool
                 throw new InvalidArgumentException("Le {$label} « {$value} » n'existe pas pour la ressource [{$resourceKey}].");
             }
         }
+    }
+
+    /**
+     * Retire récursivement les liens HATEOAS (`links`) de la réponse Oracle :
+     * chaque ligne et chaque ressource enfant en porte un, inutile à l'affichage
+     * et coûteux en tokens pour l'agent.
+     */
+    public static function withoutLinks(mixed $value): mixed
+    {
+        if (! is_array($value)) {
+            return $value;
+        }
+
+        unset($value['links']);
+
+        foreach ($value as $key => $inner) {
+            $value[$key] = self::withoutLinks($inner);
+        }
+
+        return $value;
     }
 }
