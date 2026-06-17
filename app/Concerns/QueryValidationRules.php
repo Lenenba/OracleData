@@ -20,13 +20,16 @@ trait QueryValidationRules
     {
         return [
             'name' => ['required', 'string', 'max:255'],
-            'description' => ['nullable', 'string', 'max:1000'],
-            'resource_path' => ['required', 'string', new AllowedResourcePath],
+            'description' => ['nullable', 'string', 'max:2000'],
+            'mode' => ['required', Rule::in(['single', 'agent'])],
+            'resource_path' => ['nullable', 'required_if:mode,single', 'string', new AllowedResourcePath],
             'tenant_key' => ['required', 'string', Rule::in(app(FusionManager::class)->keys())],
             'parameters' => ['nullable', 'array'],
             'parameters.limit' => ['nullable', 'integer', 'min:1', 'max:500'],
-            'parameters.q' => ['nullable', 'string', 'max:1000'],
-            'parameters.fields' => ['nullable', 'string', 'max:1000'],
+            'parameters.q' => ['nullable', 'string', 'max:2000'],
+            'parameters.fields' => ['nullable', 'string', 'max:2000'],
+            'parameters.expand' => ['nullable', 'string', 'max:500'],
+            'parameters.orderBy' => ['nullable', 'string', 'max:500'],
             'parameters.offset' => ['nullable', 'integer', 'min:0'],
             'visibility' => ['required', 'in:private,shared'],
         ];

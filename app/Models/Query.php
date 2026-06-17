@@ -14,15 +14,16 @@ use Illuminate\Support\Carbon;
  * @property int $user_id
  * @property string $name
  * @property string|null $description
- * @property string $resource_path
+ * @property string|null $resource_path
  * @property string|null $tenant_key
+ * @property string $mode
  * @property array<string, mixed>|null $parameters
  * @property string $visibility
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read User $user
  */
-#[Fillable(['name', 'description', 'resource_path', 'tenant_key', 'parameters', 'visibility'])]
+#[Fillable(['name', 'description', 'resource_path', 'tenant_key', 'mode', 'parameters', 'visibility'])]
 class Query extends Model
 {
     /** @use HasFactory<QueryFactory> */

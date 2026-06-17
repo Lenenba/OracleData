@@ -38,25 +38,56 @@ test('an authenticated user can store a query', function () {
         ->and($query->visibility)->toBe('private');
 });
 
-test('an authenticated user can store a natural language supplier query', function () {
+test('an authenticated user can store a resolved single supplier query', function () {
     $user = User::factory()->create();
 
     $response = $this->actingAs($user)->post(route('queries.store'), [
-        'intent' => 'Je veux la liste des fournisseurs',
-        'tenant_key' => 'client_y',
-        'parameters' => ['limit' => 10],
+        'name' => 'Fournisseurs actifs Acme',
+        'description' => 'Donne-moi les 5 fournisseurs actifs dont le nom contient Acme',
+        'mode' => 'single',
+        'resource_path' => '/fscmRestApi/resources/11.13.18.05/suppliers',
+        'tenant_key' => 'client_x',
+        'parameters' => [
+            'limit' => 5,
+            'q' => "Status='ACTIVE' AND Supplier LIKE '%Acme%'",
+            'fields' => 'Supplier,SupplierNumber',
+        ],
+        'visibility' => 'private',
     ]);
 
     $response->assertSessionHasNoErrors()->assertRedirect(route('queries.index'));
 
     $query = Query::sole();
     expect($query->user_id)->toBe($user->id)
-        ->and($query->name)->toBe('Liste des fournisseurs')
-        ->and($query->description)->toBe('Je veux la liste des fournisseurs')
+        ->and($query->mode)->toBe('single')
         ->and($query->resource_path)->toBe('/fscmRestApi/resources/11.13.18.05/suppliers')
-        ->and($query->tenant_key)->toBe('client_y')
-        ->and($query->parameters)->toBe(['limit' => 10])
-        ->and($query->visibility)->toBe('private');
+        ->and($query->tenant_key)->toBe('client_x')
+        ->and($query->parameters)->toBe([
+            'limit' => 5,
+            'q' => "Status='ACTIVE' AND Supplier LIKE '%Acme%'",
+            'fields' => 'Supplier,SupplierNumber',
+        ]);
+});
+
+test('an authenticated user can store an agent analysis query without a resource path', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->post(route('queries.store'), [
+        'name' => 'Total facturé par fournisseur',
+        'description' => 'Lier les fournisseurs et les factures et donner le total facturé par fournisseur',
+        'mode' => 'agent',
+        'tenant_key' => 'client_x',
+        'visibility' => 'shared',
+    ]);
+
+    $response->assertSessionHasNoErrors()->assertRedirect(route('queries.index'));
+
+    $query = Query::sole();
+    expect($query->mode)->toBe('agent')
+        ->and($query->resource_path)->toBeNull()
+        ->and($query->parameters)->toBeNull()
+        ->and($query->description)->toContain('factures')
+        ->and($query->visibility)->toBe('shared');
 });
 
 test('a name is required', function () {

@@ -2,84 +2,123 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Str;
-
+/**
+ * Catalogue des ressources Oracle Fusion REST accessibles en lecture.
+ *
+ * Source unique de vérité : sert à la fois de contexte fourni au LLM
+ * (ressources et champs disponibles), de liste blanche de validation
+ * (un champ/ressource hors catalogue est rejeté avant tout appel Oracle),
+ * et de suggestions pour l'UI.
+ *
+ * @phpstan-type resource array{
+ *     key: string,
+ *     label: string,
+ *     description: string,
+ *     domain: string,
+ *     method: string,
+ *     path: string,
+ *     keywords: list<string>,
+ *     fields: list<string>,
+ *     preview_fields: list<string>,
+ *     child_resources: list<string>,
+ *     join_keys: array<string, string>
+ * }
+ */
 class OracleResourceCatalog
 {
     /**
-     * Oracle Fusion REST resources that can be selected from natural language.
+     * Ressources Oracle Fusion REST déclarées (lecture seule, GET).
      *
-     * @return list<array{
-     *     key: string,
-     *     label: string,
-     *     description: string,
-     *     domain: string,
-     *     method: string,
-     *     path: string,
-     *     keywords: list<string>,
-     *     preview_fields: list<string>
-     * }>
+     * @return list<resource>
      */
     public function all(): array
     {
         return [
             [
                 'key' => 'suppliers',
-                'label' => 'Liste des fournisseurs',
-                'description' => 'Fournisseurs Oracle Procurement',
+                'label' => 'Fournisseurs',
+                'description' => 'Fournisseurs Oracle Procurement, avec leurs sites, contacts et adresses.',
                 'domain' => 'Procurement',
                 'method' => 'GET',
                 'path' => '/fscmRestApi/resources/11.13.18.05/suppliers',
-                'keywords' => [
-                    'fournisseur',
-                    'fournisseurs',
-                    'supplier',
-                    'suppliers',
-                    'vendeur',
-                    'vendeurs',
-                    'vendor',
-                    'vendors',
-                ],
+                'keywords' => ['fournisseur', 'fournisseurs', 'supplier', 'suppliers', 'vendeur', 'vendor', 'achat', 'procurement'],
+                'fields' => ['SupplierId', 'Supplier', 'SupplierNumber', 'Status', 'SupplierType', 'BusinessRelationship', 'TaxOrganizationType', 'CreationDate'],
                 'preview_fields' => ['SupplierId', 'Supplier', 'SupplierNumber', 'Status'],
+                'child_resources' => ['sites', 'contacts', 'addresses'],
+                'join_keys' => ['invoices' => 'SupplierId', 'purchase_orders' => 'SupplierId'],
             ],
             [
                 'key' => 'workers',
-                'label' => 'Liste des employés',
-                'description' => 'Employés Oracle HCM',
+                'label' => 'Employés',
+                'description' => 'Employés Oracle HCM (personnes et affectations).',
                 'domain' => 'HCM',
                 'method' => 'GET',
                 'path' => '/hcmRestApi/resources/11.13.18.05/workers',
-                'keywords' => [
-                    'employe',
-                    'employes',
-                    'employé',
-                    'employés',
-                    'worker',
-                    'workers',
-                    'collaborateur',
-                    'collaborateurs',
-                    'personnel',
-                    'salarie',
-                    'salaries',
-                    'salarié',
-                    'salariés',
-                ],
+                'keywords' => ['employe', 'employes', 'employé', 'employés', 'worker', 'workers', 'collaborateur', 'personnel', 'salarie', 'salarié', 'rh'],
+                'fields' => ['PersonId', 'PersonNumber', 'DisplayName', 'WorkEmail', 'HireDate', 'PersonType'],
                 'preview_fields' => ['PersonId', 'PersonNumber', 'DisplayName', 'WorkEmail'],
+                'child_resources' => ['assignments', 'addresses', 'emails', 'phones', 'names'],
+                'join_keys' => [],
+            ],
+            [
+                'key' => 'invoices',
+                'label' => 'Factures fournisseurs',
+                'description' => 'Factures fournisseurs Oracle Payables (AP).',
+                'domain' => 'Finance',
+                'method' => 'GET',
+                'path' => '/fscmRestApi/resources/11.13.18.05/invoices',
+                'keywords' => ['facture', 'factures', 'invoice', 'invoices', 'payable', 'payables', 'comptes fournisseurs'],
+                'fields' => ['InvoiceId', 'InvoiceNumber', 'InvoiceAmount', 'InvoiceDate', 'Supplier', 'SupplierId', 'InvoiceCurrency', 'PaymentStatus'],
+                'preview_fields' => ['InvoiceId', 'InvoiceNumber', 'InvoiceAmount', 'InvoiceDate', 'Supplier'],
+                'child_resources' => ['invoiceLines', 'invoiceInstallments'],
+                'join_keys' => ['suppliers' => 'SupplierId'],
+            ],
+            [
+                'key' => 'purchase_orders',
+                'label' => 'Bons de commande',
+                'description' => 'Bons de commande Oracle Procurement (PO).',
+                'domain' => 'Procurement',
+                'method' => 'GET',
+                'path' => '/fscmRestApi/resources/11.13.18.05/purchaseOrders',
+                'keywords' => ['bon de commande', 'bons de commande', 'commande', 'commandes', 'purchase order', 'purchase orders', 'po'],
+                'fields' => ['POHeaderId', 'OrderNumber', 'Supplier', 'SupplierId', 'Status', 'CurrencyCode', 'CreationDate'],
+                'preview_fields' => ['POHeaderId', 'OrderNumber', 'Supplier', 'Status'],
+                'child_resources' => ['lines', 'schedules', 'distributions'],
+                'join_keys' => ['suppliers' => 'SupplierId'],
             ],
         ];
     }
 
     /**
-     * @return list<array{
-     *     key: string,
-     *     label: string,
-     *     description: string,
-     *     domain: string,
-     *     method: string,
-     *     path: string,
-     *     keywords: list<string>,
-     *     preview_fields: list<string>
-     * }>
+     * Clés de ressources connues (liste blanche).
+     *
+     * @return list<string>
+     */
+    public function keys(): array
+    {
+        return array_map(fn (array $resource): string => $resource['key'], $this->all());
+    }
+
+    /**
+     * Ressource par clé, ou null si inconnue.
+     *
+     * @return resource|null
+     */
+    public function find(string $key): ?array
+    {
+        foreach ($this->all() as $resource) {
+            if ($resource['key'] === $key) {
+                return $resource;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Suggestions allégées pour l'UI (création de requête).
+     *
+     * @return list<array<string, mixed>>
      */
     public function suggestions(): array
     {
@@ -90,77 +129,10 @@ class OracleResourceCatalog
     }
 
     /**
-     * @return array{
-     *     key: string,
-     *     label: string,
-     *     description: string,
-     *     domain: string,
-     *     method: string,
-     *     path: string,
-     *     keywords: list<string>,
-     *     preview_fields: list<string>
-     * }|null
-     */
-    public function match(string $intent): ?array
-    {
-        $normalizedIntent = $this->normalize($intent);
-
-        if ($normalizedIntent === '') {
-            return null;
-        }
-
-        foreach ($this->all() as $resource) {
-            foreach ($resource['keywords'] as $keyword) {
-                if (str_contains($normalizedIntent, $this->normalize($keyword))) {
-                    return $resource;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * @return array{name: string, description: string, resource_path: string, parameters: array{limit: int}, visibility: string}|null
-     */
-    public function draft(string $intent, mixed $limit = null): ?array
-    {
-        $resource = $this->match($intent);
-
-        if ($resource === null) {
-            return null;
-        }
-
-        return [
-            'name' => $resource['label'],
-            'description' => trim($intent),
-            'resource_path' => $resource['path'],
-            'parameters' => ['limit' => $this->clampLimit($limit)],
-            'visibility' => 'private',
-        ];
-    }
-
-    /**
-     * @param  array{
-     *     key: string,
-     *     label: string,
-     *     description: string,
-     *     domain: string,
-     *     method: string,
-     *     path: string,
-     *     keywords: list<string>,
-     *     preview_fields: list<string>
-     * }  $resource
-     * @return array{
-     *     key: string,
-     *     label: string,
-     *     description: string,
-     *     domain: string,
-     *     method: string,
-     *     path: string,
-     *     keywords: list<string>,
-     *     preview_fields: list<string>
-     * }
+     * Projection non sensible d'une ressource pour le front / les réponses JSON.
+     *
+     * @param  resource  $resource
+     * @return array<string, mixed>
      */
     public function toSuggestion(array $resource): array
     {
@@ -173,24 +145,47 @@ class OracleResourceCatalog
             'path' => $resource['path'],
             'keywords' => $resource['keywords'],
             'preview_fields' => $resource['preview_fields'],
+            'fields' => $resource['fields'],
+            'child_resources' => $resource['child_resources'],
         ];
     }
 
+    /**
+     * Description compacte du catalogue fournie au LLM comme contexte.
+     */
+    public function context(): string
+    {
+        $lines = [];
+
+        foreach ($this->all() as $resource) {
+            $lines[] = sprintf(
+                "- %s (clé: %s, domaine: %s) — %s\n  champs: %s\n  enfants (expand): %s\n  jointures: %s",
+                $resource['label'],
+                $resource['key'],
+                $resource['domain'],
+                $resource['description'],
+                implode(', ', $resource['fields']),
+                $resource['child_resources'] === [] ? '(aucun)' : implode(', ', $resource['child_resources']),
+                $resource['join_keys'] === []
+                    ? '(aucune)'
+                    : implode(', ', array_map(
+                        fn (string $field, string $target): string => "{$target} via {$field}",
+                        $resource['join_keys'],
+                        array_keys($resource['join_keys']),
+                    )),
+            );
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * Borne la limite de lignes dans [1, 500] (défaut 25).
+     */
     public function clampLimit(mixed $limit): int
     {
         $parsed = is_numeric($limit) ? (int) $limit : 25;
 
         return min(500, max(1, $parsed));
-    }
-
-    private function normalize(string $value): string
-    {
-        $normalized = preg_replace(
-            '/[^a-z0-9]+/',
-            ' ',
-            Str::ascii(Str::lower($value)),
-        );
-
-        return trim($normalized ?? '');
     }
 }

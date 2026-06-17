@@ -4,10 +4,8 @@ namespace App\Http\Requests;
 
 use App\Concerns\QueryValidationRules;
 use App\Services\FusionManager;
-use App\Services\OracleResourceCatalog;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Str;
 
 class StoreQueryRequest extends FormRequest
 {
@@ -22,37 +20,17 @@ class StoreQueryRequest extends FormRequest
     }
 
     /**
-     * Allow the simplified UI to submit a natural-language intent instead of
-     * making the user type the Oracle REST path manually.
+     * The form submits the query already resolved by the preview step; here we
+     * only fill safe defaults for fields the UI may leave implicit.
      */
     protected function prepareForValidation(): void
     {
-        if (! $this->filled('tenant_key')) {
-            $this->merge([
-                'tenant_key' => app(FusionManager::class)->defaultKey(),
-            ]);
-        }
-
-        if ($this->filled('resource_path')) {
-            return;
-        }
-
-        $intent = trim((string) $this->input('intent', ''));
-
-        if ($intent === '') {
-            return;
-        }
-
-        $limit = data_get($this->input('parameters', []), 'limit', 25);
-        $catalog = app(OracleResourceCatalog::class);
-        $draft = $catalog->draft($intent, $limit);
-
         $this->merge([
-            'name' => $draft['name'] ?? Str::limit($intent, 80, ''),
-            'description' => $intent,
-            'resource_path' => $draft['resource_path'] ?? '',
-            'parameters' => $draft['parameters'] ?? ['limit' => $catalog->clampLimit($limit)],
+            'mode' => $this->input('mode', 'single'),
             'visibility' => $this->input('visibility', 'private'),
+            'tenant_key' => $this->filled('tenant_key')
+                ? $this->input('tenant_key')
+                : app(FusionManager::class)->defaultKey(),
         ]);
     }
 

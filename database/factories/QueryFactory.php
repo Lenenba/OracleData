@@ -24,9 +24,23 @@ class QueryFactory extends Factory
             'description' => fake()->optional()->sentence(),
             'resource_path' => '/hcmRestApi/resources/11.13.18.05/workers',
             'tenant_key' => 'client_x',
+            'mode' => 'single',
             'parameters' => ['limit' => 25],
             'visibility' => 'private',
         ];
+    }
+
+    /**
+     * Indicate that the query is a multi-resource analysis run by the agent.
+     */
+    public function agent(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'mode' => 'agent',
+            'resource_path' => null,
+            'parameters' => null,
+            'description' => 'Lier les fournisseurs et les factures et analyser le total facturé.',
+        ]);
     }
 
     /**
