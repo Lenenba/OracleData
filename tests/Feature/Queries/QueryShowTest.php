@@ -6,7 +6,7 @@ use Inertia\Testing\AssertableInertia as Assert;
 
 test('the owner can view the show page with tenant options', function () {
     $user = User::factory()->create();
-    $query = Query::factory()->for($user)->create();
+    $query = Query::factory()->for($user)->create(['tenant_key' => 'client_y']);
 
     $this->actingAs($user)
         ->get(route('queries.show', $query))
@@ -14,8 +14,10 @@ test('the owner can view the show page with tenant options', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->component('queries/show')
             ->where('query.id', $query->id)
+            ->where('query.tenant_key', 'client_y')
+            ->where('defaultTenant', 'client_y')
             ->has('tenants')
-            ->has('defaultTenant'));
+        );
 });
 
 test('a shared query is viewable by another user', function () {

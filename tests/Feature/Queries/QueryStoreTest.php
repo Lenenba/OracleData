@@ -23,6 +23,7 @@ test('an authenticated user can store a query', function () {
         'name' => 'Liste des employés',
         'description' => 'Tous les workers HCM',
         'resource_path' => '/hcmRestApi/resources/11.13.18.05/workers',
+        'tenant_key' => 'client_x',
         'parameters' => ['limit' => 25],
         'visibility' => 'private',
     ]);
@@ -32,7 +33,29 @@ test('an authenticated user can store a query', function () {
     $query = Query::sole();
     expect($query->user_id)->toBe($user->id)
         ->and($query->name)->toBe('Liste des employés')
+        ->and($query->tenant_key)->toBe('client_x')
         ->and($query->parameters)->toBe(['limit' => 25])
+        ->and($query->visibility)->toBe('private');
+});
+
+test('an authenticated user can store a natural language supplier query', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->post(route('queries.store'), [
+        'intent' => 'Je veux la liste des fournisseurs',
+        'tenant_key' => 'client_y',
+        'parameters' => ['limit' => 10],
+    ]);
+
+    $response->assertSessionHasNoErrors()->assertRedirect(route('queries.index'));
+
+    $query = Query::sole();
+    expect($query->user_id)->toBe($user->id)
+        ->and($query->name)->toBe('Liste des fournisseurs')
+        ->and($query->description)->toBe('Je veux la liste des fournisseurs')
+        ->and($query->resource_path)->toBe('/fscmRestApi/resources/11.13.18.05/suppliers')
+        ->and($query->tenant_key)->toBe('client_y')
+        ->and($query->parameters)->toBe(['limit' => 10])
         ->and($query->visibility)->toBe('private');
 });
 
@@ -77,6 +100,17 @@ test('visibility must be private or shared', function () {
             'visibility' => 'public',
         ])
         ->assertInvalid('visibility');
+});
+
+test('tenant_key must be configured', function () {
+    $this->actingAs(User::factory()->create())
+        ->post(route('queries.store'), [
+            'name' => 'Bad tenant',
+            'resource_path' => '/fscmRestApi/resources/11.13.18.05/invoices',
+            'tenant_key' => 'unknown',
+            'visibility' => 'private',
+        ])
+        ->assertInvalid('tenant_key');
 });
 
 test('unknown parameter keys are stripped before saving', function () {

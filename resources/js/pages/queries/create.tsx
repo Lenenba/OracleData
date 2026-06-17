@@ -1,9 +1,20 @@
 import { Form, Head } from '@inertiajs/react';
 import Heading from '@/components/heading';
 import { QueryForm } from '@/components/queries/query-form';
+import type { ResourceSuggestion } from '@/components/queries/query-form';
 import queries from '@/routes/queries';
 
-export default function CreateQuery() {
+type CreateQueryProps = {
+    resourceSuggestions: ResourceSuggestion[];
+    tenants: Record<string, string>;
+    defaultTenant: string;
+};
+
+export default function CreateQuery({
+    resourceSuggestions,
+    tenants,
+    defaultTenant,
+}: CreateQueryProps) {
     return (
         <>
             <Head title="Nouvelle requête" />
@@ -11,7 +22,7 @@ export default function CreateQuery() {
             <div className="px-4 py-6">
                 <Heading
                     title="Nouvelle requête"
-                    description="Enregistrez une requête Oracle Fusion à réutiliser et partager."
+                    description="Décrivez les données Oracle à consulter, puis vérifiez l'aperçu avant d'enregistrer."
                 />
 
                 <Form {...queries.store.form()} className="max-w-2xl">
@@ -20,6 +31,9 @@ export default function CreateQuery() {
                             errors={errors}
                             processing={processing}
                             submitLabel="Enregistrer"
+                            resourceSuggestions={resourceSuggestions}
+                            tenants={tenants}
+                            defaultTenant={defaultTenant}
                         />
                     )}
                 </Form>

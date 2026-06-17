@@ -10,6 +10,10 @@ type QueryRow = {
     name: string;
     description: string | null;
     resource_path: string;
+    tenant: {
+        key: string | null;
+        label: string | null;
+    };
     visibility: 'private' | 'shared';
     owner: string;
     can: { update: boolean };
@@ -61,6 +65,9 @@ export default function QueriesIndex({
                                         Chemin REST
                                     </th>
                                     <th className="px-4 py-3 font-medium">
+                                        Tenant
+                                    </th>
+                                    <th className="px-4 py-3 font-medium">
                                         Visibilité
                                     </th>
                                     <th className="px-4 py-3 font-medium">
@@ -91,6 +98,13 @@ export default function QueriesIndex({
                                             <code className="text-xs">
                                                 {query.resource_path}
                                             </code>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <Badge variant="outline">
+                                                {query.tenant.label ??
+                                                    query.tenant.key ??
+                                                    '-'}
+                                            </Badge>
                                         </td>
                                         <td className="px-4 py-3">
                                             <Badge

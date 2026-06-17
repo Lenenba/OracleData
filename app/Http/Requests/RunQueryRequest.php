@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Services\FusionManager;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -28,7 +29,7 @@ class RunQueryRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'tenant' => ['required', 'string', Rule::in(array_keys(config('fusion.tenants', [])))],
+            'tenant' => ['nullable', 'string', Rule::in(app(FusionManager::class)->keys())],
         ];
     }
 

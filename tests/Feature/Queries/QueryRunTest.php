@@ -45,6 +45,33 @@ test('the owner can run a query and receives items with metadata', function () {
         ->assertJsonCount(2, 'items');
 });
 
+test('a natural language supplier query can be previewed', function () {
+    Http::fake(['*' => Http::response([
+        'items' => [
+            ['SupplierId' => 100, 'Supplier' => 'Acme'],
+            ['SupplierId' => 101, 'Supplier' => 'Globex'],
+        ],
+        'count' => 2,
+        'hasMore' => false,
+    ])]);
+
+    $this->actingAs(User::factory()->create())
+        ->postJson(route('queries.preview'), [
+            'intent' => 'Je veux la liste des fournisseurs',
+            'tenant' => 'client_x',
+            'parameters' => ['limit' => 2],
+        ])
+        ->assertOk()
+        ->assertJsonPath('tenant', 'client_x')
+        ->assertJsonPath('resource.path', '/fscmRestApi/resources/11.13.18.05/suppliers')
+        ->assertJsonPath('count', 2)
+        ->assertJsonPath('error', null)
+        ->assertJsonCount(2, 'items');
+
+    Http::assertSent(fn ($request) => str_starts_with($request->url(), 'https://client-x.fa.oraclecloud.com/fscmRestApi/resources/11.13.18.05/suppliers')
+        && str_contains($request->url(), 'limit=2'));
+});
+
 test('running targets the selected tenant base url', function () {
     Http::fake([
         'client-x.fa.oraclecloud.com/*' => Http::response(['items' => [['t' => 'x']]]),
@@ -62,13 +89,19 @@ test('running targets the selected tenant base url', function () {
     Http::assertSent(fn ($request) => str_starts_with($request->url(), 'https://client-y.fa.oraclecloud.com'));
 });
 
-test('a tenant is required', function () {
+test('running falls back to the query tenant when none is submitted', function () {
+    Http::fake([
+        'client-y.fa.oraclecloud.com/*' => Http::response(['items' => [['t' => 'saved']]]),
+    ]);
+
     $user = User::factory()->create();
-    $query = Query::factory()->for($user)->create();
+    $query = Query::factory()->for($user)->create(['tenant_key' => 'client_y']);
 
     $this->actingAs($user)
         ->postJson(route('queries.run', $query), [])
-        ->assertJsonValidationErrors('tenant');
+        ->assertOk()
+        ->assertJsonPath('tenant', 'client_y')
+        ->assertJsonPath('items.0.t', 'saved');
 });
 
 test('an unknown tenant is rejected', function () {

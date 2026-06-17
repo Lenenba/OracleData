@@ -28,6 +28,10 @@ class FusionClient
      */
     public function get(string $path, array $query = []): array
     {
+        if ($this->baseUrl === '') {
+            throw new RuntimeException("L'URL Oracle Fusion de cet environnement n'est pas configurée.");
+        }
+
         try {
             return Http::withBasicAuth($this->username, $this->password)
                 ->baseUrl($this->baseUrl)

@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
+import { readCsrfToken } from '@/lib/csrf';
 import queries from '@/routes/queries';
 
 type QueryDetail = {
@@ -22,6 +23,7 @@ type QueryDetail = {
     name: string;
     description: string | null;
     resource_path: string;
+    tenant_key: string | null;
     parameters: Record<string, unknown>;
     visibility: 'private' | 'shared';
     can: { update: boolean };
@@ -41,12 +43,6 @@ type ShowProps = {
     defaultTenant: string;
 };
 
-function readCsrfToken(): string {
-    const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
-
-    return match ? decodeURIComponent(match[1]) : '';
-}
-
 export default function ShowQuery({
     query,
     tenants,
@@ -54,9 +50,11 @@ export default function ShowQuery({
 }: ShowProps) {
     const tenantKeys = Object.keys(tenants);
     const [tenant, setTenant] = useState(
-        tenantKeys.includes(defaultTenant)
-            ? defaultTenant
-            : (tenantKeys[0] ?? ''),
+        query.tenant_key && tenantKeys.includes(query.tenant_key)
+            ? query.tenant_key
+            : tenantKeys.includes(defaultTenant)
+              ? defaultTenant
+              : (tenantKeys[0] ?? ''),
     );
     const [status, setStatus] = useState<'idle' | 'loading' | 'done'>('idle');
     const [result, setResult] = useState<RunResult | null>(null);
@@ -121,6 +119,11 @@ export default function ShowQuery({
                         }
                     >
                         {query.visibility === 'shared' ? 'Partagée' : 'Privée'}
+                    </Badge>
+                    <Badge variant="outline">
+                        {tenants[query.tenant_key ?? ''] ??
+                            query.tenant_key ??
+                            'Aucun tenant'}
                     </Badge>
                     <code className="text-xs">{query.resource_path}</code>
                 </div>

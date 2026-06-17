@@ -23,6 +23,7 @@ class QueryFactory extends Factory
             'name' => fake()->sentence(3),
             'description' => fake()->optional()->sentence(),
             'resource_path' => '/hcmRestApi/resources/11.13.18.05/workers',
+            'tenant_key' => 'client_x',
             'parameters' => ['limit' => 25],
             'visibility' => 'private',
         ];
