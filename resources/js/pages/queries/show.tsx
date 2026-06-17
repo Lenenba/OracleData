@@ -1,8 +1,8 @@
 import { Head } from '@inertiajs/react';
 import { useState } from 'react';
-import AlertError from '@/components/alert-error';
 import Heading from '@/components/heading';
-import { ResultsTable } from '@/components/queries/results-table';
+import { QueryResultView } from '@/components/queries/query-result';
+import type { QueryResult } from '@/components/queries/query-result';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -22,19 +22,12 @@ type QueryDetail = {
     id: number;
     name: string;
     description: string | null;
-    resource_path: string;
+    resource_path: string | null;
     tenant_key: string | null;
+    mode: 'single' | 'agent';
     parameters: Record<string, unknown>;
     visibility: 'private' | 'shared';
     can: { update: boolean };
-};
-
-type RunResult = {
-    tenant: string;
-    items: Record<string, unknown>[];
-    count: number;
-    hasMore: boolean;
-    error: string | null;
 };
 
 type ShowProps = {
@@ -57,12 +50,14 @@ export default function ShowQuery({
               : (tenantKeys[0] ?? ''),
     );
     const [status, setStatus] = useState<'idle' | 'loading' | 'done'>('idle');
-    const [result, setResult] = useState<RunResult | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [result, setResult] = useState<QueryResult | null>(null);
+    const [fetchError, setFetchError] = useState<string | null>(null);
+
+    const tenantLabel = tenants[result?.tenant ?? tenant] ?? tenant;
 
     async function run() {
         setStatus('loading');
-        setError(null);
+        setFetchError(null);
         setResult(null);
 
         try {
@@ -78,11 +73,13 @@ export default function ShowQuery({
                 body: JSON.stringify({ tenant }),
             });
 
-            if (!response.ok) {
-                const data = await response.json().catch(() => null);
-                setError(
-                    data?.errors?.tenant?.[0] ??
-                        data?.message ??
+            const data = (await response
+                .json()
+                .catch(() => null)) as QueryResult | null;
+
+            if (!response.ok || data === null) {
+                setFetchError(
+                    (data as { message?: string } | null)?.message ??
                         "Échec de l'exécution de la requête.",
                 );
                 setStatus('done');
@@ -90,12 +87,12 @@ export default function ShowQuery({
                 return;
             }
 
-            const data: RunResult = await response.json();
             setResult(data);
-            setError(data.error);
             setStatus('done');
         } catch {
-            setError('Erreur réseau lors de la communication avec le serveur.');
+            setFetchError(
+                'Erreur réseau lors de la communication avec le serveur.',
+            );
             setStatus('done');
         }
     }
@@ -121,11 +118,16 @@ export default function ShowQuery({
                         {query.visibility === 'shared' ? 'Partagée' : 'Privée'}
                     </Badge>
                     <Badge variant="outline">
+                        {query.mode === 'agent' ? 'Analyse' : 'Requête'}
+                    </Badge>
+                    <Badge variant="outline">
                         {tenants[query.tenant_key ?? ''] ??
                             query.tenant_key ??
                             'Aucun tenant'}
                     </Badge>
-                    <code className="text-xs">{query.resource_path}</code>
+                    {query.resource_path && (
+                        <code className="text-xs">{query.resource_path}</code>
+                    )}
                 </div>
 
                 <div className="flex flex-wrap items-end gap-3 rounded-xl border p-4">
@@ -162,29 +164,33 @@ export default function ShowQuery({
                     </div>
                 )}
 
-                {status === 'done' && error && (
-                    <AlertError title="La requête a échoué" errors={[error]} />
+                {status === 'done' && fetchError && (
+                    <QueryResultView
+                        result={
+                            {
+                                mode: query.mode,
+                                tenant,
+                                resource: null,
+                                parameters: null,
+                                columns: null,
+                                analysis: null,
+                                items: [],
+                                count: 0,
+                                hasMore: false,
+                                oracleCalls: [],
+                                clarification: null,
+                                error: fetchError,
+                            } satisfies QueryResult
+                        }
+                        tenantLabel={tenantLabel}
+                    />
                 )}
 
-                {status === 'done' && !error && result && (
-                    <div className="space-y-3">
-                        <p className="text-sm text-muted-foreground">
-                            {result.count} résultat(s) depuis{' '}
-                            <span className="font-medium text-foreground">
-                                {tenants[result.tenant] ?? result.tenant}
-                            </span>
-                            {result.hasMore &&
-                                ' (plus de résultats disponibles)'}
-                        </p>
-
-                        {result.items.length === 0 ? (
-                            <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-                                Aucun résultat pour cette requête.
-                            </div>
-                        ) : (
-                            <ResultsTable items={result.items} />
-                        )}
-                    </div>
+                {status === 'done' && !fetchError && result && (
+                    <QueryResultView
+                        result={result}
+                        tenantLabel={tenantLabel}
+                    />
                 )}
             </div>
         </>
