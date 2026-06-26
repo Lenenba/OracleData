@@ -136,7 +136,7 @@ html.dark { background-color: oklch(0.2 0.018 282); }
 
 ## 4. Logo — wordmark
 
-`resources/js/components/app-logo.tsx` : remplacer le texte « Laravel Starter Kit » par « OracleData ». Garder la structure (carré primaire + icône). Wordmark visé : **Oracle** en gras + **Data** en `text-muted-foreground` (ou même couleur, au choix), cohérent avec la maquette validée.
+`resources/js/components/app-logo.tsx` : remplacer le texte « Laravel Starter Kit » par « OracleData ». Garder la structure (carré primaire + icône). Wordmark figé (conforme à la maquette validée) : **Oracle** en `font-semibold` couleur de texte normale + **Data** en `text-muted-foreground`, dans un seul `<span>` (ex. `Oracle<span className="text-muted-foreground">Data</span>`).
 
 ## 5. Icône — glyphe cylindre
 
