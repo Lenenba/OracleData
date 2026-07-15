@@ -1,4 +1,8 @@
+import { Eye, Save } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import InputError from '@/components/input-error';
+import { QueryResultView } from '@/components/queries/query-result';
+import type { QueryResult } from '@/components/queries/query-result';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,17 +13,32 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Spinner } from '@/components/ui/spinner';
+import { Textarea } from '@/components/ui/textarea';
+import { readCsrfToken } from '@/lib/csrf';
+import queries from '@/routes/queries';
+
+const DEFAULT_LIMIT = 25;
+
+export type ResourceSuggestion = {
+    key: string;
+    label: string;
+    description: string;
+    domain: string;
+    method: string;
+    path: string;
+    keywords: string[];
+    preview_fields: string[];
+    fields?: string[];
+    child_resources?: string[];
+};
 
 export type QueryFormDefaults = {
     name?: string;
     description?: string | null;
-    resource_path?: string;
-    parameters?: {
-        limit?: number | null;
-        q?: string | null;
-        fields?: string | null;
-    } | null;
-    visibility?: 'private' | 'shared';
+    tenant_key?: string | null;
+    parameters?: { limit?: number | null } | null;
 };
 
 type QueryFormProps = {
@@ -27,123 +46,294 @@ type QueryFormProps = {
     processing: boolean;
     submitLabel: string;
     defaults?: QueryFormDefaults;
+    resourceSuggestions: ResourceSuggestion[];
+    tenants: Record<string, string>;
+    defaultTenant: string;
 };
+
+function parseLimit(value: string): number {
+    const parsed = Number.parseInt(value, 10);
+
+    if (Number.isNaN(parsed)) {
+        return DEFAULT_LIMIT;
+    }
+
+    return Math.min(500, Math.max(1, parsed));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
+}
+
+function readError(data: unknown): string {
+    if (isRecord(data)) {
+        if (typeof data.message === 'string') {
+            return data.message;
+        }
+
+        if (typeof data.error === 'string') {
+            return data.error;
+        }
+    }
+
+    return "Impossible de préparer l'aperçu pour le moment.";
+}
 
 export function QueryForm({
     errors,
     processing,
     submitLabel,
     defaults,
+    tenants,
+    defaultTenant,
 }: QueryFormProps) {
-    const parameters = defaults?.parameters ?? undefined;
+    const tenantKeys = useMemo(() => Object.keys(tenants), [tenants]);
+    const [selectedTenant, setSelectedTenant] = useState(() =>
+        tenantKeys.includes(defaultTenant)
+            ? defaultTenant
+            : (defaults?.tenant_key ?? tenantKeys[0] ?? ''),
+    );
+    const [intent, setIntent] = useState(defaults?.description ?? '');
+    const [name, setName] = useState(defaults?.name ?? '');
+    const [limitValue, setLimitValue] = useState(
+        String(defaults?.parameters?.limit ?? DEFAULT_LIMIT),
+    );
+    const [status, setStatus] = useState<'idle' | 'loading' | 'done'>('idle');
+    const [result, setResult] = useState<QueryResult | null>(null);
+    const [fetchError, setFetchError] = useState<string | null>(null);
+
+    const limit = useMemo(() => parseLimit(limitValue), [limitValue]);
+    const tenantLabel = tenants[selectedTenant] ?? selectedTenant;
+
+    const isSaveable =
+        result !== null &&
+        !result.error &&
+        !fetchError &&
+        (result.mode === 'single'
+            ? result.resource !== null
+            : result.mode === 'agent');
+
+    const resolvedName =
+        name.trim() !== ''
+            ? name.trim()
+            : (result?.resource?.label ?? intent.trim().slice(0, 80));
+
+    const parameters: Record<string, unknown> =
+        result?.mode === 'single' && isRecord(result.parameters)
+            ? result.parameters
+            : {};
+
+    async function preview() {
+        if (intent.trim() === '' || selectedTenant === '') {
+            return;
+        }
+
+        setStatus('loading');
+        setFetchError(null);
+        setResult(null);
+
+        try {
+            const response = await fetch(queries.preview.url(), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-XSRF-TOKEN': readCsrfToken(),
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    intent: intent.trim(),
+                    tenant: selectedTenant,
+                    parameters: { limit },
+                }),
+            });
+
+            const data = (await response
+                .json()
+                .catch(() => null)) as QueryResult | null;
+
+            if (!response.ok || data === null) {
+                setFetchError(readError(data));
+                setStatus('done');
+
+                return;
+            }
+
+            setResult(data);
+
+            if (name.trim() === '' && data.resource) {
+                setName(data.resource.label);
+            }
+
+            setStatus('done');
+        } catch {
+            setFetchError("Erreur réseau lors de la préparation de l'aperçu.");
+            setStatus('done');
+        }
+    }
 
     return (
-        <div className="space-y-6">
-            <div className="grid gap-2">
-                <Label htmlFor="name">Nom</Label>
-                <Input
-                    id="name"
-                    name="name"
+        <div className="flex flex-col gap-6">
+            {/* Champs soumis à l'enregistrement, dérivés de l'aperçu résolu. */}
+            <input type="hidden" name="name" value={resolvedName} />
+            <input type="hidden" name="description" value={intent.trim()} />
+            <input type="hidden" name="mode" value={result?.mode ?? 'single'} />
+            <input
+                type="hidden"
+                name="resource_path"
+                value={result?.resource?.path ?? ''}
+            />
+            <input type="hidden" name="tenant_key" value={selectedTenant} />
+            <input type="hidden" name="visibility" value="private" />
+            {Object.entries(parameters).map(([key, value]) => (
+                <input
+                    key={key}
+                    type="hidden"
+                    name={`parameters[${key}]`}
+                    value={String(value)}
+                />
+            ))}
+
+            <div className="flex flex-col gap-2">
+                <Label htmlFor="intent">Demande</Label>
+                <Textarea
+                    id="intent"
                     required
-                    defaultValue={defaults?.name}
-                    placeholder="Liste des employés"
+                    rows={4}
+                    value={intent}
+                    onChange={(event) => setIntent(event.target.value)}
+                    placeholder="Ex : liste des fournisseurs avec leur numéro, leurs contacts et leurs sites"
+                    aria-invalid={Boolean(
+                        errors.description ?? errors.resource_path,
+                    )}
                 />
-                <InputError message={errors.name} />
+                <InputError
+                    message={errors.description ?? errors.resource_path}
+                />
             </div>
 
-            <div className="grid gap-2">
-                <Label htmlFor="description">Description</Label>
-                <textarea
-                    id="description"
-                    name="description"
-                    rows={3}
-                    defaultValue={defaults?.description ?? ''}
-                    placeholder="À quoi sert cette requête ?"
-                    className="flex min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive md:text-sm"
-                />
-                <InputError message={errors.description} />
-            </div>
-
-            <div className="grid gap-2">
-                <Label htmlFor="resource_path">Chemin REST Fusion</Label>
-                <Input
-                    id="resource_path"
-                    name="resource_path"
-                    required
-                    defaultValue={defaults?.resource_path}
-                    placeholder="/hcmRestApi/resources/11.13.18.05/workers"
-                />
-                <InputError message={errors.resource_path} />
-                <p className="text-xs text-muted-foreground">
-                    Doit commencer par <code>/hcmRestApi/</code> ou{' '}
-                    <code>/fscmRestApi/</code>.
-                </p>
-            </div>
-
-            <fieldset className="grid gap-4 rounded-lg border p-4">
-                <legend className="px-1 text-sm font-medium">Paramètres</legend>
-
-                <div className="grid gap-2">
+            <div className="flex flex-wrap items-end gap-4">
+                <div className="flex max-w-44 flex-col gap-2">
                     <Label htmlFor="parameters-limit">Limite</Label>
                     <Input
                         id="parameters-limit"
-                        name="parameters[limit]"
-                        type="number"
+                        inputMode="numeric"
                         min={1}
                         max={500}
-                        defaultValue={parameters?.limit ?? 25}
+                        type="number"
+                        value={limitValue}
+                        onBlur={() => setLimitValue(String(limit))}
+                        onChange={(event) => setLimitValue(event.target.value)}
+                        aria-invalid={Boolean(errors['parameters.limit'])}
                     />
                     <InputError message={errors['parameters.limit']} />
                 </div>
 
-                <div className="grid gap-2">
-                    <Label htmlFor="parameters-q">Filtre (q)</Label>
-                    <Input
-                        id="parameters-q"
-                        name="parameters[q]"
-                        defaultValue={parameters?.q ?? ''}
-                        placeholder={'DisplayName LIKE "A%"'}
-                    />
-                    <InputError message={errors['parameters.q']} />
+                <div className="flex max-w-xs flex-1 flex-col gap-2">
+                    <Label htmlFor="tenant_key">Tenant Oracle</Label>
+                    <Select
+                        value={selectedTenant}
+                        onValueChange={setSelectedTenant}
+                        disabled={tenantKeys.length === 0}
+                    >
+                        <SelectTrigger
+                            id="tenant_key"
+                            className="w-full"
+                            aria-invalid={Boolean(errors.tenant_key)}
+                        >
+                            <SelectValue placeholder="Choisir un tenant" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {tenantKeys.map((key) => (
+                                <SelectItem key={key} value={key}>
+                                    {tenants[key]}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <InputError message={errors.tenant_key} />
                 </div>
 
-                <div className="grid gap-2">
-                    <Label htmlFor="parameters-fields">Champs (fields)</Label>
-                    <Input
-                        id="parameters-fields"
-                        name="parameters[fields]"
-                        defaultValue={parameters?.fields ?? ''}
-                        placeholder="PersonId,DisplayName"
-                    />
-                    <InputError message={errors['parameters.fields']} />
-                </div>
-            </fieldset>
-
-            <div className="grid gap-2">
-                <Label htmlFor="visibility">Visibilité</Label>
-                <Select
-                    name="visibility"
-                    defaultValue={defaults?.visibility ?? 'private'}
+                <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={preview}
+                    disabled={
+                        status === 'loading' ||
+                        intent.trim() === '' ||
+                        selectedTenant === ''
+                    }
                 >
-                    <SelectTrigger id="visibility" className="w-full">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="private">
-                            Privée — visible par moi seul
-                        </SelectItem>
-                        <SelectItem value="shared">
-                            Partagée — visible par tous
-                        </SelectItem>
-                    </SelectContent>
-                </Select>
-                <InputError message={errors.visibility} />
+                    {status === 'loading' ? (
+                        <Spinner data-icon="inline-start" />
+                    ) : (
+                        <Eye data-icon="inline-start" />
+                    )}
+                    Prévisualiser
+                </Button>
             </div>
 
-            <div className="flex items-center gap-4">
-                <Button type="submit" disabled={processing}>
+            <div className="flex flex-col gap-2">
+                <Label htmlFor="name">Nom de la requête</Label>
+                <Input
+                    id="name"
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    placeholder={result?.resource?.label ?? 'Nom à enregistrer'}
+                    aria-invalid={Boolean(errors.name)}
+                />
+                <InputError message={errors.name} />
+            </div>
+
+            {status === 'loading' && (
+                <div className="flex flex-col gap-2">
+                    <Skeleton className="h-9 w-full" />
+                    <Skeleton className="h-9 w-full" />
+                    <Skeleton className="h-9 w-full" />
+                </div>
+            )}
+
+            {fetchError && (
+                <QueryResultView
+                    result={
+                        {
+                            mode: 'single',
+                            tenant: selectedTenant,
+                            resource: null,
+                            parameters: null,
+                            columns: null,
+                            analysis: null,
+                            items: [],
+                            count: 0,
+                            hasMore: false,
+                            oracleCalls: [],
+                            clarification: null,
+                            error: fetchError,
+                        } satisfies QueryResult
+                    }
+                    tenantLabel={tenantLabel}
+                />
+            )}
+
+            {status === 'done' && !fetchError && result && (
+                <QueryResultView result={result} tenantLabel={tenantLabel} />
+            )}
+
+            <div className="flex flex-wrap items-center gap-3">
+                <Button type="submit" disabled={processing || !isSaveable}>
+                    {processing ? (
+                        <Spinner data-icon="inline-start" />
+                    ) : (
+                        <Save data-icon="inline-start" />
+                    )}
                     {submitLabel}
                 </Button>
+                <p className="text-sm text-muted-foreground">
+                    {isSaveable
+                        ? `Prête à enregistrer pour ${tenantLabel}.`
+                        : "Prévisualisez d'abord pour vérifier le résultat."}
+                </p>
             </div>
         </div>
     );

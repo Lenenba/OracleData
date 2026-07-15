@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\OracleTenant;
 use App\Services\FusionClient;
 use App\Services\FusionManager;
 use Illuminate\Support\Facades\Http;
@@ -57,6 +58,28 @@ test('available() returns configured tenant keys and labels', function () {
         'client_x' => 'Client X (Production)',
         'client_y' => 'Client Y',
     ]);
+});
+
+test('database tenants are available and can become the default tenant', function () {
+    OracleTenant::factory()->default()->create([
+        'key' => 'client_z',
+        'label' => 'Client Z',
+        'base_url' => 'https://client-z.fa.oraclecloud.com',
+        'username' => 'svc_z',
+        'password' => 'secret_z',
+    ]);
+
+    Http::fake(['*' => Http::response(['items' => []])]);
+
+    $manager = app(FusionManager::class);
+
+    expect($manager->defaultKey())->toBe('client_z')
+        ->and($manager->available())->toHaveKey('client_z', 'Client Z');
+
+    $manager->default()->get('/hcmRestApi/resources/11.13.18.05/workers');
+
+    Http::assertSent(fn ($request) => str_starts_with($request->url(), 'https://client-z.fa.oraclecloud.com')
+        && $request->hasHeader('Authorization', 'Basic '.base64_encode('svc_z:secret_z')));
 });
 
 test('has() reflects configured tenants', function () {

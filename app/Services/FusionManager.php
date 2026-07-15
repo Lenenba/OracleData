@@ -2,14 +2,18 @@
 
 namespace App\Services;
 
+use App\Models\OracleTenant;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
+use Throwable;
 
 /**
- * Résout un {@see FusionClient} par tenant (client) à partir de `config/fusion.php`.
+ * Résout un {@see FusionClient} par tenant (client).
  *
  * Multi-tenant : chaque client possède son propre environnement Oracle Fusion
  * (URL + compte de service). Le tenant cible est choisi à l'exécution.
+ * Les tenants en base priment sur `config/fusion.php`, qui reste un fallback.
  */
 class FusionManager
 {
@@ -39,7 +43,7 @@ class FusionManager
      */
     public function default(): FusionClient
     {
-        return $this->tenant((string) config('fusion.default'));
+        return $this->tenant($this->defaultKey());
     }
 
     /**
@@ -47,7 +51,37 @@ class FusionManager
      */
     public function has(string $key): bool
     {
-        return is_array(config("fusion.tenants.{$key}"));
+        return array_key_exists($key, $this->tenants());
+    }
+
+    /**
+     * Clé du tenant par défaut, ou le premier disponible.
+     */
+    public function defaultKey(): string
+    {
+        foreach ($this->databaseTenants() as $key => $tenant) {
+            if ($tenant['is_default'] ?? false) {
+                return $key;
+            }
+        }
+
+        $configuredDefault = (string) config('fusion.default');
+
+        if ($configuredDefault !== '' && $this->has($configuredDefault)) {
+            return $configuredDefault;
+        }
+
+        return (string) array_key_first($this->tenants());
+    }
+
+    /**
+     * Liste des clés de tenants utilisables pour la validation.
+     *
+     * @return array<int, string>
+     */
+    public function keys(): array
+    {
+        return array_keys($this->tenants());
     }
 
     /**
@@ -57,12 +91,44 @@ class FusionManager
      */
     public function available(): array
     {
-        /** @var array<string, array{label?: string}> $tenants */
-        $tenants = config('fusion.tenants', []);
-
-        return (new Collection($tenants))
+        return (new Collection($this->tenants()))
             ->map(fn (array $config, string $key): string => $config['label'] ?? $key)
             ->all();
+    }
+
+    /**
+     * Détails non sensibles des tenants pour la page de configuration.
+     *
+     * @return array<int, array{key: string, label: string, base_url: string, username: string, source: string, is_default: bool, is_active: bool}>
+     */
+    public function details(): array
+    {
+        return (new Collection($this->tenants()))
+            ->map(fn (array $config, string $key): array => [
+                'key' => $key,
+                'label' => (string) ($config['label'] ?? $key),
+                'base_url' => (string) ($config['base_url'] ?? ''),
+                'username' => (string) ($config['username'] ?? ''),
+                'source' => $config['source'] ?? 'config',
+                'is_default' => $key === $this->defaultKey(),
+                'is_active' => (bool) ($config['is_active'] ?? true),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Libellé d'un tenant.
+     */
+    public function label(?string $key): ?string
+    {
+        if ($key === null || $key === '') {
+            return null;
+        }
+
+        $tenant = $this->tenants()[$key] ?? null;
+
+        return $tenant['label'] ?? $key;
     }
 
     /**
@@ -71,12 +137,75 @@ class FusionManager
     protected function build(string $key): FusionClient
     {
         /** @var array{base_url?: string, username?: string, password?: string} $config */
-        $config = config("fusion.tenants.{$key}");
+        $config = $this->tenants()[$key];
 
         return new FusionClient(
             baseUrl: (string) ($config['base_url'] ?? ''),
             username: (string) ($config['username'] ?? ''),
             password: (string) ($config['password'] ?? ''),
         );
+    }
+
+    /**
+     * Configuration fusion combinée : config locale + tenants enregistrés.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    protected function tenants(): array
+    {
+        return array_replace($this->configuredTenants(), $this->databaseTenants());
+    }
+
+    /**
+     * Tenants déclarés dans config/fusion.php.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    protected function configuredTenants(): array
+    {
+        /** @var array<string, array<string, mixed>> $tenants */
+        $tenants = config('fusion.tenants', []);
+
+        return (new Collection($tenants))
+            ->map(fn (array $config): array => [
+                ...$config,
+                'source' => 'config',
+                'is_active' => true,
+            ])
+            ->all();
+    }
+
+    /**
+     * Tenants actifs enregistrés en base.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    protected function databaseTenants(): array
+    {
+        try {
+            if (! Schema::hasTable('oracle_tenants')) {
+                return [];
+            }
+
+            return OracleTenant::query()
+                ->where('is_active', true)
+                ->orderByDesc('is_default')
+                ->orderBy('label')
+                ->get()
+                ->mapWithKeys(fn (OracleTenant $tenant): array => [
+                    $tenant->key => [
+                        'label' => $tenant->label,
+                        'base_url' => $tenant->base_url,
+                        'username' => $tenant->username,
+                        'password' => $tenant->password,
+                        'source' => 'database',
+                        'is_default' => $tenant->is_default,
+                        'is_active' => $tenant->is_active,
+                    ],
+                ])
+                ->all();
+        } catch (Throwable) {
+            return [];
+        }
     }
 }
