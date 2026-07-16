@@ -95,6 +95,7 @@ export function QueryForm({
     );
     const [intent, setIntent] = useState(defaults?.description ?? '');
     const [name, setName] = useState(defaults?.name ?? '');
+    const [visibility, setVisibility] = useState<'private' | 'shared'>('private');
     const [limitValue, setLimitValue] = useState(
         String(defaults?.parameters?.limit ?? DEFAULT_LIMIT),
     );
@@ -284,6 +285,32 @@ export function QueryForm({
                     aria-invalid={Boolean(errors.name)}
                 />
                 <InputError message={errors.name} />
+            </div>
+
+            <div className="flex flex-col gap-2">
+                <Label>Visibilité</Label>
+                <div className="flex gap-4">
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                        <input
+                            type="radio"
+                            name="_visibility_ui"
+                            value="private"
+                            checked={visibility === 'private'}
+                            onChange={() => setVisibility('private')}
+                        />
+                        Privée — visible uniquement par moi
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                        <input
+                            type="radio"
+                            name="_visibility_ui"
+                            value="shared"
+                            checked={visibility === 'shared'}
+                            onChange={() => setVisibility('shared')}
+                        />
+                        Partagée — visible par tous
+                    </label>
+                </div>
             </div>
 
             {status === 'loading' && (

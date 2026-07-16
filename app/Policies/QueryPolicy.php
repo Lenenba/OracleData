@@ -14,4 +14,12 @@ class QueryPolicy
     {
         return $query->visibility === 'shared' || $user->id === $query->user_id;
     }
+
+    /**
+     * Only the owner may update or delete the query.
+     */
+    public function update(User $user, Query $query): bool
+    {
+        return $user->id === $query->user_id;
+    }
 }

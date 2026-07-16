@@ -22,6 +22,7 @@ use Inertia\Inertia;
 use Inertia\Response;
 use InvalidArgumentException;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class QueryController extends Controller
 {
@@ -97,6 +98,42 @@ class QueryController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Requête enregistrée.')]);
 
         return to_route('queries.index');
+    }
+
+    /**
+     * Delete a query owned by the current user.
+     */
+    public function destroy(Request $request, Query $query): RedirectResponse
+    {
+        Gate::authorize('update', $query);
+
+        $query->delete();
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Requête supprimée.')]);
+
+        return to_route('queries.index');
+    }
+
+    /**
+     * Toggle the visibility of a query (private ↔ shared).
+     */
+    public function updateVisibility(Request $request, Query $query): SymfonyResponse
+    {
+        Gate::authorize('update', $query);
+
+        $validated = $request->validate([
+            'visibility' => ['required', 'in:private,shared'],
+        ]);
+
+        $query->update(['visibility' => $validated['visibility']]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['visibility' => $query->visibility]);
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Visibilité mise à jour.')]);
+
+        return back();
     }
 
     /**
@@ -193,7 +230,7 @@ class QueryController extends Controller
     {
         try {
             $result = $tool->run($tenant, $query);
-        } catch (InvalidArgumentException|RuntimeException $e) {
+        } catch (InvalidArgumentException $e) {
             return $this->basePayload($tenant, 'single', $e->getMessage());
         }
 

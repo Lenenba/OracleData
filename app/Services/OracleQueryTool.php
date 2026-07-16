@@ -159,8 +159,7 @@ class OracleQueryTool
     {
         preg_match_all('/([A-Za-z_][A-Za-z0-9_]*)\s*(?:>=|<=|!=|=|>|<|\bLIKE\b)/i', $q, $matches);
 
-        /** @var list<string> $fields */
-        $fields = $matches[1] ?? [];
+        $fields = $matches[1];
 
         return array_values(array_unique($fields));
     }

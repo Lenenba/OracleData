@@ -1,8 +1,12 @@
-import { Head, Link } from '@inertiajs/react';
-import { Plus } from 'lucide-react';
+import { Head, Link, router } from '@inertiajs/react';
+import { Plus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import Heading from '@/components/heading';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Spinner } from '@/components/ui/spinner';
+import { readCsrfToken } from '@/lib/csrf';
 import queries from '@/routes/queries';
 
 type QueryRow = {
@@ -20,11 +24,107 @@ type QueryRow = {
     can: { update: boolean };
 };
 
+function VisibilityToggle({
+    query,
+    onToggle,
+}: {
+    query: QueryRow;
+    onToggle: (id: number, newVisibility: 'private' | 'shared') => void;
+}) {
+    const [loading, setLoading] = useState(false);
+
+    async function toggle() {
+        setLoading(true);
+        const next: 'private' | 'shared' =
+            query.visibility === 'shared' ? 'private' : 'shared';
+
+        try {
+            await fetch(queries.visibility.url(query.id), {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-XSRF-TOKEN': readCsrfToken(),
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({ visibility: next }),
+            });
+            onToggle(query.id, next);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    if (!query.can.update) {
+        return (
+            <Badge
+                variant={
+                    query.visibility === 'shared' ? 'default' : 'secondary'
+                }
+            >
+                {query.visibility === 'shared' ? 'Partagée' : 'Privée'}
+            </Badge>
+        );
+    }
+
+    return (
+        <button
+            type="button"
+            onClick={toggle}
+            disabled={loading}
+            className="inline-flex items-center gap-1"
+            title="Cliquez pour changer la visibilité"
+        >
+            {loading ? (
+                <Spinner className="size-3" />
+            ) : (
+                <Badge
+                    variant={
+                        query.visibility === 'shared' ? 'default' : 'secondary'
+                    }
+                    className="cursor-pointer hover:opacity-80"
+                >
+                    {query.visibility === 'shared' ? 'Partagée' : 'Privée'}
+                </Badge>
+            )}
+        </button>
+    );
+}
+
 export default function QueriesIndex({
-    queries: rows,
+    queries: initialRows,
 }: {
     queries: QueryRow[];
 }) {
+    const [rows, setRows] = useState<QueryRow[]>(initialRows);
+    const [search, setSearch] = useState('');
+
+    const filtered = rows.filter(
+        (q) =>
+            q.name.toLowerCase().includes(search.toLowerCase()) ||
+            (q.description ?? '').toLowerCase().includes(search.toLowerCase()),
+    );
+
+    function handleVisibilityToggle(
+        id: number,
+        newVisibility: 'private' | 'shared',
+    ) {
+        setRows((prev) =>
+            prev.map((q) =>
+                q.id === id ? { ...q, visibility: newVisibility } : q,
+            ),
+        );
+    }
+
+    function deleteQuery(id: number) {
+        if (!confirm('Supprimer cette requête ? Cette action est irréversible.')) {
+            return;
+        }
+
+        router.delete(queries.destroy(id));
+    }
+
     return (
         <>
             <Head title="Requêtes" />
@@ -43,16 +143,29 @@ export default function QueriesIndex({
                     </Button>
                 </div>
 
-                {rows.length === 0 ? (
+                {rows.length > 0 && (
+                    <Input
+                        placeholder="Rechercher par nom ou description…"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="max-w-sm"
+                    />
+                )}
+
+                {filtered.length === 0 ? (
                     <div className="rounded-xl border border-dashed p-10 text-center">
                         <p className="text-sm text-muted-foreground">
-                            Aucune requête pour l'instant.
+                            {rows.length === 0
+                                ? 'Aucune requête pour l\'instant.'
+                                : 'Aucune requête ne correspond à votre recherche.'}
                         </p>
-                        <Button asChild className="mt-4" variant="outline">
-                            <Link href={queries.create()}>
-                                Créer ma première requête
-                            </Link>
-                        </Button>
+                        {rows.length === 0 && (
+                            <Button asChild className="mt-4" variant="outline">
+                                <Link href={queries.create()}>
+                                    Créer ma première requête
+                                </Link>
+                            </Button>
+                        )}
                     </div>
                 ) : (
                     <div className="overflow-x-auto rounded-xl border">
@@ -80,10 +193,15 @@ export default function QueriesIndex({
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
-                                {rows.map((query) => (
+                                {filtered.map((query) => (
                                     <tr
                                         key={query.id}
-                                        className="hover:bg-muted/40"
+                                        className="cursor-pointer hover:bg-muted/40"
+                                        onClick={() =>
+                                            router.visit(
+                                                queries.show(query.id),
+                                            )
+                                        }
                                     >
                                         <td className="px-4 py-3">
                                             <div className="font-medium">
@@ -113,37 +231,51 @@ export default function QueriesIndex({
                                                     '-'}
                                             </Badge>
                                         </td>
-                                        <td className="px-4 py-3">
-                                            <Badge
-                                                variant={
-                                                    query.visibility ===
-                                                    'shared'
-                                                        ? 'default'
-                                                        : 'secondary'
+                                        <td
+                                            className="px-4 py-3"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <VisibilityToggle
+                                                query={query}
+                                                onToggle={
+                                                    handleVisibilityToggle
                                                 }
-                                            >
-                                                {query.visibility === 'shared'
-                                                    ? 'Partagée'
-                                                    : 'Privée'}
-                                            </Badge>
+                                            />
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground">
                                             {query.owner}
                                         </td>
-                                        <td className="px-4 py-3 text-right">
-                                            <Button
-                                                asChild
-                                                size="sm"
-                                                variant="outline"
-                                            >
-                                                <Link
-                                                    href={queries.show(
-                                                        query.id,
-                                                    )}
+                                        <td
+                                            className="px-4 py-3 text-right"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <div className="flex items-center justify-end gap-2">
+                                                <Button
+                                                    asChild
+                                                    size="sm"
+                                                    variant="outline"
                                                 >
-                                                    Exécuter
-                                                </Link>
-                                            </Button>
+                                                    <Link
+                                                        href={queries.show(
+                                                            query.id,
+                                                        )}
+                                                    >
+                                                        Exécuter
+                                                    </Link>
+                                                </Button>
+                                                {query.can.update && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className="text-destructive hover:text-destructive"
+                                                        onClick={() =>
+                                                            deleteQuery(query.id)
+                                                        }
+                                                    >
+                                                        <Trash2 className="size-4" />
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
