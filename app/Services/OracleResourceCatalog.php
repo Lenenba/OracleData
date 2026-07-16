@@ -10,7 +10,7 @@ namespace App\Services;
  * (un champ/ressource hors catalogue est rejeté avant tout appel Oracle),
  * et de suggestions pour l'UI.
  *
- * @phpstan-type resource array{
+ * @phpstan-type OracleResource array{
  *     key: string,
  *     label: string,
  *     description: string,
@@ -29,7 +29,7 @@ class OracleResourceCatalog
     /**
      * Ressources Oracle Fusion REST déclarées (lecture seule, GET).
      *
-     * @return list<resource>
+     * @return list<OracleResource>
      */
     public function all(): array
     {
@@ -102,7 +102,7 @@ class OracleResourceCatalog
     /**
      * Ressource par clé, ou null si inconnue.
      *
-     * @return resource|null
+     * @return OracleResource|null
      */
     public function find(string $key): ?array
     {
@@ -131,7 +131,7 @@ class OracleResourceCatalog
     /**
      * Projection non sensible d'une ressource pour le front / les réponses JSON.
      *
-     * @param  resource  $resource
+     * @param  OracleResource  $resource
      * @return array<string, mixed>
      */
     public function toSuggestion(array $resource): array
