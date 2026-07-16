@@ -460,17 +460,17 @@ function Step3({
 
     const resolvedName = name.trim() || resource.label;
 
-    // Build the full intent string sent to the LLM
+    // Description lisible sauvegardée avec la requête (pas envoyée au LLM)
     const fullIntent = useMemo(() => {
-        const parts: string[] = [`${resource.label}`];
+        const parts: string[] = [resource.label];
 
         if (intent.trim()) {
-parts.push(intent.trim());
-}
+            parts.push(intent.trim());
+        }
 
         if (selectedFields.length > 0) {
-parts.push(`champs: ${selectedFields.join(', ')}`);
-}
+            parts.push(`champs: ${selectedFields.join(', ')}`);
+        }
 
         return parts.join(' — ');
     }, [resource.label, intent, selectedFields]);
@@ -481,7 +481,8 @@ parts.push(`champs: ${selectedFields.join(', ')}`);
         setPreviewResult(null);
 
         try {
-            const res = await fetch(queries.preview.url(), {
+            // Appel direct Oracle sans LLM — la ressource est déjà connue
+            const res = await fetch(queries.directPreview.url(), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -491,9 +492,10 @@ parts.push(`champs: ${selectedFields.join(', ')}`);
                 },
                 credentials: 'same-origin',
                 body: JSON.stringify({
-                    intent: fullIntent,
+                    resource_key: resource.key,
                     tenant,
-                    parameters: { limit },
+                    fields: selectedFields.length > 0 ? selectedFields : [],
+                    limit,
                 }),
             });
 
@@ -507,10 +509,6 @@ parts.push(`champs: ${selectedFields.join(', ')}`);
             }
 
             setPreviewResult(data);
-
-            if (!name.trim() && data.resource?.label) {
-                setName(data.resource.label);
-            }
         } catch {
             setPreviewError("Erreur réseau lors de la préparation de l'aperçu.");
         } finally {

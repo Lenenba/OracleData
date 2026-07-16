@@ -137,6 +137,29 @@ class QueryController extends Controller
     }
 
     /**
+     * Execute a direct Oracle query from the wizard (resource already chosen — no LLM needed).
+     * Accepts: resource_key, tenant, fields[], limit.
+     */
+    public function directPreview(Request $request, FusionManager $fusion, OracleQueryTool $tool): JsonResponse
+    {
+        $validated = $request->validate([
+            'resource_key' => ['required', 'string'],
+            'tenant' => ['nullable', 'string', Rule::in($fusion->keys())],
+            'fields' => ['nullable', 'array'],
+            'fields.*' => ['string'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:500'],
+        ]);
+
+        $tenant = (string) ($validated['tenant'] ?? $fusion->defaultKey());
+
+        return response()->json($this->runSingle($tenant, [
+            'resource' => $validated['resource_key'],
+            'fields' => $validated['fields'] ?? [],
+            'limit' => $validated['limit'] ?? 25,
+        ], $tool));
+    }
+
+    /**
      * Resolve a natural-language intent and preview rows without saving it.
      */
     public function preview(Request $request, FusionManager $fusion, QueryResolver $resolver, OracleQueryTool $tool, QueryAgent $agent): JsonResponse
