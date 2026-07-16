@@ -147,16 +147,31 @@ class QueryController extends Controller
             'tenant' => ['nullable', 'string', Rule::in($fusion->keys())],
             'fields' => ['nullable', 'array'],
             'fields.*' => ['string'],
+            'expand' => ['nullable', 'array'],
+            'expand.*' => ['string'],
+            'filter_q' => ['nullable', 'string', 'max:500'],
+            'order_by' => ['nullable', 'string', 'max:200'],
             'limit' => ['nullable', 'integer', 'min:1', 'max:500'],
         ]);
 
         $tenant = (string) ($validated['tenant'] ?? $fusion->defaultKey());
 
-        return response()->json($this->runSingle($tenant, [
+        $query = [
             'resource' => $validated['resource_key'],
             'fields' => $validated['fields'] ?? [],
+            'expand' => $validated['expand'] ?? [],
             'limit' => $validated['limit'] ?? 25,
-        ], $tool));
+        ];
+
+        if (! empty($validated['filter_q'])) {
+            $query['q'] = $validated['filter_q'];
+        }
+
+        if (! empty($validated['order_by'])) {
+            $query['orderBy'] = $validated['order_by'];
+        }
+
+        return response()->json($this->runSingle($tenant, $query, $tool));
     }
 
     /**

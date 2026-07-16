@@ -147,6 +147,7 @@ class OracleResourceCatalog
             'preview_fields' => $resource['preview_fields'],
             'fields' => $resource['fields'],
             'child_resources' => $resource['child_resources'],
+            'join_keys' => $resource['join_keys'],
         ];
     }
 
