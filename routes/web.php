@@ -26,6 +26,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Routes coûteuses (appels Claude + Oracle) : limitées à 15 req/min par utilisateur.
     Route::middleware('throttle:15,1')->group(function () {
         Route::post('queries/preview', [QueryController::class, 'preview'])->name('queries.preview');
+        Route::post('queries/direct-preview', [QueryController::class, 'directPreview'])->name('queries.direct-preview');
         Route::post('queries/{query}/run', [QueryController::class, 'run'])->name('queries.run');
     });
 
