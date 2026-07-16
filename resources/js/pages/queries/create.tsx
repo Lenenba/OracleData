@@ -1,7 +1,7 @@
-import { Form, Head } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import Heading from '@/components/heading';
-import { QueryForm } from '@/components/queries/query-form';
 import type { ResourceSuggestion } from '@/components/queries/query-form';
+import { QueryWizard } from '@/components/queries/query-wizard';
 import queries from '@/routes/queries';
 
 type CreateQueryProps = {
@@ -22,21 +22,14 @@ export default function CreateQuery({
             <div className="px-4 py-6">
                 <Heading
                     title="Nouvelle requête"
-                    description="Décrivez les données Oracle à consulter, puis vérifiez l'aperçu avant d'enregistrer."
+                    description="Suivez les 3 étapes pour configurer, prévisualiser et enregistrer votre requête Oracle."
                 />
 
-                <Form {...queries.store.form()} className="max-w-2xl">
-                    {({ processing, errors }) => (
-                        <QueryForm
-                            errors={errors}
-                            processing={processing}
-                            submitLabel="Enregistrer"
-                            resourceSuggestions={resourceSuggestions}
-                            tenants={tenants}
-                            defaultTenant={defaultTenant}
-                        />
-                    )}
-                </Form>
+                <QueryWizard
+                    resourceSuggestions={resourceSuggestions}
+                    tenants={tenants}
+                    defaultTenant={defaultTenant}
+                />
             </div>
         </>
     );
