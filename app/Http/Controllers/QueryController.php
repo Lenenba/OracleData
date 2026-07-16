@@ -88,9 +88,17 @@ class QueryController extends Controller
             $data['resource_path'] = null;
             $data['parameters'] = null;
         } else {
-            $data['parameters'] = (new Collection(Arr::only($data['parameters'] ?? [], self::ALLOWED_PARAMETER_KEYS)))
+            $rawParams = is_array($data['parameters'] ?? null) ? $data['parameters'] : [];
+            $params = (new Collection(Arr::only($rawParams, self::ALLOWED_PARAMETER_KEYS)))
                 ->reject(fn ($value): bool => $value === null || $value === '')
                 ->all();
+
+            // Persist resource_key so the wizard can be pre-filled on edit.
+            if (! empty($rawParams['resource_key'])) {
+                $params['resource_key'] = (string) $rawParams['resource_key'];
+            }
+
+            $data['parameters'] = $params;
         }
 
         $request->user()->queries()->create($data);
@@ -98,6 +106,62 @@ class QueryController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Requête enregistrée.')]);
 
         return to_route('queries.index');
+    }
+
+    /**
+     * Show the wizard pre-filled for editing an existing query.
+     */
+    public function edit(Request $request, Query $query, OracleResourceCatalog $catalog, FusionManager $fusion): Response
+    {
+        Gate::authorize('update', $query);
+
+        return Inertia::render('queries/edit', [
+            'query' => [
+                'id' => $query->id,
+                'name' => $query->name,
+                'description' => $query->description,
+                'resource_path' => $query->resource_path,
+                'tenant_key' => $query->tenant_key,
+                'mode' => $query->mode,
+                'parameters' => (object) ($query->parameters ?? []),
+                'visibility' => $query->visibility,
+            ],
+            'resourceSuggestions' => $catalog->suggestions(),
+            'tenants' => $fusion->available(),
+            'defaultTenant' => $query->tenant_key ?: $fusion->defaultKey(),
+        ]);
+    }
+
+    /**
+     * Update an existing query owned by the current user.
+     */
+    public function update(StoreQueryRequest $request, Query $query): RedirectResponse
+    {
+        Gate::authorize('update', $query);
+
+        $data = $request->validated();
+
+        if (($data['mode'] ?? 'single') === 'agent') {
+            $data['resource_path'] = null;
+            $data['parameters'] = null;
+        } else {
+            $rawParams = is_array($data['parameters'] ?? null) ? $data['parameters'] : [];
+            $params = (new Collection(Arr::only($rawParams, self::ALLOWED_PARAMETER_KEYS)))
+                ->reject(fn ($value): bool => $value === null || $value === '')
+                ->all();
+
+            if (! empty($rawParams['resource_key'])) {
+                $params['resource_key'] = (string) $rawParams['resource_key'];
+            }
+
+            $data['parameters'] = $params;
+        }
+
+        $query->update($data);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Requête mise à jour.')]);
+
+        return to_route('queries.show', $query);
     }
 
     /**

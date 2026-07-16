@@ -31,6 +31,7 @@ trait QueryValidationRules
             'parameters.expand' => ['nullable', 'string', 'max:500'],
             'parameters.orderBy' => ['nullable', 'string', 'max:500'],
             'parameters.offset' => ['nullable', 'integer', 'min:0'],
+            'parameters.resource_key' => ['nullable', 'string'],
             'visibility' => ['required', 'in:private,shared'],
         ];
     }

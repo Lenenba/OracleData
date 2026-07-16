@@ -1,5 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import Heading from '@/components/heading';
 import { Badge } from '@/components/ui/badge';
@@ -255,25 +255,32 @@ export default function QueriesIndex({
                                                     size="sm"
                                                     variant="outline"
                                                 >
-                                                    <Link
-                                                        href={queries.show(
-                                                            query.id,
-                                                        )}
-                                                    >
+                                                    <Link href={queries.show(query.id)}>
                                                         Exécuter
                                                     </Link>
                                                 </Button>
                                                 {query.can.update && (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        className="text-destructive hover:text-destructive"
-                                                        onClick={() =>
-                                                            deleteQuery(query.id)
-                                                        }
-                                                    >
-                                                        <Trash2 className="size-4" />
-                                                    </Button>
+                                                    <>
+                                                        <Button
+                                                            asChild
+                                                            size="sm"
+                                                            variant="ghost"
+                                                        >
+                                                            <Link href={queries.edit(query.id)}>
+                                                                <Pencil className="size-4" />
+                                                            </Link>
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="text-destructive hover:text-destructive"
+                                                            onClick={() =>
+                                                                deleteQuery(query.id)
+                                                            }
+                                                        >
+                                                            <Trash2 className="size-4" />
+                                                        </Button>
+                                                    </>
                                                 )}
                                             </div>
                                         </td>

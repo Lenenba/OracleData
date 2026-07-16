@@ -1,4 +1,5 @@
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
+import { Pencil } from 'lucide-react';
 import { useState } from 'react';
 import Heading from '@/components/heading';
 import { QueryResultView } from '@/components/queries/query-result';
@@ -102,10 +103,20 @@ export default function ShowQuery({
             <Head title={query.name} />
 
             <div className="space-y-6 px-4 py-6">
-                <Heading
-                    title={query.name}
-                    description={query.description ?? undefined}
-                />
+                <div className="flex items-start justify-between gap-4">
+                    <Heading
+                        title={query.name}
+                        description={query.description ?? undefined}
+                    />
+                    {query.can.update && (
+                        <Button asChild variant="outline" size="sm" className="shrink-0">
+                            <Link href={queries.edit(query.id)}>
+                                <Pencil className="size-3.5" />
+                                Modifier
+                            </Link>
+                        </Button>
+                    )}
+                </div>
 
                 <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                     <Badge
