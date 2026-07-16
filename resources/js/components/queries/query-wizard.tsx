@@ -11,12 +11,13 @@ import {
     Filter,
     Globe,
     Link2,
-    ListFilter,
     Lock,
+    Plus,
     Save,
     Search,
     SortAsc,
     Table2,
+    X,
 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import type { ResourceSuggestion } from '@/components/queries/query-form';
@@ -45,15 +46,59 @@ type Step = 1 | 2 | 3;
 // Étend ResourceSuggestion pour inclure join_keys
 type Resource = ResourceSuggestion & { join_keys?: Record<string, string> };
 
+// Une ligne du constructeur de filtres
+type FilterRow = {
+    id: string;
+    field: string;
+    operator: string;
+    value: string;
+    conjunction: 'AND' | 'OR';
+};
+
+// Champs sélectionnés pour chaque enfant (key = nom de l'enfant)
+type ChildFieldsMap = Record<string, string[]>;
+
+// Champs connus d'un enfant (issus du catalogue si disponible, sinon vide)
+type ChildFieldsCatalog = Record<string, string[]>;
+
+type WizardMode = 'create' | 'edit';
+
+type WizardInitialState = {
+    queryId?: number;
+    name?: string;
+    visibility?: 'private' | 'shared';
+    resourceKey?: string;
+    tenantKey?: string;
+    fields?: string[];
+    expand?: string[];
+    childFields?: ChildFieldsMap;
+    filterQ?: string;
+    orderBy?: string;
+    limit?: number;
+};
+
 type WizardProps = {
     resourceSuggestions: Resource[];
     tenants: Record<string, string>;
     defaultTenant: string;
+    mode?: WizardMode;
+    initialState?: WizardInitialState;
 };
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
 const DEFAULT_LIMIT = 25;
+
+const FILTER_OPERATORS = [
+    { value: '=', label: '= égal à' },
+    { value: '!=', label: '≠ différent de' },
+    { value: '>', label: '> supérieur à' },
+    { value: '>=', label: '>= supérieur ou égal' },
+    { value: '<', label: '< inférieur à' },
+    { value: '<=', label: '<= inférieur ou égal' },
+    { value: 'LIKE', label: '~ contient (LIKE)' },
+    { value: 'STARTSWITH', label: 'commence par' },
+];
 
 const DOMAIN_META: Record<string, { color: string; icon: string }> = {
     Procurement: {
@@ -97,15 +142,94 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 function readError(data: unknown): string {
     if (isRecord(data)) {
         if (typeof data.message === 'string') {
-            return data.message;
-        }
+return data.message;
+}
 
         if (typeof data.error === 'string') {
-            return data.error;
-        }
+return data.error;
+}
     }
 
     return "Impossible de préparer l'aperçu pour le moment.";
+}
+
+function newFilterRow(): FilterRow {
+    return { id: Math.random().toString(36).slice(2), field: '', operator: '=', value: '', conjunction: 'AND' };
+}
+
+/**
+ * Convertit les lignes du filter-builder en syntaxe Oracle REST q=
+ * Ex: Supplier = "Acme" AND Status = "ACTIVE"
+ * Pour LIKE: Supplier LIKE "Acme*"
+ * Pour STARTSWITH: on génère LIKE "val*"
+ */
+function filterRowsToQ(rows: FilterRow[], parentFields: string[]): string {
+    const valid = rows.filter(
+        (r) => r.field !== '' && r.value.trim() !== '' && parentFields.includes(r.field),
+    );
+
+    if (valid.length === 0) {
+return '';
+}
+
+    return valid
+        .map((r, i) => {
+            const prefix = i > 0 ? `${r.conjunction} ` : '';
+            const val = r.value.trim();
+            let expr: string;
+
+            if (r.operator === 'STARTSWITH') {
+                expr = `${r.field} LIKE "${val}*"`;
+            } else if (r.operator === 'LIKE') {
+                expr = `${r.field} LIKE "*${val}*"`;
+            } else if (/^\d/.test(val) || val === 'true' || val === 'false') {
+                // numeric/boolean — no quotes
+                expr = `${r.field} ${r.operator} ${val}`;
+            } else {
+                expr = `${r.field} ${r.operator} "${val}"`;
+            }
+
+            return `${prefix}${expr}`;
+        })
+        .join(' ');
+}
+
+/**
+ * Parse une chaîne q= Oracle REST en lignes de filter-builder.
+ * Heuristique : supporte AND/OR de conditions simples.
+ */
+function qToFilterRows(q: string, parentFields: string[]): FilterRow[] {
+    if (!q.trim()) {
+return [];
+}
+
+    // Tokenize: split on AND/OR boundaries
+    const tokenRe =
+        /(?:(AND|OR)\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*(>=|<=|!=|LIKE|=|>|<)\s*"([^"]*)"|(?:(AND|OR)\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*(>=|<=|!=|=|>|<)\s*(\S+)/gi;
+
+    const rows: FilterRow[] = [];
+    let match: RegExpExecArray | null;
+
+    while ((match = tokenRe.exec(q)) !== null) {
+        const conj = (match[1] ?? match[5] ?? 'AND').toUpperCase() as 'AND' | 'OR';
+        const field = match[2] ?? match[6] ?? '';
+        const op = (match[3] ?? match[7] ?? '=').toUpperCase();
+        const val = match[4] ?? match[8] ?? '';
+
+        if (!parentFields.includes(field)) {
+continue;
+}
+
+        rows.push({
+            id: Math.random().toString(36).slice(2),
+            field,
+            operator: op,
+            value: val.replace(/\*$/, '').replace(/^\*/, '').replace(/\*/g, ''),
+            conjunction: rows.length === 0 ? 'AND' : conj,
+        });
+    }
+
+    return rows.length > 0 ? rows : [];
 }
 
 // Génère un SQL BIP (Oracle BI Publisher) à partir des paramètres du wizard
@@ -113,6 +237,7 @@ function generateBipSql(
     resource: Resource,
     fields: string[],
     expand: string[],
+    childFields: ChildFieldsMap,
     filterQ: string,
     orderBy: string,
     limit: number,
@@ -124,7 +249,24 @@ function generateBipSql(
     let sql = `-- Requête générée par OracleData Wizard\n`;
     sql += `-- Ressource : ${resource.label} (${resource.domain})\n`;
     sql += `-- Chemin REST : ${resource.path}\n\n`;
-    sql += `SELECT\n${selectCols}\nFROM ${tableName}`;
+    sql += `SELECT\n${selectCols}`;
+
+    if (expand.length > 0) {
+        expand.forEach((child) => {
+            const childTable = child.toUpperCase();
+            const cFields = childFields[child] ?? [];
+
+            if (cFields.length > 0) {
+                cFields.forEach((cf) => {
+                    sql += `,\n  ${childTable}.${cf}`;
+                });
+            } else {
+                sql += `,\n  ${childTable}.*`;
+            }
+        });
+    }
+
+    sql += `\nFROM ${tableName}`;
 
     if (expand.length > 0) {
         expand.forEach((child) => {
@@ -285,6 +427,141 @@ function Collapsible({
     );
 }
 
+// ─── Constructeur de filtres assisté ─────────────────────────────────────────
+
+function FilterBuilder({
+    rows,
+    parentFields,
+    onChange,
+}: {
+    rows: FilterRow[];
+    parentFields: string[];
+    onChange: (rows: FilterRow[]) => void;
+}) {
+    function update(id: string, patch: Partial<FilterRow>) {
+        onChange(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    }
+
+    function remove(id: string) {
+        onChange(rows.filter((r) => r.id !== id));
+    }
+
+    function add() {
+        onChange([...rows, newFilterRow()]);
+    }
+
+    return (
+        <div className="flex flex-col gap-2">
+            {rows.length === 0 && (
+                <p className="text-xs text-muted-foreground italic">
+                    Aucun filtre — tous les enregistrements seront retournés.
+                </p>
+            )}
+
+            {rows.map((row, idx) => (
+                <div key={row.id} className="flex flex-wrap items-center gap-2">
+                    {/* Conjonction AND/OR (sauf première ligne) */}
+                    {idx > 0 ? (
+                        <Select
+                            value={row.conjunction}
+                            onValueChange={(v) => update(row.id, { conjunction: v as 'AND' | 'OR' })}
+                        >
+                            <SelectTrigger className="h-8 w-16 text-xs font-semibold">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="AND">ET</SelectItem>
+                                <SelectItem value="OR">OU</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    ) : (
+                        <span className="flex h-8 w-16 items-center justify-center rounded-md border border-transparent text-xs font-semibold text-muted-foreground">
+                            OÙ
+                        </span>
+                    )}
+
+                    {/* Champ */}
+                    <Select
+                        value={row.field}
+                        onValueChange={(v) => update(row.id, { field: v })}
+                    >
+                        <SelectTrigger className="h-8 min-w-36 flex-1 text-xs font-mono">
+                            <SelectValue placeholder="Champ…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {parentFields.map((f) => (
+                                <SelectItem key={f} value={f} className="font-mono text-xs">
+                                    {f}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+
+                    {/* Opérateur */}
+                    <Select
+                        value={row.operator}
+                        onValueChange={(v) => update(row.id, { operator: v })}
+                    >
+                        <SelectTrigger className="h-8 w-44 text-xs">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {FILTER_OPERATORS.map((op) => (
+                                <SelectItem key={op.value} value={op.value} className="text-xs">
+                                    {op.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+
+                    {/* Valeur */}
+                    <Input
+                        className="h-8 min-w-32 flex-1 text-xs font-mono"
+                        placeholder={
+                            row.operator === 'LIKE' || row.operator === 'STARTSWITH'
+                                ? 'ex : Acme'
+                                : 'valeur…'
+                        }
+                        value={row.value}
+                        onChange={(e) => update(row.id, { value: e.target.value })}
+                    />
+
+                    {/* Supprimer */}
+                    <button
+                        type="button"
+                        onClick={() => remove(row.id)}
+                        className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                        title="Supprimer ce filtre"
+                    >
+                        <X className="size-3.5" />
+                    </button>
+                </div>
+            ))}
+
+            <button
+                type="button"
+                onClick={add}
+                className="mt-1 flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+            >
+                <Plus className="size-3.5" />
+                Ajouter un filtre
+            </button>
+
+            {/* Aperçu de la syntaxe générée */}
+            {rows.some((r) => r.field && r.value) && (
+                <div className="mt-2 rounded-md border bg-muted/40 px-3 py-2">
+                    <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Syntaxe Oracle REST générée
+                    </p>
+                    <code className="text-xs font-mono text-foreground">
+                        {filterRowsToQ(rows, parentFields) || '…'}
+                    </code>
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ─── ÉTAPE 1 — Source de données ──────────────────────────────────────────────
 
 function Step1({
@@ -312,8 +589,8 @@ function Step1({
         }
 
         if (!q) {
-            return list;
-        }
+return list;
+}
 
         return list.filter(
             (r) =>
@@ -328,7 +605,8 @@ function Step1({
             <div>
                 <h2 className="text-lg font-semibold tracking-tight">Source de données Oracle</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                    Choisissez le jeu de données principal à interroger. Vous pourrez enrichir avec des données liées à l'étape suivante.
+                    Choisissez le jeu de données principal à interroger. Vous pourrez enrichir
+                    avec des données liées et des filtres avancés à l'étape suivante.
                 </p>
             </div>
 
@@ -392,27 +670,29 @@ function Step1({
                                     : 'border-border bg-card hover:border-primary/50 hover:shadow-sm',
                             ].join(' ')}
                         >
-                            {/* Header */}
                             <div className="flex items-start justify-between gap-2">
                                 <div className="flex items-center gap-2">
                                     <span className="text-lg leading-none">{domainIcon(r.domain)}</span>
                                     <span className="font-semibold text-sm leading-snug">{r.label}</span>
                                 </div>
-                                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${domainColor(r.domain)}`}>
+                                <span
+                                    className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${domainColor(r.domain)}`}
+                                >
                                     {r.domain}
                                 </span>
                             </div>
 
-                            {/* Description */}
                             <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
                                 {r.description}
                             </p>
 
-                            {/* Champs */}
                             {(r.fields ?? []).length > 0 && (
                                 <div className="flex flex-wrap gap-1">
                                     {(r.fields ?? []).slice(0, 4).map((f) => (
-                                        <span key={f} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                                        <span
+                                            key={f}
+                                            className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+                                        >
                                             {f}
                                         </span>
                                     ))}
@@ -424,23 +704,28 @@ function Step1({
                                 </div>
                             )}
 
-                            {/* Données liées disponibles */}
-                            {((r.child_resources ?? []).length > 0 || Object.keys(r.join_keys ?? {}).length > 0) && (
+                            {((r.child_resources ?? []).length > 0 ||
+                                Object.keys(r.join_keys ?? {}).length > 0) && (
                                 <div className="flex flex-wrap gap-1 border-t pt-2">
                                     {(r.child_resources ?? []).slice(0, 2).map((c) => (
-                                        <span key={c} className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300">
+                                        <span
+                                            key={c}
+                                            className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300"
+                                        >
                                             ↳ {c}
                                         </span>
                                     ))}
                                     {Object.keys(r.join_keys ?? {}).slice(0, 2).map((target) => (
-                                        <span key={target} className="rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+                                        <span
+                                            key={target}
+                                            className="rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                        >
                                             ⟷ {target}
                                         </span>
                                     ))}
                                 </div>
                             )}
 
-                            {/* Indicateur sélectionné */}
                             {isSelected && (
                                 <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
                                     <CheckCircle2 className="size-3.5" />
@@ -487,8 +772,10 @@ function Step2({
     setFields,
     expand,
     setExpand,
-    filterQ,
-    setFilterQ,
+    childFields,
+    setChildFields,
+    filterRows,
+    setFilterRows,
     orderBy,
     setOrderBy,
     tenant,
@@ -505,8 +792,10 @@ function Step2({
     setFields: (v: string[]) => void;
     expand: string[];
     setExpand: (v: string[]) => void;
-    filterQ: string;
-    setFilterQ: (v: string) => void;
+    childFields: ChildFieldsMap;
+    setChildFields: (v: ChildFieldsMap) => void;
+    filterRows: FilterRow[];
+    setFilterRows: (v: FilterRow[]) => void;
     orderBy: string;
     setOrderBy: (v: string) => void;
     tenant: string;
@@ -517,19 +806,61 @@ function Step2({
     onNext: () => void;
 }) {
     const allFields = resource.fields ?? [];
-    const childResources = resource.child_resources ?? [];
+    const childResources = useMemo(() => resource.child_resources ?? [], [resource.child_resources]);
     const joinKeys = resource.join_keys ?? {};
     const joinTargets = Object.keys(joinKeys);
 
     // Ressources joignables — on affiche leur label
     const joinableResources = allResources.filter((r) => joinTargets.includes(r.key));
 
+    // Catalogue des champs enfants (une ressource enfant = ses champs du catalogue)
+    const childFieldsCatalog = useMemo<ChildFieldsCatalog>(() => {
+        const map: ChildFieldsCatalog = {};
+
+        // Champs des ressources joignables (present dans le catalogue)
+        for (const jr of joinableResources) {
+            map[jr.key] = jr.fields ?? [];
+        }
+
+        // Pour les enfants imbriqués (expand) qui ne sont pas dans les ressources
+        // du catalogue, on ne peut pas connaître les champs a priori.
+        for (const c of childResources) {
+            if (!map[c]) {
+                map[c] = [];
+            }
+        }
+
+        return map;
+    }, [joinableResources, childResources]);
+
     function toggle(list: string[], item: string, set: (v: string[]) => void) {
         set(list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
     }
 
+    function toggleChildField(childKey: string, field: string) {
+        const current = childFields[childKey] ?? [];
+        const updated = current.includes(field)
+            ? current.filter((f) => f !== field)
+            : [...current, field];
+
+        setChildFields({ ...childFields, [childKey]: updated });
+    }
+
+    function toggleExpand(key: string) {
+        if (expand.includes(key)) {
+            // Déselectionner : retirer aussi les childFields
+            setExpand(expand.filter((x) => x !== key));
+            const updated = { ...childFields };
+            delete updated[key];
+            setChildFields(updated);
+        } else {
+            setExpand([...expand, key]);
+        }
+    }
+
     const canContinue = tenant !== '';
     const hasRelated = childResources.length > 0 || joinTargets.length > 0;
+    const activeFilterCount = filterRows.filter((r) => r.field && r.value.trim()).length;
 
     return (
         <div className="flex flex-col gap-4">
@@ -541,7 +872,8 @@ function Step2({
                     </Badge>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                    Choisissez les colonnes, ajoutez des données liées, et affinez avec des filtres.
+                    Choisissez les colonnes, enrichissez avec des données liées, et filtrez
+                    précisément (par nom, numéro, statut, date…).
                 </p>
             </div>
 
@@ -577,101 +909,217 @@ function Step2({
             {hasRelated && (
                 <Collapsible
                     title="Données liées"
-                    subtitle="Enfants (expand) et jointures avec d'autres ressources"
+                    subtitle="Enfants (expand) et jointures — choisissez aussi leurs colonnes"
                     icon={<Link2 className="size-4" />}
                     badge={expand.length}
                 >
                     {childResources.length > 0 && (
-                        <div className="mb-4">
-                            <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        <div className="mb-5">
+                            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                 Enfants imbriqués (expand)
                             </p>
                             <p className="mb-2 text-xs text-muted-foreground">
-                                Ex : fournisseurs <strong>avec leurs sites</strong> ou <strong>leurs contacts</strong> dans le même résultat.
+                                Ex : fournisseurs <strong>avec leurs sites</strong> ou{' '}
+                                <strong>leurs contacts</strong> dans le même résultat.
                             </p>
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-wrap gap-2 mb-3">
                                 {childResources.map((c) => (
                                     <FieldPill
                                         key={c}
                                         label={c}
                                         checked={expand.includes(c)}
-                                        onClick={() => toggle(expand, c, setExpand)}
+                                        onClick={() => toggleExpand(c)}
                                         variant="child"
                                     />
                                 ))}
                             </div>
+
+                            {/* Sélection des champs de chaque enfant activé */}
+                            {childResources
+                                .filter((c) => expand.includes(c))
+                                .map((c) => {
+                                    const knownFields = childFieldsCatalog[c] ?? [];
+
+                                    return (
+                                        <div
+                                            key={c}
+                                            className="mb-3 rounded-lg border border-blue-200 bg-blue-50/40 p-3 dark:border-blue-800 dark:bg-blue-950/20"
+                                        >
+                                            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
+                                                <ChevronRight className="size-3.5" />
+                                                Colonnes de «{c}» à inclure
+                                            </p>
+                                            {knownFields.length > 0 ? (
+                                                <>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {knownFields.map((f) => (
+                                                            <FieldPill
+                                                                key={f}
+                                                                label={f}
+                                                                checked={(childFields[c] ?? []).includes(f)}
+                                                                onClick={() => toggleChildField(c, f)}
+                                                                variant="child"
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                    <p className="mt-1.5 text-[11px] text-muted-foreground">
+                                                        Sans sélection → tous les champs de l'enfant sont inclus.
+                                                    </p>
+                                                </>
+                                            ) : (
+                                                <p className="text-xs text-muted-foreground italic">
+                                                    Les champs disponibles pour «{c}» sont déterminés à l'exécution.
+                                                </p>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                         </div>
                     )}
 
                     {joinableResources.length > 0 && (
                         <div>
-                            <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                 Jointures avec d'autres ressources
                             </p>
                             <p className="mb-2 text-xs text-muted-foreground">
-                                Ex : fournisseurs <strong>qui ont des bons de commande</strong>. Les données de la ressource liée seront incluses.
+                                Ex : fournisseurs{' '}
+                                <strong>qui ont des bons de commande</strong>. Les données de la
+                                ressource liée seront incluses.
                             </p>
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-wrap gap-2 mb-3">
                                 {joinableResources.map((r) => (
                                     <FieldPill
                                         key={r.key}
                                         label={r.label}
                                         checked={expand.includes(r.key)}
-                                        onClick={() => toggle(expand, r.key, setExpand)}
+                                        onClick={() => toggleExpand(r.key)}
                                         variant="join"
                                     />
                                 ))}
                             </div>
+
+                            {/* Sélection des champs de chaque jointure activée */}
+                            {joinableResources
+                                .filter((r) => expand.includes(r.key))
+                                .map((r) => {
+                                    const knownFields = r.fields ?? [];
+
+                                    return (
+                                        <div
+                                            key={r.key}
+                                            className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50/40 p-3 dark:border-emerald-800 dark:bg-emerald-950/20"
+                                        >
+                                            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                                                <Link2 className="size-3.5" />
+                                                Colonnes de «{r.label}» à inclure
+                                            </p>
+                                            {knownFields.length > 0 ? (
+                                                <>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {knownFields.map((f) => (
+                                                            <FieldPill
+                                                                key={f}
+                                                                label={f}
+                                                                checked={(childFields[r.key] ?? []).includes(f)}
+                                                                onClick={() =>
+                                                                    toggleChildField(r.key, f)
+                                                                }
+                                                                variant="join"
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                    <p className="mt-1.5 text-[11px] text-muted-foreground">
+                                                        Sans sélection → tous les champs de la ressource liée sont inclus.
+                                                    </p>
+                                                </>
+                                            ) : (
+                                                <p className="text-xs text-muted-foreground italic">
+                                                    Champs déterminés à l'exécution.
+                                                </p>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                         </div>
                     )}
                 </Collapsible>
             )}
 
-            {/* ─ Filtres & tri ─ */}
+            {/* ─ Filtres assistés ─ */}
             <Collapsible
-                title="Filtres et tri"
-                subtitle="Optionnel — réduire et ordonner les résultats"
-                icon={<ListFilter className="size-4" />}
-                badge={[filterQ, orderBy].filter(Boolean).length}
+                title="Filtres"
+                subtitle={
+                    activeFilterCount === 0
+                        ? 'Optionnel — chercher un fournisseur, une facture, par nom/numéro/statut…'
+                        : `${activeFilterCount} filtre(s) actif(s)`
+                }
+                icon={<Filter className="size-4" />}
+                badge={activeFilterCount}
+                defaultOpen={filterRows.length > 0}
             >
-                <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-1.5">
-                        <Label htmlFor="wiz-filter" className="flex items-center gap-1.5 text-xs font-medium">
-                            <Filter className="size-3.5 text-muted-foreground" />
-                            Filtre (Oracle REST q=)
-                        </Label>
-                        <Input
-                            id="wiz-filter"
-                            value={filterQ}
-                            onChange={(e) => setFilterQ(e.target.value)}
-                            placeholder={`Ex : Status = "ACTIVE" AND CreationDate > "2024-01-01"`}
-                            className="font-mono text-xs"
-                        />
-                        <p className="text-[11px] text-muted-foreground">
-                            Syntaxe Oracle REST : <code>Champ = "valeur"</code>, <code>Champ {'>'} valeur</code>, <code>AND</code>, <code>OR</code>
-                        </p>
-                    </div>
+                <FilterBuilder
+                    rows={filterRows}
+                    parentFields={allFields}
+                    onChange={setFilterRows}
+                />
+            </Collapsible>
 
-                    <div className="flex flex-col gap-1.5">
-                        <Label htmlFor="wiz-order" className="flex items-center gap-1.5 text-xs font-medium">
-                            <SortAsc className="size-3.5 text-muted-foreground" />
-                            Tri (orderBy=)
-                        </Label>
-                        <Input
-                            id="wiz-order"
-                            value={orderBy}
-                            onChange={(e) => setOrderBy(e.target.value)}
-                            placeholder={`Ex : ${allFields[0] ?? 'CreationDate'}:desc`}
-                            className="font-mono text-xs"
-                        />
+            {/* ─ Tri ─ */}
+            <Collapsible
+                title="Tri"
+                subtitle="Optionnel — ordonner les résultats"
+                icon={<SortAsc className="size-4" />}
+                badge={orderBy.trim() ? 1 : 0}
+            >
+                <div className="flex flex-col gap-1.5">
+                    <div className="flex flex-wrap gap-2">
+                        {allFields.slice(0, 6).map((f) => (
+                            <button
+                                key={f}
+                                type="button"
+                                onClick={() => {
+                                    if (orderBy === `${f}:asc`) {
+setOrderBy(`${f}:desc`);
+} else if (orderBy === `${f}:desc`) {
+setOrderBy('');
+} else {
+setOrderBy(`${f}:asc`);
+}
+                                }}
+                                className={[
+                                    'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 font-mono text-xs transition-all',
+                                    orderBy.startsWith(f)
+                                        ? 'border-primary bg-primary/10 text-primary font-semibold'
+                                        : 'border-border text-muted-foreground hover:border-primary/50',
+                                ].join(' ')}
+                            >
+                                {f}
+                                {orderBy === `${f}:asc` && ' ↑'}
+                                {orderBy === `${f}:desc` && ' ↓'}
+                            </button>
+                        ))}
                     </div>
+                    <Label htmlFor="wiz-order" className="mt-2 flex items-center gap-1.5 text-xs font-medium">
+                        <SortAsc className="size-3.5 text-muted-foreground" />
+                        Valeur libre (orderBy=)
+                    </Label>
+                    <Input
+                        id="wiz-order"
+                        value={orderBy}
+                        onChange={(e) => setOrderBy(e.target.value)}
+                        placeholder={`Ex : ${allFields[0] ?? 'CreationDate'}:desc`}
+                        className="font-mono text-xs"
+                    />
                 </div>
             </Collapsible>
 
             {/* ─ Tenant & limite ─ */}
             <div className="flex flex-wrap gap-3 rounded-xl border bg-card p-4">
                 <div className="flex max-w-32 flex-col gap-1.5">
-                    <Label htmlFor="wiz-limit" className="text-xs font-medium">Limite de lignes</Label>
+                    <Label htmlFor="wiz-limit" className="text-xs font-medium">
+                        Limite de lignes
+                    </Label>
                     <Input
                         id="wiz-limit"
                         type="number"
@@ -686,14 +1134,22 @@ function Step2({
                 </div>
 
                 <div className="flex flex-1 min-w-44 flex-col gap-1.5">
-                    <Label htmlFor="wiz-tenant" className="text-xs font-medium">Tenant Oracle</Label>
-                    <Select value={tenant} onValueChange={setTenant} disabled={Object.keys(tenants).length === 0}>
+                    <Label htmlFor="wiz-tenant" className="text-xs font-medium">
+                        Tenant Oracle
+                    </Label>
+                    <Select
+                        value={tenant}
+                        onValueChange={setTenant}
+                        disabled={Object.keys(tenants).length === 0}
+                    >
                         <SelectTrigger id="wiz-tenant" className="h-9">
                             <SelectValue placeholder="Choisir un tenant" />
                         </SelectTrigger>
                         <SelectContent>
                             {Object.entries(tenants).map(([k, v]) => (
-                                <SelectItem key={k} value={k}>{v}</SelectItem>
+                                <SelectItem key={k} value={k}>
+                                    {v}
+                                </SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
@@ -722,9 +1178,14 @@ function Step3({
     tenants,
     fields,
     expand,
-    filterQ,
+    childFields,
+    filterRows,
     orderBy,
     limitStr,
+    wizardMode,
+    queryId,
+    initialName,
+    initialVisibility,
     onBack,
 }: {
     resource: Resource;
@@ -732,13 +1193,18 @@ function Step3({
     tenants: Record<string, string>;
     fields: string[];
     expand: string[];
-    filterQ: string;
+    childFields: ChildFieldsMap;
+    filterRows: FilterRow[];
     orderBy: string;
     limitStr: string;
+    wizardMode: WizardMode;
+    queryId?: number;
+    initialName?: string;
+    initialVisibility?: 'private' | 'shared';
     onBack: () => void;
 }) {
-    const [name, setName] = useState(resource.label);
-    const [visibility, setVisibility] = useState<'private' | 'shared'>('private');
+    const [name, setName] = useState(initialName ?? resource.label);
+    const [visibility, setVisibility] = useState<'private' | 'shared'>(initialVisibility ?? 'private');
     const [previewStatus, setPreviewStatus] = useState<'idle' | 'loading' | 'done'>('idle');
     const [previewResult, setPreviewResult] = useState<QueryResult | null>(null);
     const [previewError, setPreviewError] = useState<string | null>(null);
@@ -747,6 +1213,9 @@ function Step3({
 
     const limit = parseLimit(limitStr);
     const tenantLabel = tenants[tenant] ?? tenant;
+
+    // Derive the filter_q from filterRows
+    const filterQ = filterRowsToQ(filterRows, resource.fields ?? []);
 
     const isSaveable =
         previewResult !== null &&
@@ -757,7 +1226,6 @@ function Step3({
 
     const resolvedName = name.trim() || resource.label;
 
-    // Description lisible pour la requête sauvegardée
     const description = useMemo(() => {
         const parts: string[] = [resource.label];
 
@@ -777,8 +1245,8 @@ function Step3({
     }, [resource.label, expand, filterQ, orderBy]);
 
     const bipSql = useMemo(
-        () => generateBipSql(resource, fields, expand, filterQ, orderBy, limit),
-        [resource, fields, expand, filterQ, orderBy, limit],
+        () => generateBipSql(resource, fields, expand, childFields, filterQ, orderBy, limit),
+        [resource, fields, expand, childFields, filterQ, orderBy, limit],
     );
 
     async function runPreview() {
@@ -826,29 +1294,42 @@ function Step3({
 
     function save() {
         if (!previewResult || saving) {
-            return;
-        }
+return;
+}
 
         setSaving(true);
 
-        const parameters: Record<string, string | number | boolean | null> =
+        const baseParams: Record<string, string | number | boolean | null> =
             previewResult.mode === 'single' && isRecord(previewResult.parameters)
                 ? (previewResult.parameters as Record<string, string | number | boolean | null>)
                 : {};
 
-        router.post(
-            queries.store.url(),
-            {
-                name: resolvedName,
-                description,
-                mode: 'single',
-                resource_path: previewResult.resource?.path ?? '',
-                tenant_key: tenant,
-                visibility,
-                parameters,
-            },
-            { onError: () => setSaving(false) },
-        );
+        // Store resource_key so the wizard can be pre-filled on next edit
+        const parameters = { ...baseParams, resource_key: resource.key };
+
+        const payload = {
+            name: resolvedName,
+            description,
+            mode: 'single',
+            resource_path: previewResult.resource?.path ?? '',
+            tenant_key: tenant,
+            visibility,
+            parameters,
+        };
+
+        if (wizardMode === 'edit' && queryId !== undefined) {
+            router.put(
+                queries.update.url(queryId),
+                payload,
+                { onError: () => setSaving(false) },
+            );
+        } else {
+            router.post(
+                queries.store.url(),
+                payload,
+                { onError: () => setSaving(false) },
+            );
+        }
     }
 
     return (
@@ -856,14 +1337,61 @@ function Step3({
             {/* En-tête */}
             <div>
                 <div className="flex items-center gap-2">
-                    <h2 className="text-lg font-semibold tracking-tight">Aperçu et enregistrement</h2>
+                    <h2 className="text-lg font-semibold tracking-tight">
+                        {wizardMode === 'edit' ? 'Modifier et ré-exécuter' : 'Aperçu et enregistrement'}
+                    </h2>
                     <Badge variant="secondary" className="text-xs">
                         {domainIcon(resource.domain)} {resource.label}
                     </Badge>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                    Testez votre requête en direct, puis enregistrez-la.
+                    {wizardMode === 'edit'
+                        ? 'Testez la requête modifiée, puis enregistrez les changements.'
+                        : 'Testez votre requête en direct, puis enregistrez-la.'}
                 </p>
+            </div>
+
+            {/* ─ Nom + visibilité ─ */}
+            <div className="flex flex-wrap gap-3 items-end">
+                <div className="flex flex-1 min-w-48 flex-col gap-1.5">
+                    <Label htmlFor="wiz-name" className="text-xs font-medium">
+                        Nom de la requête
+                    </Label>
+                    <Input
+                        id="wiz-name"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder={resource.label}
+                    />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium">Visibilité</Label>
+                    <div className="flex gap-2">
+                        {(['private', 'shared'] as const).map((v) => (
+                            <button
+                                key={v}
+                                type="button"
+                                onClick={() => setVisibility(v)}
+                                className={[
+                                    'flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm transition-colors',
+                                    visibility === v
+                                        ? 'border-primary bg-primary/5 text-primary font-medium'
+                                        : 'border-border text-muted-foreground hover:border-primary/40',
+                                ].join(' ')}
+                            >
+                                {v === 'private' ? (
+                                    <>
+                                        <Lock className="size-3.5" /> Privée
+                                    </>
+                                ) : (
+                                    <>
+                                        <Globe className="size-3.5" /> Partagée
+                                    </>
+                                )}
+                            </button>
+                        ))}
+                    </div>
+                </div>
             </div>
 
             {/* ─ Résumé de la configuration ─ */}
@@ -871,7 +1399,10 @@ function Step3({
                 <p className="font-medium text-sm mb-1">Récapitulatif</p>
                 <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
                     <span className="text-muted-foreground">Ressource</span>
-                    <span className="font-medium">{resource.label} <span className="text-muted-foreground">({resource.path})</span></span>
+                    <span className="font-medium">
+                        {resource.label}{' '}
+                        <span className="text-muted-foreground">({resource.path})</span>
+                    </span>
 
                     <span className="text-muted-foreground">Colonnes</span>
                     <span className="font-mono">
@@ -881,7 +1412,18 @@ function Step3({
                     {expand.length > 0 && (
                         <>
                             <span className="text-muted-foreground">Données liées</span>
-                            <span className="font-mono">{expand.join(', ')}</span>
+                            <div className="flex flex-wrap gap-1">
+                                {expand.map((e) => (
+                                    <span key={e} className="font-mono">
+                                        {e}
+                                        {(childFields[e] ?? []).length > 0 && (
+                                            <span className="text-muted-foreground">
+                                                {' '}({(childFields[e] ?? []).join(', ')})
+                                            </span>
+                                        )}
+                                    </span>
+                                ))}
+                            </div>
                         </>
                     )}
 
@@ -907,41 +1449,6 @@ function Step3({
                 </div>
             </div>
 
-            {/* ─ Nom + visibilité ─ */}
-            <div className="flex flex-wrap gap-3 items-end">
-                <div className="flex flex-1 min-w-48 flex-col gap-1.5">
-                    <Label htmlFor="wiz-name" className="text-xs font-medium">Nom de la requête</Label>
-                    <Input
-                        id="wiz-name"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder={resource.label}
-                    />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium">Visibilité</Label>
-                    <div className="flex gap-2">
-                        {(['private', 'shared'] as const).map((v) => (
-                            <button
-                                key={v}
-                                type="button"
-                                onClick={() => setVisibility(v)}
-                                className={[
-                                    'flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm transition-colors',
-                                    visibility === v
-                                        ? 'border-primary bg-primary/5 text-primary font-medium'
-                                        : 'border-border text-muted-foreground hover:border-primary/40',
-                                ].join(' ')}
-                            >
-                                {v === 'private'
-                                    ? <><Lock className="size-3.5" /> Privée</>
-                                    : <><Globe className="size-3.5" /> Partagée</>}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            </div>
-
             {/* ─ Bouton aperçu + statut ─ */}
             <div className="flex flex-wrap items-center gap-3">
                 <Button
@@ -950,9 +1457,15 @@ function Step3({
                     onClick={runPreview}
                     disabled={previewStatus === 'loading'}
                 >
-                    {previewStatus === 'loading'
-                        ? <><Spinner data-icon="inline-start" /> Chargement…</>
-                        : <><Eye data-icon="inline-start" /> Tester la requête</>}
+                    {previewStatus === 'loading' ? (
+                        <>
+                            <Spinner data-icon="inline-start" /> Chargement…
+                        </>
+                    ) : (
+                        <>
+                            <Eye data-icon="inline-start" /> Tester la requête
+                        </>
+                    )}
                 </Button>
                 {isSaveable && (
                     <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
@@ -973,7 +1486,6 @@ function Step3({
             {/* ─ Résultats avec onglets Aperçu / SQL BIP ─ */}
             {previewStatus === 'done' && (
                 <div className="rounded-xl border overflow-hidden">
-                    {/* Onglets */}
                     <div className="flex border-b bg-muted/30">
                         <button
                             type="button"
@@ -1008,7 +1520,6 @@ function Step3({
                         </button>
                     </div>
 
-                    {/* Contenu onglet Aperçu */}
                     {activeTab === 'preview' && (
                         <div className="p-3">
                             <QueryResultView
@@ -1035,20 +1546,21 @@ function Step3({
                         </div>
                     )}
 
-                    {/* Contenu onglet SQL BIP */}
                     {activeTab === 'sql' && (
                         <div className="p-4">
                             <div className="flex items-center justify-between mb-3">
                                 <div>
-                                    <p className="text-sm font-medium">SQL généré pour Oracle BI Publisher</p>
+                                    <p className="text-sm font-medium">
+                                        SQL généré pour Oracle BI Publisher
+                                    </p>
                                     <p className="text-xs text-muted-foreground mt-0.5">
-                                        Copiez ce SQL dans votre rapport BIP pour obtenir le même résultat.
+                                        Copiez ce SQL dans votre rapport BIP.
                                     </p>
                                 </div>
                                 <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => navigator.clipboard.writeText(bipSql)}
+                                    onClick={() => void navigator.clipboard.writeText(bipSql)}
                                 >
                                     Copier
                                 </Button>
@@ -1068,9 +1580,16 @@ function Step3({
                     Retour
                 </Button>
                 <Button onClick={save} disabled={!isSaveable || saving} size="default">
-                    {saving
-                        ? <><Spinner data-icon="inline-start" /> Enregistrement…</>
-                        : <><Save data-icon="inline-start" /> Enregistrer la requête</>}
+                    {saving ? (
+                        <>
+                            <Spinner data-icon="inline-start" /> Enregistrement…
+                        </>
+                    ) : (
+                        <>
+                            <Save data-icon="inline-start" />
+                            {wizardMode === 'edit' ? 'Mettre à jour' : 'Enregistrer la requête'}
+                        </>
+                    )}
                 </Button>
             </div>
         </div>
@@ -1079,17 +1598,47 @@ function Step3({
 
 // ─── QueryWizard (composant racine) ───────────────────────────────────────────
 
-export function QueryWizard({ resourceSuggestions, tenants, defaultTenant }: WizardProps) {
-    const [step, setStep] = useState<Step>(1);
-    const [resource, setResource] = useState<Resource | null>(null);
+export function QueryWizard({
+    resourceSuggestions,
+    tenants,
+    defaultTenant,
+    mode = 'create',
+    initialState,
+}: WizardProps) {
+    // Resolve initial resource from initialState.resourceKey
+    const resourceKey = initialState?.resourceKey;
+    const initialResource = useMemo(
+        () =>
+            resourceKey
+                ? (resourceSuggestions.find((r) => r.key === resourceKey) ?? null)
+                : null,
+        [resourceSuggestions, resourceKey],
+    );
+
+    const [step, setStep] = useState<Step>(initialResource ? 2 : 1);
+    const [resource, setResource] = useState<Resource | null>(initialResource);
 
     // État étape 2
-    const [fields, setFields] = useState<string[]>([]);
-    const [expand, setExpand] = useState<string[]>([]);
-    const [filterQ, setFilterQ] = useState('');
-    const [orderBy, setOrderBy] = useState('');
-    const [tenant, setTenant] = useState(defaultTenant || Object.keys(tenants)[0] || '');
-    const [limit, setLimit] = useState(String(DEFAULT_LIMIT));
+    const [fields, setFields] = useState<string[]>(initialState?.fields ?? []);
+    const [expand, setExpand] = useState<string[]>(initialState?.expand ?? []);
+    const [childFields, setChildFields] = useState<ChildFieldsMap>(initialState?.childFields ?? {});
+    const [filterRows, setFilterRows] = useState<FilterRow[]>(() => {
+        const q = initialState?.filterQ ?? '';
+        const pFields = initialResource?.fields ?? [];
+
+        if (!q) {
+return [];
+}
+
+        const parsed = qToFilterRows(q, pFields);
+
+        return parsed.length > 0 ? parsed : [];
+    });
+    const [orderBy, setOrderBy] = useState(initialState?.orderBy ?? '');
+    const [tenant, setTenant] = useState(
+        initialState?.tenantKey ?? defaultTenant ?? Object.keys(tenants)[0] ?? '',
+    );
+    const [limit, setLimit] = useState(String(initialState?.limit ?? DEFAULT_LIMIT));
 
     const topRef = useRef<HTMLDivElement>(null);
 
@@ -1103,7 +1652,8 @@ export function QueryWizard({ resourceSuggestions, tenants, defaultTenant }: Wiz
         if (resource?.key !== r.key) {
             setFields([]);
             setExpand([]);
-            setFilterQ('');
+            setChildFields({});
+            setFilterRows([]);
             setOrderBy('');
         }
 
@@ -1132,8 +1682,10 @@ export function QueryWizard({ resourceSuggestions, tenants, defaultTenant }: Wiz
                     setFields={setFields}
                     expand={expand}
                     setExpand={setExpand}
-                    filterQ={filterQ}
-                    setFilterQ={setFilterQ}
+                    childFields={childFields}
+                    setChildFields={setChildFields}
+                    filterRows={filterRows}
+                    setFilterRows={setFilterRows}
                     orderBy={orderBy}
                     setOrderBy={setOrderBy}
                     tenant={tenant}
@@ -1152,9 +1704,14 @@ export function QueryWizard({ resourceSuggestions, tenants, defaultTenant }: Wiz
                     tenants={tenants}
                     fields={fields}
                     expand={expand}
-                    filterQ={filterQ}
+                    childFields={childFields}
+                    filterRows={filterRows}
                     orderBy={orderBy}
                     limitStr={limit}
+                    wizardMode={mode}
+                    queryId={initialState?.queryId}
+                    initialName={initialState?.name}
+                    initialVisibility={initialState?.visibility}
                     onBack={() => goTo(2)}
                 />
             )}

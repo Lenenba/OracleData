@@ -20,6 +20,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('queries', [QueryController::class, 'index'])->name('queries.index');
     Route::get('queries/create', [QueryController::class, 'create'])->name('queries.create');
     Route::post('queries', [QueryController::class, 'store'])->name('queries.store');
+    Route::get('queries/{query}/edit', [QueryController::class, 'edit'])->name('queries.edit');
+    Route::put('queries/{query}', [QueryController::class, 'update'])->name('queries.update');
     Route::patch('queries/{query}/visibility', [QueryController::class, 'updateVisibility'])->name('queries.visibility');
     Route::delete('queries/{query}', [QueryController::class, 'destroy'])->name('queries.destroy');
 
