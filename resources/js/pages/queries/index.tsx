@@ -13,7 +13,8 @@ import {
     Trash2,
     User,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { DataTable, StopClick, TableAvatar } from '@/components/data-table';
 import type { DataTableColumn } from '@/components/data-table';
 import { EntityChip } from '@/components/entity-chip';
@@ -55,6 +56,17 @@ type QuerySummary = {
     shared: number;
 };
 
+type PaginatedQueries = {
+    data: QueryRow[];
+    current_page: number;
+    last_page: number;
+    from: number | null;
+    to: number | null;
+    total: number;
+    prev_page_url: string | null;
+    next_page_url: string | null;
+};
+
 function VisibilityToggle({
     query,
     onToggle,
@@ -70,7 +82,7 @@ function VisibilityToggle({
             query.visibility === 'shared' ? 'private' : 'shared';
 
         try {
-            await fetch(queries.visibility.url(query.id), {
+            const response = await fetch(queries.visibility.url(query.id), {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
@@ -81,7 +93,14 @@ function VisibilityToggle({
                 credentials: 'same-origin',
                 body: JSON.stringify({ visibility: next }),
             });
+
+            if (!response.ok) {
+                throw new Error('Visibility update failed.');
+            }
+
             onToggle(query.id, next);
+        } catch {
+            toast.error("La visibilité n'a pas pu être mise à jour.");
         } finally {
             setLoading(false);
         }
@@ -189,30 +208,52 @@ function QueryActionsMenu({
 }
 
 export default function QueriesIndex({
-    queries: initialRows,
+    queries: queryPage,
     scope = 'all',
     summary,
+    search: initialSearch = '',
 }: {
-    queries: QueryRow[];
+    queries: PaginatedQueries;
     scope?: QueryScope;
     summary: QuerySummary;
+    search?: string;
 }) {
-    const [rows, setRows] = useState<QueryRow[]>(initialRows);
-    const [search, setSearch] = useState('');
+    const [visibilityOverrides, setVisibilityOverrides] = useState<
+        Record<number, 'private' | 'shared'>
+    >({});
+    const [search, setSearch] = useState(initialSearch);
+    const rows = queryPage.data
+        .map((query) => ({
+            ...query,
+            visibility: visibilityOverrides[query.id] ?? query.visibility,
+        }))
+        .filter((query) => scope !== 'shared' || query.visibility === 'shared');
 
     useEffect(() => {
-        setRows(initialRows);
-    }, [initialRows]);
+        if (search === initialSearch) {
+            return;
+        }
 
-    const filtered = useMemo(() => {
-        const q = search.toLowerCase();
+        const timer = window.setTimeout(() => {
+            router.get(
+                queries.index({
+                    query: {
+                        scope: scope === 'all' ? undefined : scope,
+                        search: search.trim() || undefined,
+                    },
+                }),
+                {},
+                {
+                    only: ['queries', 'search'],
+                    preserveState: true,
+                    preserveScroll: true,
+                    replace: true,
+                },
+            );
+        }, 350);
 
-        return rows.filter(
-            (row) =>
-                row.name.toLowerCase().includes(q) ||
-                (row.description ?? '').toLowerCase().includes(q),
-        );
-    }, [rows, search]);
+        return () => window.clearTimeout(timer);
+    }, [initialSearch, scope, search]);
 
     const heading =
         scope === 'shared'
@@ -252,18 +293,10 @@ export default function QueriesIndex({
         id: number,
         newVisibility: 'private' | 'shared',
     ) {
-        setRows((prev) =>
-            prev
-                .map((q) =>
-                    q.id === id ? { ...q, visibility: newVisibility } : q,
-                )
-                .filter(
-                    (q) =>
-                        scope !== 'shared' ||
-                        q.visibility === 'shared' ||
-                        q.id !== id,
-                ),
-        );
+        setVisibilityOverrides((current) => ({
+            ...current,
+            [id]: newVisibility,
+        }));
     }
 
     function cloneQuery(id: number) {
@@ -319,19 +352,23 @@ export default function QueriesIndex({
                     <span className="text-muted-foreground">—</span>
                 ),
         },
-        {
-            key: 'visibility',
-            header: 'Visibilité',
-            icon: Eye,
-            cell: (query) => (
-                <StopClick>
-                    <VisibilityToggle
-                        query={query}
-                        onToggle={handleVisibilityToggle}
-                    />
-                </StopClick>
-            ),
-        },
+        ...(scope === 'shared'
+            ? []
+            : [
+                  {
+                      key: 'visibility',
+                      header: 'Visibilité',
+                      icon: Eye,
+                      cell: (query: QueryRow) => (
+                          <StopClick>
+                              <VisibilityToggle
+                                  query={query}
+                                  onToggle={handleVisibilityToggle}
+                              />
+                          </StopClick>
+                      ),
+                  },
+              ]),
         {
             key: 'owner',
             header: 'Propriétaire',
@@ -376,7 +413,6 @@ export default function QueriesIndex({
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 className="h-9 pl-9"
-                                disabled={rows.length === 0}
                             />
                         </div>
                         <Button asChild size="sm">
@@ -409,13 +445,13 @@ export default function QueriesIndex({
 
                     <DataTable
                         columns={columns}
-                        rows={filtered}
+                        rows={rows}
                         rowKey={(query) => query.id}
                         onRowClick={(query) =>
                             router.visit(queries.show(query.id))
                         }
                         empty={
-                            rows.length === 0 ? (
+                            queryPage.total === 0 && initialSearch === '' ? (
                                 <div className="space-y-3">
                                     <p>Aucune requête pour l'instant.</p>
                                     <Button asChild size="sm" variant="outline">
@@ -431,10 +467,55 @@ export default function QueriesIndex({
                     />
 
                     {/* Footer */}
-                    <div className="border-t px-5 py-3 text-xs text-muted-foreground">
-                        {filtered.length} résultat
-                        {filtered.length > 1 ? 's' : ''}
-                        {search && ` sur ${rows.length}`}
+                    <div className="flex items-center justify-between gap-3 border-t px-5 py-3 text-xs text-muted-foreground">
+                        <span>
+                            {queryPage.total === 0 ? (
+                                '0 résultat'
+                            ) : (
+                                <>
+                                    {queryPage.from}–{queryPage.to} sur{' '}
+                                    {queryPage.total}
+                                </>
+                            )}
+                        </span>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={queryPage.prev_page_url === null}
+                                onClick={() => {
+                                    if (queryPage.prev_page_url !== null) {
+                                        router.visit(queryPage.prev_page_url, {
+                                            only: ['queries'],
+                                            preserveState: true,
+                                            preserveScroll: true,
+                                        });
+                                    }
+                                }}
+                            >
+                                Précédent
+                            </Button>
+                            <span>
+                                Page {queryPage.current_page} sur{' '}
+                                {queryPage.last_page}
+                            </span>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={queryPage.next_page_url === null}
+                                onClick={() => {
+                                    if (queryPage.next_page_url !== null) {
+                                        router.visit(queryPage.next_page_url, {
+                                            only: ['queries'],
+                                            preserveState: true,
+                                            preserveScroll: true,
+                                        });
+                                    }
+                                }}
+                            >
+                                Suivant
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -62,6 +62,23 @@ test('get() wraps HTTP errors in a RuntimeException', function () {
     makeFusionClient()->get('/hcmRestApi/resources/11.13.18.05/workers');
 })->throws(RuntimeException::class);
 
+test('get() returns a safe message without leaking the upstream response', function () {
+    Http::fake(['*' => Http::response([
+        'error' => 'sensitive upstream detail',
+    ], 500)]);
+
+    try {
+        makeFusionClient()->get('/hcmRestApi/resources/11.13.18.05/workers');
+    } catch (RuntimeException $exception) {
+        expect($exception->getMessage())
+            ->toBe('Oracle Fusion est temporairement indisponible. Réessayez plus tard.')
+            ->not->toContain('sensitive upstream detail')
+            ->not->toContain('client-x.fa.oraclecloud.com');
+    }
+
+    Http::assertSentCount(3);
+});
+
 test('testConnection() returns true on success', function () {
     Http::fake(['*' => Http::response([], 200)]);
 

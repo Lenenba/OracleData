@@ -385,9 +385,11 @@ export function generateBipSql(
     let sql = `-- Requête générée par OracleData Query Builder\n`;
     sql += `-- Ressource : ${resource.label} (${resource.domain})\n`;
     sql += `-- Chemin REST : ${resource.path}\n\n`;
+
     if (sqlSource?.note) {
         sql += `-- Source SQL indicative : ${sqlSource.note}\n\n`;
     }
+
     sql += `SELECT\n${selectCols}`;
 
     [...expand, ...joins].forEach((related) => {

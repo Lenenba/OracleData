@@ -11,7 +11,7 @@ test('guests cannot manage Oracle tenants', function () {
 });
 
 test('the tenant configuration page renders configured tenants', function () {
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(User::factory()->superAdmin()->create())
         ->get(route('oracle-tenants.index'))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
@@ -21,7 +21,7 @@ test('the tenant configuration page renders configured tenants', function () {
 });
 
 test('an authenticated user can store an Oracle tenant with encrypted credentials', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->superAdmin()->create();
 
     $this->actingAs($user)
         ->post(route('oracle-tenants.store'), [
@@ -48,7 +48,7 @@ test('an authenticated user can store an Oracle tenant with encrypted credential
 test('setting a new default tenant clears the previous database default', function () {
     $old = OracleTenant::factory()->default()->create(['key' => 'old_client']);
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(User::factory()->superAdmin()->create())
         ->post(route('oracle-tenants.store'), [
             'key' => 'new_client',
             'label' => 'New Client',

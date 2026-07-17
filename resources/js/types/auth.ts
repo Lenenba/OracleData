@@ -4,6 +4,9 @@ export type User = {
     email: string;
     avatar?: string;
     email_verified_at: string | null;
+    is_super_admin: boolean;
+    locale: 'fr' | 'en' | 'es';
+    timezone: string;
     two_factor_enabled?: boolean;
     created_at: string;
     updated_at: string;

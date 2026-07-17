@@ -42,8 +42,24 @@ class QueryController extends Controller
         $userId = $request->user()->id;
         $scope = $request->string('scope')->toString();
         $scope = in_array($scope, ['all', 'mine', 'shared'], true) ? $scope : 'all';
+        $search = trim($request->string('search')->toString());
+
+        if (mb_strlen($search) > 100) {
+            $search = mb_substr($search, 0, 100);
+        }
 
         $queries = Query::query()
+            ->select([
+                'id',
+                'user_id',
+                'name',
+                'description',
+                'resource_path',
+                'tenant_key',
+                'mode',
+                'visibility',
+                'updated_at',
+            ])
             ->when($scope === 'all', fn (Builder $query) => $query
                 ->where(fn (Builder $query) => $query
                     ->where('user_id', $userId)
@@ -52,10 +68,16 @@ class QueryController extends Controller
                 ->where('user_id', $userId))
             ->when($scope === 'shared', fn (Builder $query) => $query
                 ->where('visibility', 'shared'))
+            ->when($search !== '', fn (Builder $query) => $query
+                ->where(fn (Builder $query) => $query
+                    ->where('name', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%")))
             ->with('user:id,name')
-            ->latest()
-            ->get()
-            ->map(fn (Query $query): array => [
+            ->orderByDesc('updated_at')
+            ->orderByDesc('id')
+            ->paginate(25)
+            ->withQueryString()
+            ->through(fn (Query $query): array => [
                 'id' => $query->id,
                 'name' => $query->name,
                 'description' => $query->description,
@@ -76,6 +98,7 @@ class QueryController extends Controller
         return Inertia::render('queries/index', [
             'queries' => $queries,
             'scope' => $scope,
+            'search' => $search,
             'summary' => [
                 'all' => Query::query()
                     ->where(fn (Builder $query) => $query

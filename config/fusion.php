@@ -30,6 +30,12 @@ return [
         '/fscmRestApi/',
     ],
 
+    'http' => [
+        'connect_timeout' => (float) env('FUSION_CONNECT_TIMEOUT', 5),
+        'timeout' => (float) env('FUSION_REQUEST_TIMEOUT', 30),
+        'retry_delays' => [200, 500],
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Tenants Oracle Fusion (multi-client)

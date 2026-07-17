@@ -16,6 +16,7 @@ class UserSeeder extends Seeder
             [
                 'name' => 'Test User',
                 'email' => 'test@example.com',
+                'is_super_admin' => true,
             ],
             [
                 'name' => 'Analyste Oracle',
@@ -28,7 +29,7 @@ class UserSeeder extends Seeder
         ];
 
         foreach ($users as $user) {
-            User::query()->updateOrCreate(
+            $model = User::query()->updateOrCreate(
                 ['email' => $user['email']],
                 [
                     'name' => $user['name'],
@@ -36,6 +37,10 @@ class UserSeeder extends Seeder
                     'email_verified_at' => now(),
                 ],
             );
+
+            $model->forceFill([
+                'is_super_admin' => (bool) ($user['is_super_admin'] ?? false),
+            ])->save();
         }
     }
 }
