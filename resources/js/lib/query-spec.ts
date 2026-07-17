@@ -12,6 +12,19 @@ export type JoinKeyDef = {
     label: string;
 };
 
+export type SqlRelationDef = {
+    table: string;
+    alias?: string;
+    join?: string;
+    columns?: Record<string, string>;
+};
+
+export type SqlSourceDef = SqlRelationDef & {
+    child_tables?: Record<string, SqlRelationDef>;
+    joins?: Record<string, SqlRelationDef>;
+    note?: string;
+};
+
 export type ResourceSuggestion = {
     key: string;
     label: string;
@@ -25,6 +38,7 @@ export type ResourceSuggestion = {
     child_resources?: string[];
     child_fields?: Record<string, string[]>;
     join_keys?: Record<string, JoinKeyDef>;
+    sql?: SqlSourceDef | null;
 };
 
 // Une ligne du constructeur de filtres
@@ -252,6 +266,102 @@ export function qToFilterRows(q: string, parentFields: string[]): FilterRow[] {
     return rows;
 }
 
+function toOracleColumn(field: string): string {
+    return field
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+        .replace(/[^A-Za-z0-9_]/g, '_')
+        .toUpperCase();
+}
+
+function relationAlias(relation: SqlRelationDef | undefined, fallback: string) {
+    return relation?.alias ?? fallback;
+}
+
+function qualifySqlExpression(expression: string, alias: string): string {
+    const trimmed = expression.trim();
+
+    if (/[\s().']/.test(trimmed) || trimmed.includes('.')) {
+        return trimmed;
+    }
+
+    return `${alias}.${trimmed}`;
+}
+
+function sqlColumnExpression(
+    relation: SqlRelationDef | undefined,
+    alias: string,
+    field: string,
+): string {
+    return qualifySqlExpression(
+        relation?.columns?.[field] ?? toOracleColumn(field),
+        alias,
+    );
+}
+
+function selectSqlColumn(
+    relation: SqlRelationDef | undefined,
+    alias: string,
+    field: string,
+    outputName = field,
+): string {
+    return `  ${sqlColumnExpression(relation, alias, field)} AS "${outputName}"`;
+}
+
+function sqlStringLiterals(expression: string): string {
+    return expression.replace(/"([^"]*)"/g, (_match, value: string) => {
+        return `'${value.replace(/'/g, "''")}'`;
+    });
+}
+
+function mapSqlFilterExpression(
+    expression: string,
+    relation: SqlRelationDef | undefined,
+    alias: string,
+    fields: string[],
+): string {
+    const knownFields = [
+        ...new Set([...fields, ...Object.keys(relation?.columns ?? {})]),
+    ].sort((a, b) => b.length - a.length);
+
+    let mapped = expression;
+
+    for (const field of knownFields) {
+        mapped = mapped.replace(
+            new RegExp(`\\b${field}\\b`, 'g'),
+            sqlColumnExpression(relation, alias, field),
+        );
+    }
+
+    return sqlStringLiterals(mapped);
+}
+
+function mapSqlOrderBy(
+    orderBy: string,
+    relation: SqlRelationDef | undefined,
+    alias: string,
+    fields: string[],
+): string {
+    return orderBy
+        .split(',')
+        .map((clause) => {
+            const [field, direction] = clause.split(':').map((v) => v.trim());
+
+            if (!field) {
+                return '';
+            }
+
+            const mappedField = fields.includes(field)
+                ? sqlColumnExpression(relation, alias, field)
+                : field;
+            const mappedDirection =
+                direction?.toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+
+            return `${mappedField} ${mappedDirection}`;
+        })
+        .filter(Boolean)
+        .join(', ');
+}
+
 // Génère un SQL BIP (Oracle BI Publisher) à partir des paramètres du builder
 export function generateBipSql(
     resource: ResourceSuggestion,
@@ -264,52 +374,91 @@ export function generateBipSql(
     limit: number,
 ): string {
     const cols = fields.length > 0 ? fields : (resource.fields ?? []);
-    const tableName = resource.key.toUpperCase();
-    const selectCols = cols.map((f) => `  ${tableName}.${f}`).join(',\n');
+    const sqlSource = resource.sql ?? undefined;
+    const tableName = sqlSource?.table ?? resource.key.toUpperCase();
+    const tableAlias = relationAlias(sqlSource, tableName);
+    const selectCols = cols
+        .map((f) => selectSqlColumn(sqlSource, tableAlias, f))
+        .join(',\n');
     const joinKeysDefs = resource.join_keys ?? {};
 
     let sql = `-- Requête générée par OracleData Query Builder\n`;
     sql += `-- Ressource : ${resource.label} (${resource.domain})\n`;
     sql += `-- Chemin REST : ${resource.path}\n\n`;
+    if (sqlSource?.note) {
+        sql += `-- Source SQL indicative : ${sqlSource.note}\n\n`;
+    }
     sql += `SELECT\n${selectCols}`;
 
     [...expand, ...joins].forEach((related) => {
-        const relatedTable = related.toUpperCase();
+        const relation =
+            sqlSource?.child_tables?.[related] ?? sqlSource?.joins?.[related];
+        const relatedTable = relation?.table ?? related.toUpperCase();
+        const relatedAlias = relationAlias(relation, relatedTable);
         const cFields = childFields[related] ?? [];
 
         if (cFields.length > 0) {
             cFields.forEach((cf) => {
-                sql += `,\n  ${relatedTable}.${cf}`;
+                sql += `,\n${selectSqlColumn(
+                    relation,
+                    relatedAlias,
+                    cf,
+                    `${related}.${cf}`,
+                )}`;
             });
         } else {
-            sql += `,\n  ${relatedTable}.*`;
+            sql += `,\n  ${relatedAlias}.*`;
         }
     });
 
-    sql += `\nFROM ${tableName}`;
+    sql += `\nFROM ${tableName} ${tableAlias}`;
 
     expand.forEach((child) => {
-        const childTable = child.toUpperCase();
-        sql += `\nLEFT JOIN ${tableName}_${childTable} ${childTable}`;
-        sql += `\n  ON ${childTable}.PARENT_${tableName}_ID = ${tableName}.${tableName.replace(/S$/, '')}ID`;
+        const relation = sqlSource?.child_tables?.[child];
+        const childTable =
+            relation?.table ?? `${tableName}_${child.toUpperCase()}`;
+        const childAlias = relationAlias(relation, child.toUpperCase());
+
+        sql += `\nLEFT JOIN ${childTable} ${childAlias}`;
+
+        if (relation?.join) {
+            sql += `\n  ON ${relation.join}`;
+        } else {
+            sql += `\n  ON ${childAlias}.PARENT_${tableName}_ID = ${tableAlias}.${tableName.replace(/S$/, '')}ID`;
+        }
     });
 
     joins.forEach((target) => {
         const joinDef = joinKeysDefs[target];
-        const targetTable = target.toUpperCase();
+        const relation = sqlSource?.joins?.[target];
+        const targetTable = relation?.table ?? target.toUpperCase();
+        const targetAlias = relationAlias(relation, targetTable);
 
-        if (joinDef) {
-            sql += `\nLEFT JOIN ${targetTable}`;
-            sql += `\n  ON ${targetTable}.${joinDef.remote_key} = ${tableName}.${joinDef.local_key}`;
+        if (relation?.join) {
+            sql += `\nLEFT JOIN ${targetTable} ${targetAlias}`;
+            sql += `\n  ON ${relation.join}`;
+        } else if (joinDef) {
+            sql += `\nLEFT JOIN ${targetTable} ${targetAlias}`;
+            sql += `\n  ON ${sqlColumnExpression(relation, targetAlias, joinDef.remote_key)} = ${sqlColumnExpression(sqlSource, tableAlias, joinDef.local_key)}`;
         }
     });
 
     if (filterQ.trim()) {
-        sql += `\nWHERE ${filterQ.trim()}`;
+        sql += `\nWHERE ${mapSqlFilterExpression(
+            filterQ.trim(),
+            sqlSource,
+            tableAlias,
+            resource.fields ?? [],
+        )}`;
     }
 
     if (orderBy.trim()) {
-        sql += `\nORDER BY ${orderBy.trim()}`;
+        sql += `\nORDER BY ${mapSqlOrderBy(
+            orderBy.trim(),
+            sqlSource,
+            tableAlias,
+            resource.fields ?? [],
+        )}`;
     }
 
     sql += `\nFETCH FIRST ${limit} ROWS ONLY`;

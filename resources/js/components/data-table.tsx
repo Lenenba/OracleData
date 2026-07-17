@@ -10,12 +10,15 @@ import type { ReactNode } from 'react';
 
 export type DataTableColumn<T> = {
     key: string;
-    header: string;
+    header: ReactNode;
     icon?: LucideIcon;
     align?: 'left' | 'right';
     /** Classe de largeur optionnelle (ex. « w-12 »). */
     width?: string;
+    headerClassName?: string;
     cellClassName?: string;
+    verticalAlign?: 'middle' | 'top';
+    onHeaderClick?: () => void;
     cell: (row: T) => ReactNode;
 };
 
@@ -57,7 +60,7 @@ export function DataTable<T>({
 }: {
     columns: DataTableColumn<T>[];
     rows: T[];
-    rowKey: (row: T) => string | number;
+    rowKey: (row: T, index: number) => string | number;
     onRowClick?: (row: T) => void;
     empty?: ReactNode;
 }) {
@@ -66,33 +69,59 @@ export function DataTable<T>({
             <table className="w-full border-collapse text-sm">
                 <thead>
                     <tr>
-                        {columns.map((col) => (
-                            <th
-                                key={col.key}
-                                className={[
-                                    'border-b border-border bg-muted/30 px-4 py-3 align-middle font-medium whitespace-nowrap text-muted-foreground',
-                                    'not-first:border-l',
-                                    col.align === 'right'
-                                        ? 'text-right'
-                                        : 'text-left',
-                                    col.width ?? '',
-                                ].join(' ')}
-                            >
-                                <span
-                                    className={[
-                                        'inline-flex items-center gap-1.5',
-                                        col.align === 'right'
-                                            ? 'flex-row-reverse'
-                                            : '',
-                                    ].join(' ')}
-                                >
-                                    {col.icon && (
-                                        <col.icon className="size-3.5 text-muted-foreground/60" />
+                        {columns.map((col) => {
+                            const HeaderIcon = col.icon;
+                            const headerContent = (
+                                <>
+                                    {HeaderIcon && (
+                                        <HeaderIcon className="size-3.5 text-muted-foreground/60" />
                                     )}
                                     {col.header}
-                                </span>
-                            </th>
-                        ))}
+                                </>
+                            );
+                            const headerLayout = [
+                                'inline-flex items-center gap-1.5',
+                                col.align === 'right' ? 'flex-row-reverse' : '',
+                            ].join(' ');
+
+                            return (
+                                <th
+                                    key={col.key}
+                                    className={[
+                                        'border-b border-border bg-muted/30 px-4 py-3 align-middle font-medium whitespace-nowrap text-muted-foreground',
+                                        'not-first:border-l',
+                                        col.align === 'right'
+                                            ? 'text-right'
+                                            : 'text-left',
+                                        col.onHeaderClick
+                                            ? 'hover:bg-muted/60'
+                                            : '',
+                                        col.width ?? '',
+                                        col.headerClassName ?? '',
+                                    ].join(' ')}
+                                >
+                                    {col.onHeaderClick ? (
+                                        <button
+                                            type="button"
+                                            onClick={col.onHeaderClick}
+                                            className={[
+                                                headerLayout,
+                                                'w-full cursor-pointer font-medium text-inherit',
+                                                col.align === 'right'
+                                                    ? 'justify-end'
+                                                    : 'justify-start',
+                                            ].join(' ')}
+                                        >
+                                            {headerContent}
+                                        </button>
+                                    ) : (
+                                        <span className={headerLayout}>
+                                            {headerContent}
+                                        </span>
+                                    )}
+                                </th>
+                            );
+                        })}
                     </tr>
                 </thead>
                 <tbody className="[&>tr:last-child>td]:border-b-0">
@@ -106,9 +135,9 @@ export function DataTable<T>({
                             </td>
                         </tr>
                     ) : (
-                        rows.map((row) => (
+                        rows.map((row, index) => (
                             <tr
-                                key={rowKey(row)}
+                                key={rowKey(row, index)}
                                 onClick={
                                     onRowClick
                                         ? () => onRowClick(row)
@@ -125,7 +154,10 @@ export function DataTable<T>({
                                     <td
                                         key={col.key}
                                         className={[
-                                            'border-b border-border px-4 py-3.5 align-middle whitespace-nowrap',
+                                            'border-b border-border px-4 py-3.5 whitespace-nowrap',
+                                            col.verticalAlign === 'top'
+                                                ? 'align-top'
+                                                : 'align-middle',
                                             'not-first:border-l',
                                             col.align === 'right'
                                                 ? 'text-right'

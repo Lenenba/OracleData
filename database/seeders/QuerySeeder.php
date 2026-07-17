@@ -1,0 +1,124 @@
+<?php
+
+namespace Database\Seeders;
+
+use App\Models\Query;
+use App\Models\User;
+use Illuminate\Database\Seeder;
+
+class QuerySeeder extends Seeder
+{
+    /**
+     * Seed a practical query library for the local OracleData workspace.
+     */
+    public function run(): void
+    {
+        $owner = User::query()->where('email', 'test@example.com')->firstOrFail();
+        $analyst = User::query()->where('email', 'analyste@oracledata.test')->firstOrFail();
+        $finance = User::query()->where('email', 'finance@oracledata.test')->firstOrFail();
+
+        $this->upsertQuery($owner, [
+            'name' => 'Bons de commande ouverts',
+            'description' => 'PO ouverts avec fournisseur, statut et montant commandé.',
+            'resource_path' => '/fscmRestApi/resources/11.13.18.05/purchaseOrders',
+            'tenant_key' => 'client_x',
+            'mode' => 'single',
+            'parameters' => [
+                'resource_key' => 'purchase_orders',
+                'fields' => 'POHeaderId,OrderNumber,Supplier,Status,Ordered,CreationDate',
+                'q' => "Status!='Closed'",
+                'orderBy' => 'CreationDate:desc',
+                'limit' => 25,
+            ],
+            'visibility' => 'shared',
+        ]);
+
+        $this->upsertQuery($owner, [
+            'name' => 'Fournisseurs actifs avec sites',
+            'description' => 'Fournisseurs actifs et leurs sites d’achat principaux.',
+            'resource_path' => '/fscmRestApi/resources/11.13.18.05/suppliers',
+            'tenant_key' => 'client_x',
+            'mode' => 'single',
+            'parameters' => [
+                'resource_key' => 'suppliers',
+                'fields' => 'Supplier,SupplierNumber,Status',
+                'expand' => 'sites',
+                'child_fields' => [
+                    'sites' => ['SupplierSite', 'PurchasingEnabled', 'PrimaryPaySite'],
+                ],
+                'q' => "Status='ACTIVE'",
+                'limit' => 50,
+            ],
+            'visibility' => 'private',
+        ]);
+
+        $this->upsertQuery($analyst, [
+            'name' => 'Demandes d’achat récentes',
+            'description' => 'Demandes d’achat avec statut et préparateur.',
+            'resource_path' => '/fscmRestApi/resources/11.13.18.05/purchaseRequisitions',
+            'tenant_key' => 'client_x',
+            'mode' => 'single',
+            'parameters' => [
+                'resource_key' => 'purchase_requisitions',
+                'fields' => 'RequisitionHeaderId,RequisitionNumber,Preparer,DocumentStatus,CreationDate',
+                'orderBy' => 'CreationDate:desc',
+                'limit' => 25,
+            ],
+            'visibility' => 'shared',
+        ]);
+
+        $this->upsertQuery($finance, [
+            'name' => 'Factures fournisseurs à payer',
+            'description' => 'Factures AP non payées avec fournisseur et montant.',
+            'resource_path' => '/fscmRestApi/resources/11.13.18.05/invoices',
+            'tenant_key' => 'client_x',
+            'mode' => 'single',
+            'parameters' => [
+                'resource_key' => 'invoices',
+                'fields' => 'InvoiceId,InvoiceNumber,Supplier,InvoiceAmount,PaidStatus,InvoiceDate',
+                'q' => "PaidStatus!='Y'",
+                'orderBy' => 'InvoiceDate:desc',
+                'limit' => 25,
+            ],
+            'visibility' => 'shared',
+        ]);
+
+        $this->upsertQuery($finance, [
+            'name' => 'Analyse fournisseurs et factures',
+            'description' => 'Lier les fournisseurs et les factures, puis résumer le total facturé par fournisseur.',
+            'resource_path' => null,
+            'tenant_key' => 'client_x',
+            'mode' => 'agent',
+            'parameters' => null,
+            'visibility' => 'shared',
+        ]);
+
+        $this->upsertQuery($analyst, [
+            'name' => 'Employés HCM actifs',
+            'description' => 'Base HCM workers pour contrôles RH.',
+            'resource_path' => '/hcmRestApi/resources/11.13.18.05/workers',
+            'tenant_key' => 'client_x',
+            'mode' => 'single',
+            'parameters' => [
+                'resource_key' => 'workers',
+                'fields' => 'PersonId,PersonNumber,CreationDate',
+                'limit' => 25,
+            ],
+            'visibility' => 'private',
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function upsertQuery(User $user, array $attributes): void
+    {
+        Query::query()->updateOrCreate(
+            [
+                'user_id' => $user->id,
+                'name' => $attributes['name'],
+            ],
+            $attributes,
+        );
+    }
+}

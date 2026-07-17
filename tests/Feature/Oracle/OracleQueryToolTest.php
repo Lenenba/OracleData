@@ -103,6 +103,109 @@ test('fields without expand are sent to Oracle and the parent is projected', fun
     });
 });
 
+test('purchase orders use the intent finder fallback when the primary collection is empty', function () {
+    Http::fake([
+        'https://client-x.fa.oraclecloud.com/fscmRestApi/resources/11.13.18.05/purchaseOrders?*' => Http::sequence()
+            ->push(['items' => [], 'count' => 0])
+            ->push([
+                'items' => [[
+                    'POHeaderId' => 100,
+                    'OrderNumber' => 'PO-100',
+                    'Supplier' => 'Acme',
+                    'Status' => 'Open',
+                ]],
+                'count' => 1,
+                'hasMore' => false,
+            ]),
+    ]);
+
+    $result = app(OracleQueryTool::class)->run('client_x', [
+        'resource' => 'purchase_orders',
+        'fields' => ['POHeaderId', 'OrderNumber', 'Supplier', 'Status'],
+        'limit' => 25,
+    ]);
+
+    expect($result['count'])->toBe(1)
+        ->and($result['items'][0]['OrderNumber'])->toBe('PO-100')
+        ->and($result['calls'])->toHaveCount(2)
+        ->and($result['calls'][0]['count'])->toBe(0)
+        ->and($result['calls'][1]['params']['finder'])->toBe('findByIntent;Intent=POUser')
+        ->and($result['params']['finder'])->toBe('findByIntent;Intent=POUser');
+
+    Http::assertSentCount(2);
+});
+
+test('purchase orders can fall back to the LOV endpoint without incompatible REST fields', function () {
+    Http::fake([
+        'https://client-x.fa.oraclecloud.com/fscmRestApi/resources/11.13.18.05/purchaseOrders?*' => Http::sequence()
+            ->push(['items' => [], 'count' => 0])
+            ->push(['items' => [], 'count' => 0])
+            ->push(['items' => [], 'count' => 0]),
+        'https://client-x.fa.oraclecloud.com/fscmRestApi/resources/11.13.18.05/purchaseOrdersLOV?*' => Http::response([
+            'items' => [[
+                'POHeaderId' => 200,
+                'OrderNumber' => 'PO-200',
+                'Supplier' => 'Beta',
+                'Status' => 'Closed',
+            ]],
+            'count' => 1,
+            'hasMore' => false,
+        ]),
+    ]);
+
+    $result = app(OracleQueryTool::class)->run('client_x', [
+        'resource' => 'purchase_orders',
+        'fields' => ['OrderNumber', 'Supplier', 'Status', 'Ordered'],
+        'orderBy' => 'OrderNumber:asc',
+        'limit' => 10,
+    ]);
+
+    expect($result['count'])->toBe(1)
+        ->and($result['path'])->toBe('/fscmRestApi/resources/11.13.18.05/purchaseOrdersLOV')
+        ->and($result['items'][0])->toEqual([
+            'OrderNumber' => 'PO-200',
+            'Supplier' => 'Beta',
+            'Status' => 'Closed',
+        ])
+        ->and($result['calls'])->toHaveCount(4)
+        ->and($result['calls'][3]['path'])->toBe('/fscmRestApi/resources/11.13.18.05/purchaseOrdersLOV')
+        ->and($result['calls'][3]['params'])->not->toHaveKeys(['fields', 'orderBy']);
+});
+
+test('a rejected field projection is retried without fields and projected locally', function () {
+    Http::fake([
+        'https://client-x.fa.oraclecloud.com/fscmRestApi/resources/11.13.18.05/purchaseOrders?*' => Http::sequence()
+            ->pushStatus(400)
+            ->push([
+                'items' => [[
+                    'POHeaderId' => 300,
+                    'OrderNumber' => 'PO-300',
+                    'Supplier' => 'Gamma',
+                    'Ordered' => 1250,
+                    'Status' => 'Open',
+                ]],
+                'count' => 1,
+            ]),
+    ]);
+
+    $result = app(OracleQueryTool::class)->run('client_x', [
+        'resource' => 'purchase_orders',
+        'fields' => ['OrderNumber', 'Supplier', 'Ordered'],
+        'limit' => 25,
+    ]);
+
+    expect($result['items'][0])->toEqual([
+        'OrderNumber' => 'PO-300',
+        'Supplier' => 'Gamma',
+        'Ordered' => 1250,
+    ])
+        ->and($result['params'])->not->toHaveKey('fields')
+        ->and($result['calls'])->toHaveCount(1)
+        ->and($result['calls'][0]['params'])->not->toHaveKey('fields');
+
+    Http::assertSentCount(2);
+});
+
 test('run() strips Oracle HATEOAS links from items, including nested children', function () {
     Http::fake(['*' => Http::response([
         'items' => [[

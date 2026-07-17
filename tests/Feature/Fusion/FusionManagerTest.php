@@ -82,6 +82,20 @@ test('database tenants are available and can become the default tenant', functio
         && $request->hasHeader('Authorization', 'Basic '.base64_encode('svc_z:secret_z')));
 });
 
+test('details() includes database tenant ids for management actions', function () {
+    $tenant = OracleTenant::factory()->create([
+        'key' => 'client_z',
+        'label' => 'Client Z',
+    ]);
+
+    $details = collect(app(FusionManager::class)->details())
+        ->firstWhere('key', 'client_z');
+
+    expect($details)->not->toBeNull()
+        ->and($details['id'])->toBe($tenant->id)
+        ->and($details['source'])->toBe('database');
+});
+
 test('has() reflects configured tenants', function () {
     $manager = app(FusionManager::class);
 

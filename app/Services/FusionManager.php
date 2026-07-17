@@ -99,12 +99,13 @@ class FusionManager
     /**
      * Détails non sensibles des tenants pour la page de configuration.
      *
-     * @return array<int, array{key: string, label: string, base_url: string, username: string, source: string, is_default: bool, is_active: bool}>
+     * @return array<int, array{id: int|null, key: string, label: string, base_url: string, username: string, source: string, is_default: bool, is_active: bool}>
      */
     public function details(): array
     {
         return (new Collection($this->tenants()))
             ->map(fn (array $config, string $key): array => [
+                'id' => $config['id'] ?? null,
                 'key' => $key,
                 'label' => (string) ($config['label'] ?? $key),
                 'base_url' => (string) ($config['base_url'] ?? ''),
@@ -194,6 +195,7 @@ class FusionManager
                 ->get()
                 ->mapWithKeys(fn (OracleTenant $tenant): array => [
                     $tenant->key => [
+                        'id' => $tenant->id,
                         'label' => $tenant->label,
                         'base_url' => $tenant->base_url,
                         'username' => $tenant->username,

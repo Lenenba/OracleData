@@ -1,5 +1,5 @@
-import { Head, Link } from '@inertiajs/react';
-import { Pencil } from 'lucide-react';
+import { Head, Link, router } from '@inertiajs/react';
+import { Copy, Pencil } from 'lucide-react';
 import { useState } from 'react';
 import Heading from '@/components/heading';
 import { QueryResultView } from '@/components/queries/query-result';
@@ -28,7 +28,7 @@ type QueryDetail = {
     mode: 'single' | 'agent';
     parameters: Record<string, unknown>;
     visibility: 'private' | 'shared';
-    can: { update: boolean };
+    can: { update: boolean; clone: boolean };
 };
 
 type ShowProps = {
@@ -55,6 +55,10 @@ export default function ShowQuery({
     const [fetchError, setFetchError] = useState<string | null>(null);
 
     const tenantLabel = tenants[result?.tenant ?? tenant] ?? tenant;
+
+    function cloneQuery() {
+        router.post(queries.clone(query.id));
+    }
 
     async function run() {
         setStatus('loading');
@@ -107,14 +111,29 @@ export default function ShowQuery({
                     title={query.name}
                     description={query.description ?? undefined}
                     actions={
-                        query.can.update && (
-                            <Button asChild variant="outline" size="sm">
-                                <Link href={queries.edit(query.id)}>
-                                    <Pencil className="size-3.5" />
-                                    Modifier
-                                </Link>
-                            </Button>
-                        )
+                        <div className="flex flex-wrap gap-2">
+                            {query.can.clone && (
+                                <Button
+                                    type="button"
+                                    variant={
+                                        query.can.update ? 'outline' : 'default'
+                                    }
+                                    size="sm"
+                                    onClick={cloneQuery}
+                                >
+                                    <Copy className="size-3.5" />
+                                    Cloner
+                                </Button>
+                            )}
+                            {query.can.update && (
+                                <Button asChild variant="outline" size="sm">
+                                    <Link href={queries.edit(query.id)}>
+                                        <Pencil className="size-3.5" />
+                                        Modifier
+                                    </Link>
+                                </Button>
+                            )}
+                        </div>
                     }
                 />
 

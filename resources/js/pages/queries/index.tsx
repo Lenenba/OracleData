@@ -1,22 +1,32 @@
 import { Head, Link, router } from '@inertiajs/react';
 import {
+    Copy,
     Database,
     Eye,
     FileText,
+    MoreHorizontal,
     Pencil,
     Plus,
+    PlayCircle,
     Search,
     Server,
     Trash2,
     User,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DataTable, StopClick, TableAvatar } from '@/components/data-table';
 import type { DataTableColumn } from '@/components/data-table';
 import { EntityChip } from '@/components/entity-chip';
 import Heading from '@/components/heading';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { readCsrfToken } from '@/lib/csrf';
@@ -34,7 +44,15 @@ type QueryRow = {
     };
     visibility: 'private' | 'shared';
     owner: string;
-    can: { update: boolean };
+    can: { update: boolean; clone: boolean };
+};
+
+type QueryScope = 'all' | 'mine' | 'shared';
+
+type QuerySummary = {
+    all: number;
+    mine: number;
+    shared: number;
 };
 
 function VisibilityToggle({
@@ -100,29 +118,156 @@ function VisibilityToggle({
     );
 }
 
+function QueryActionsMenu({
+    query,
+    onClone,
+    onDelete,
+}: {
+    query: QueryRow;
+    onClone: (id: number) => void;
+    onDelete: (id: number) => void;
+}) {
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="size-8"
+                    aria-label={`Actions pour ${query.name}`}
+                >
+                    <MoreHorizontal className="size-4" />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem asChild className="cursor-pointer">
+                    <Link href={queries.show(query.id)}>
+                        <PlayCircle className="size-4" />
+                        Exécuter
+                    </Link>
+                </DropdownMenuItem>
+
+                {query.can.clone && (
+                    <DropdownMenuItem
+                        className="cursor-pointer"
+                        onSelect={(event) => {
+                            event.preventDefault();
+                            onClone(query.id);
+                        }}
+                    >
+                        <Copy className="size-4" />
+                        Cloner
+                    </DropdownMenuItem>
+                )}
+
+                {query.can.update && (
+                    <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem asChild className="cursor-pointer">
+                            <Link href={queries.edit(query.id)}>
+                                <Pencil className="size-4" />
+                                Modifier
+                            </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                            className="cursor-pointer text-destructive focus:text-destructive"
+                            onSelect={(event) => {
+                                event.preventDefault();
+                                onDelete(query.id);
+                            }}
+                        >
+                            <Trash2 className="size-4 text-destructive" />
+                            Supprimer
+                        </DropdownMenuItem>
+                    </>
+                )}
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
+}
+
 export default function QueriesIndex({
     queries: initialRows,
+    scope = 'all',
+    summary,
 }: {
     queries: QueryRow[];
+    scope?: QueryScope;
+    summary: QuerySummary;
 }) {
     const [rows, setRows] = useState<QueryRow[]>(initialRows);
     const [search, setSearch] = useState('');
 
-    const filtered = rows.filter(
-        (q) =>
-            q.name.toLowerCase().includes(search.toLowerCase()) ||
-            (q.description ?? '').toLowerCase().includes(search.toLowerCase()),
-    );
+    useEffect(() => {
+        setRows(initialRows);
+    }, [initialRows]);
+
+    const filtered = useMemo(() => {
+        const q = search.toLowerCase();
+
+        return rows.filter(
+            (row) =>
+                row.name.toLowerCase().includes(q) ||
+                (row.description ?? '').toLowerCase().includes(q),
+        );
+    }, [rows, search]);
+
+    const heading =
+        scope === 'shared'
+            ? {
+                  title: 'Requêtes partagées',
+                  description:
+                      'Les requêtes mises à disposition de la plateforme. Clonez-les pour créer votre propre version modifiable.',
+              }
+            : {
+                  title: 'Bibliothèque de requêtes',
+                  description:
+                      'Vos requêtes enregistrées et celles partagées avec vous.',
+              };
+
+    const scopeLinks = [
+        {
+            value: 'all' as const,
+            label: 'Toutes',
+            count: summary.all,
+            href: queries.index(),
+        },
+        {
+            value: 'mine' as const,
+            label: 'Mes requêtes',
+            count: summary.mine,
+            href: queries.index({ query: { scope: 'mine' } }),
+        },
+        {
+            value: 'shared' as const,
+            label: 'Partagées',
+            count: summary.shared,
+            href: queries.shared(),
+        },
+    ];
 
     function handleVisibilityToggle(
         id: number,
         newVisibility: 'private' | 'shared',
     ) {
         setRows((prev) =>
-            prev.map((q) =>
-                q.id === id ? { ...q, visibility: newVisibility } : q,
-            ),
+            prev
+                .map((q) =>
+                    q.id === id ? { ...q, visibility: newVisibility } : q,
+                )
+                .filter(
+                    (q) =>
+                        scope !== 'shared' ||
+                        q.visibility === 'shared' ||
+                        q.id !== id,
+                ),
         );
+    }
+
+    function cloneQuery(id: number) {
+        router.post(queries.clone(id));
     }
 
     function deleteQuery(id: number) {
@@ -159,19 +304,6 @@ export default function QueriesIndex({
                     </div>
                 </div>
             ),
-        },
-        {
-            key: 'resource',
-            header: 'Ressource',
-            icon: Server,
-            cell: (query) =>
-                query.mode === 'agent' ? (
-                    <Badge variant="secondary">Analyse multi-ressources</Badge>
-                ) : (
-                    <code className="text-xs text-muted-foreground">
-                        {query.resource_path}
-                    </code>
-                ),
         },
         {
             key: 'tenant',
@@ -211,28 +343,14 @@ export default function QueriesIndex({
             key: 'actions',
             header: 'Actions',
             align: 'right',
+            width: 'w-24',
             cell: (query) => (
                 <StopClick>
-                    <Button asChild size="sm" variant="outline">
-                        <Link href={queries.show(query.id)}>Exécuter</Link>
-                    </Button>
-                    {query.can.update && (
-                        <>
-                            <Button asChild size="sm" variant="ghost">
-                                <Link href={queries.edit(query.id)}>
-                                    <Pencil className="size-4" />
-                                </Link>
-                            </Button>
-                            <Button
-                                size="sm"
-                                variant="ghost"
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => deleteQuery(query.id)}
-                            >
-                                <Trash2 className="size-4" />
-                            </Button>
-                        </>
-                    )}
+                    <QueryActionsMenu
+                        query={query}
+                        onClone={cloneQuery}
+                        onDelete={deleteQuery}
+                    />
                 </StopClick>
             ),
         },
@@ -244,8 +362,8 @@ export default function QueriesIndex({
 
             <div className="px-6 py-6">
                 <Heading
-                    title="Bibliothèque de requêtes"
-                    description="Vos requêtes enregistrées et celles partagées avec vous."
+                    title={heading.title}
+                    description={heading.description}
                 />
 
                 <div className="overflow-hidden rounded-xl border bg-card">
@@ -267,6 +385,26 @@ export default function QueriesIndex({
                                 Nouvelle requête
                             </Link>
                         </Button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 border-b px-5 py-3">
+                        {scopeLinks.map((item) => (
+                            <Button
+                                key={item.value}
+                                asChild
+                                size="sm"
+                                variant={
+                                    scope === item.value ? 'default' : 'outline'
+                                }
+                            >
+                                <Link href={item.href}>
+                                    {item.label}
+                                    <span className="rounded-sm bg-background/20 px-1.5 py-0.5 text-[11px]">
+                                        {item.count}
+                                    </span>
+                                </Link>
+                            </Button>
+                        ))}
                     </div>
 
                     <DataTable

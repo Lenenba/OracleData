@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { Database, LayoutGrid, Server } from 'lucide-react';
+import { Database, LayoutGrid, Server, Share2 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -27,6 +27,11 @@ const mainNavItems: NavItem[] = [
         title: 'Requêtes',
         href: queries.index(),
         icon: Database,
+    },
+    {
+        title: 'Requêtes partagées',
+        href: queries.shared(),
+        icon: Share2,
     },
     {
         title: 'Tenants Oracle',
