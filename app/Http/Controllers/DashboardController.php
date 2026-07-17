@@ -19,6 +19,7 @@ class DashboardController extends Controller
     public function __invoke(Request $request, FusionManager $fusion, OracleResourceCatalog $catalog): Response
     {
         $userId = $request->user()->id;
+        $fusion = $fusion->forUser($request->user());
 
         $accessible = fn (): Builder => Query::query()
             ->where(fn (Builder $q) => $q
@@ -35,7 +36,9 @@ class DashboardController extends Controller
                 'name' => $query->name,
                 'description' => $query->description,
                 'mode' => $query->mode,
-                'tenant_label' => $fusion->label($query->tenant_key),
+                'tenant_label' => $query->user_id === $userId
+                    ? $fusion->label($query->tenant_key)
+                    : null,
                 'visibility' => $query->visibility,
                 'owner' => $query->user->name,
                 'can' => ['update' => $query->user_id === $userId],
@@ -48,7 +51,7 @@ class DashboardController extends Controller
                 'totalQueries' => $accessible()->count(),
                 'myQueries' => Query::query()->where('user_id', $userId)->count(),
                 'sharedQueries' => $accessible()->where('visibility', 'shared')->count(),
-                'activeTenants' => count($tenantDetails),
+                'activeTenants' => collect($tenantDetails)->where('is_active', true)->count(),
             ],
             'queriesPerWeek' => $this->queriesPerWeek($accessible()),
             'domainBreakdown' => $this->domainBreakdown($accessible(), $catalog),

@@ -10,14 +10,15 @@ test('guests cannot reach the create form or store a query', function () {
 });
 
 test('the create page renders', function () {
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(createConnectedUser([], ['key' => 'client_x']))
         ->get(route('queries.create'))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page->component('queries/create'));
 });
 
 test('an authenticated user can store a query', function () {
-    $user = User::factory()->create();
+    $user = createConnectedUser([], ['key' => 'client_x']);
+    $tenant = $user->oracleTenants()->sole();
 
     $response = $this->actingAs($user)->post(route('queries.store'), [
         'name' => 'Liste des employés',
@@ -34,12 +35,13 @@ test('an authenticated user can store a query', function () {
     expect($query->user_id)->toBe($user->id)
         ->and($query->name)->toBe('Liste des employés')
         ->and($query->tenant_key)->toBe('client_x')
+        ->and($query->oracle_tenant_id)->toBe($tenant->id)
         ->and($query->parameters)->toBe(['limit' => 25])
         ->and($query->visibility)->toBe('private');
 });
 
 test('an authenticated user can store a resolved single supplier query', function () {
-    $user = User::factory()->create();
+    $user = createConnectedUser([], ['key' => 'client_x']);
 
     $response = $this->actingAs($user)->post(route('queries.store'), [
         'name' => 'Fournisseurs actifs Acme',
@@ -70,7 +72,7 @@ test('an authenticated user can store a resolved single supplier query', functio
 });
 
 test('an authenticated user can store an agent analysis query without a resource path', function () {
-    $user = User::factory()->create();
+    $user = createConnectedUser([], ['key' => 'client_x']);
 
     $response = $this->actingAs($user)->post(route('queries.store'), [
         'name' => 'Total facturé par fournisseur',
@@ -145,7 +147,7 @@ test('tenant_key must be configured', function () {
 });
 
 test('joins and child_fields from the wizard are persisted', function () {
-    $user = User::factory()->create();
+    $user = createConnectedUser([], ['key' => 'client_x']);
 
     $this->actingAs($user)->post(route('queries.store'), [
         'name' => 'Fournisseurs + factures',
@@ -172,7 +174,7 @@ test('joins and child_fields from the wizard are persisted', function () {
 });
 
 test('unknown parameter keys are stripped before saving', function () {
-    $user = User::factory()->create();
+    $user = createConnectedUser([], ['key' => 'client_x']);
 
     $this->actingAs($user)->post(route('queries.store'), [
         'name' => 'With junk params',

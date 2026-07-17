@@ -35,11 +35,17 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $user = $request->user();
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
             'auth' => [
-                'user' => $request->user(),
+                'user' => $user,
+                'onboarding' => [
+                    'completed' => $user?->hasCompletedOnboarding() ?? false,
+                    'required' => $user !== null && ! $user->hasCompletedOnboarding(),
+                ],
             ],
             'locale' => app()->getLocale(),
             'locales' => config('app.supported_locales'),

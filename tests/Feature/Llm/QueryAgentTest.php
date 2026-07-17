@@ -10,15 +10,14 @@ beforeEach(function () {
         'model' => 'claude-opus-4-8',
         'version' => '2023-06-01',
     ]);
-    config()->set('fusion.default', 'client_x');
-    config()->set('fusion.tenants', [
-        'client_x' => [
-            'label' => 'Client X',
-            'base_url' => 'https://client-x.fa.oraclecloud.com',
-            'username' => 'svc_x',
-            'password' => 'secret_x',
-        ],
-    ]);
+    $this->actingAs(createConnectedUser([], [
+        'key' => 'client_x',
+        'label' => 'Client X',
+        'base_url' => 'https://client-x.fa.oraclecloud.com',
+    ], [
+        'identifier' => 'svc_x',
+        'secret' => 'secret_x',
+    ]));
 });
 
 /**

@@ -3,9 +3,13 @@
 use App\Models\Query;
 use App\Models\User;
 
-test('a user can clone a shared query and becomes the owner of a private copy', function () {
+test('a user clones a shared query onto their own default connection', function () {
     $owner = User::factory()->create();
-    $user = User::factory()->create();
+    $user = createConnectedUser([], [
+        'key' => 'reader_default',
+        'label' => 'Reader default',
+    ]);
+    $readerTenant = $user->oracleTenants()->sole();
 
     $source = Query::factory()->for($owner)->shared()->create([
         'name' => 'Bons de commande ouverts',
@@ -29,15 +33,19 @@ test('a user can clone a shared query and becomes the owner of a private copy', 
     expect($copy->name)->toBe('Copie de Bons de commande ouverts')
         ->and($copy->description)->toBe($source->description)
         ->and($copy->resource_path)->toBe($source->resource_path)
-        ->and($copy->tenant_key)->toBe($source->tenant_key)
+        ->and($copy->tenant_key)->toBe('reader_default')
+        ->and($copy->oracle_tenant_id)->toBe($readerTenant->id)
         ->and($copy->mode)->toBe($source->mode)
         ->and($copy->parameters)->toBe($source->parameters)
         ->and($copy->visibility)->toBe('private');
 });
 
 test('a user can clone their own private query', function () {
-    $user = User::factory()->create();
-    $source = Query::factory()->for($user)->private()->create(['name' => 'Ma requête']);
+    $user = createConnectedUser([], ['key' => 'client_x']);
+    $source = Query::factory()->for($user)->private()->create([
+        'name' => 'Ma requête',
+        'oracle_tenant_id' => $user->oracleTenants()->sole()->id,
+    ]);
 
     $this->actingAs($user)
         ->post(route('queries.clone', $source))

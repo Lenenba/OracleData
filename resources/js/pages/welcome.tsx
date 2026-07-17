@@ -1,5 +1,12 @@
 import { Head, Link, usePage } from '@inertiajs/react';
-import { Database, FileBarChart2, Lock, Search, Server, Zap } from 'lucide-react';
+import {
+    Database,
+    FileBarChart2,
+    Lock,
+    Search,
+    Server,
+    Zap,
+} from 'lucide-react';
 import AppLogoIcon from '@/components/app-logo-icon';
 import { dashboard, login } from '@/routes';
 import { register } from '@/routes';
@@ -18,12 +25,12 @@ const FEATURES = [
     {
         icon: Zap,
         title: 'Aperçu instantané',
-        desc: 'Testez votre requête en direct avant de l\'enregistrer. Résultats en tableau, export CSV, SQL BIP prêt à coller dans BI Publisher.',
+        desc: "Testez votre requête en direct avant de l'enregistrer. Résultats en tableau, export CSV, SQL BIP prêt à coller dans BI Publisher.",
     },
     {
         icon: Server,
         title: 'Multi-tenant',
-        desc: 'Gérez plusieurs environnements Oracle (production, recette, sandbox) et basculez d\'un tenant à l\'autre en un clic.',
+        desc: "Gérez plusieurs environnements Oracle (production, recette, sandbox) et basculez d'un tenant à l'autre en un clic.",
     },
     {
         icon: FileBarChart2,
@@ -38,10 +45,26 @@ const FEATURES = [
 ];
 
 const DOMAINS = [
-    { label: 'Procurement', emoji: '🛒', items: ['Fournisseurs', 'Bons de commande', 'Contrats', 'Réceptions'] },
-    { label: 'Finance', emoji: '💰', items: ['Factures AP', 'Factures AR', 'Journaux GL', 'Paiements'] },
-    { label: 'HCM', emoji: '👥', items: ['Employés', 'Affectations', 'Paie', 'Absences'] },
-    { label: 'Projets & Actifs', emoji: '📦', items: ['Projets PPM', 'Actifs fixes', 'Stock', 'Inventaire'] },
+    {
+        label: 'Procurement',
+        emoji: '🛒',
+        items: ['Fournisseurs', 'Bons de commande', 'Contrats', 'Réceptions'],
+    },
+    {
+        label: 'Finance',
+        emoji: '💰',
+        items: ['Factures AP', 'Factures AR', 'Journaux GL', 'Paiements'],
+    },
+    {
+        label: 'HCM',
+        emoji: '👥',
+        items: ['Employés', 'Affectations', 'Paie', 'Absences'],
+    },
+    {
+        label: 'Projets & Actifs',
+        emoji: '📦',
+        items: ['Projets PPM', 'Actifs fixes', 'Stock', 'Inventaire'],
+    },
 ];
 
 export default function Welcome() {
@@ -52,14 +75,16 @@ export default function Welcome() {
             <Head title="OracleData — Interrogez Oracle Fusion" />
 
             <div className="min-h-screen bg-white text-[#1b1b18] dark:bg-[#0a0a0a] dark:text-[#EDEDEC]">
-
                 {/* ── Navbar ── */}
                 <header className="border-b border-[#e3e3e0] dark:border-[#2a2a27]">
                     <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
                         <div className="flex items-center gap-2.5">
                             <AppLogoIcon className="size-7 fill-current" />
                             <span className="text-base font-semibold tracking-tight">
-                                Oracle<span className="text-[#706f6c] dark:text-[#A1A09A]">Data</span>
+                                Oracle
+                                <span className="text-[#706f6c] dark:text-[#A1A09A]">
+                                    Data
+                                </span>
                             </span>
                         </div>
                         <nav className="flex items-center gap-3">
@@ -97,13 +122,17 @@ export default function Welcome() {
                         Oracle Fusion REST · Lecture seule · Multi-tenant
                     </div>
                     <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-                        Interrogez Oracle Fusion<br />
-                        <span className="text-[#706f6c] dark:text-[#A1A09A]">sans écrire de code</span>
+                        Interrogez Oracle Fusion
+                        <br />
+                        <span className="text-[#706f6c] dark:text-[#A1A09A]">
+                            sans écrire de code
+                        </span>
                     </h1>
                     <p className="mx-auto mb-8 max-w-2xl text-lg text-[#706f6c] dark:text-[#A1A09A]">
-                        Construisez des requêtes en quelques clics, filtrez par n'importe quel champ,
-                        prévisualisez en direct et partagez avec votre équipe.
-                        Fournisseurs, factures, employés, projets — tout Oracle Fusion à portée de main.
+                        Construisez des requêtes en quelques clics, filtrez par
+                        n'importe quel champ, prévisualisez en direct et
+                        partagez avec votre équipe. Fournisseurs, factures,
+                        employés, projets — tout Oracle Fusion à portée de main.
                     </p>
                     <div className="flex flex-wrap items-center justify-center gap-3">
                         {auth.user ? (
@@ -147,8 +176,12 @@ export default function Welcome() {
                                     className="rounded-xl border border-[#e3e3e0] bg-white p-4 dark:border-[#2a2a27] dark:bg-[#161615]"
                                 >
                                     <div className="mb-3 flex items-center gap-2">
-                                        <span className="text-xl">{d.emoji}</span>
-                                        <span className="text-sm font-semibold">{d.label}</span>
+                                        <span className="text-xl">
+                                            {d.emoji}
+                                        </span>
+                                        <span className="text-sm font-semibold">
+                                            {d.label}
+                                        </span>
                                     </div>
                                     <ul className="space-y-1.5">
                                         {d.items.map((item) => (
@@ -181,7 +214,9 @@ export default function Welcome() {
                                 <div className="mb-3 flex size-9 items-center justify-center rounded-lg border border-[#e3e3e0] bg-[#f7f7f5] dark:border-[#2a2a27] dark:bg-[#1a1a17]">
                                     <f.icon className="size-4 text-[#706f6c] dark:text-[#A1A09A]" />
                                 </div>
-                                <p className="mb-1.5 text-sm font-semibold">{f.title}</p>
+                                <p className="mb-1.5 text-sm font-semibold">
+                                    {f.title}
+                                </p>
                                 <p className="text-xs leading-relaxed text-[#706f6c] dark:text-[#A1A09A]">
                                     {f.desc}
                                 </p>
@@ -197,7 +232,8 @@ export default function Welcome() {
                             Prêt à interroger vos données Oracle ?
                         </h2>
                         <p className="mb-7 text-sm text-[#706f6c] dark:text-[#A1A09A]">
-                            Connectez vos tenants Oracle, créez votre première requête en moins de 2 minutes.
+                            Connectez vos tenants Oracle, créez votre première
+                            requête en moins de 2 minutes.
                         </p>
                         {auth.user ? (
                             <Link

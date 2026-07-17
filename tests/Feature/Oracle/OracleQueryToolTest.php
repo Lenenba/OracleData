@@ -4,15 +4,14 @@ use App\Services\OracleQueryTool;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
-    config()->set('fusion.default', 'client_x');
-    config()->set('fusion.tenants', [
-        'client_x' => [
-            'label' => 'Client X',
-            'base_url' => 'https://client-x.fa.oraclecloud.com',
-            'username' => 'svc_x',
-            'password' => 'secret_x',
-        ],
-    ]);
+    $this->actingAs(createConnectedUser([], [
+        'key' => 'client_x',
+        'label' => 'Client X',
+        'base_url' => 'https://client-x.fa.oraclecloud.com',
+    ], [
+        'identifier' => 'svc_x',
+        'secret' => 'secret_x',
+    ]));
 });
 
 test('run() executes a single GET with fields, q and orderBy', function () {

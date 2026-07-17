@@ -40,6 +40,7 @@ class QueryController extends Controller
     public function index(Request $request, FusionManager $fusion): Response
     {
         $userId = $request->user()->id;
+        $fusion = $fusion->forUser($request->user());
         $scope = $request->string('scope')->toString();
         $scope = in_array($scope, ['all', 'mine', 'shared'], true) ? $scope : 'all';
         $search = trim($request->string('search')->toString());
@@ -84,8 +85,10 @@ class QueryController extends Controller
                 'resource_path' => $query->resource_path,
                 'mode' => $query->mode,
                 'tenant' => [
-                    'key' => $query->tenant_key,
-                    'label' => $fusion->label($query->tenant_key),
+                    'key' => $query->user_id === $userId ? $query->tenant_key : null,
+                    'label' => $query->user_id === $userId
+                        ? $fusion->label($query->tenant_key)
+                        : null,
                 ],
                 'visibility' => $query->visibility,
                 'owner' => $query->user->name,
@@ -124,8 +127,10 @@ class QueryController extends Controller
     /**
      * Show the form to create a new query.
      */
-    public function create(OracleResourceCatalog $catalog, FusionManager $fusion): Response
+    public function create(Request $request, OracleResourceCatalog $catalog, FusionManager $fusion): Response
     {
+        $fusion = $fusion->forUser($request->user());
+
         return Inertia::render('queries/create', [
             'resourceSuggestions' => $catalog->suggestions(),
             'tenants' => $fusion->available(),
@@ -136,9 +141,11 @@ class QueryController extends Controller
     /**
      * Persist a new query owned by the current user.
      */
-    public function store(StoreQueryRequest $request): RedirectResponse
+    public function store(StoreQueryRequest $request, FusionManager $fusion): RedirectResponse
     {
         $data = $request->validated();
+        $fusion = $fusion->forUser($request->user());
+        $data['oracle_tenant_id'] = $fusion->tenantId($data['tenant_key']);
 
         if (($data['mode'] ?? 'single') === 'agent') {
             $data['resource_path'] = null;
@@ -170,6 +177,7 @@ class QueryController extends Controller
     public function edit(Request $request, Query $query, OracleResourceCatalog $catalog, FusionManager $fusion): Response
     {
         Gate::authorize('update', $query);
+        $fusion = $fusion->forUser($request->user());
 
         return Inertia::render('queries/edit', [
             'query' => [
@@ -177,25 +185,31 @@ class QueryController extends Controller
                 'name' => $query->name,
                 'description' => $query->description,
                 'resource_path' => $query->resource_path,
-                'tenant_key' => $query->tenant_key,
+                'tenant_key' => $query->user_id === $request->user()->id
+                    ? $query->tenant_key
+                    : null,
                 'mode' => $query->mode,
                 'parameters' => (object) ($query->parameters ?? []),
                 'visibility' => $query->visibility,
             ],
             'resourceSuggestions' => $catalog->suggestions(),
             'tenants' => $fusion->available(),
-            'defaultTenant' => $query->tenant_key ?: $fusion->defaultKey(),
+            'defaultTenant' => $fusion->has($query->tenant_key)
+                ? $query->tenant_key
+                : $fusion->defaultKey(),
         ]);
     }
 
     /**
      * Update an existing query owned by the current user.
      */
-    public function update(StoreQueryRequest $request, Query $query): RedirectResponse
+    public function update(StoreQueryRequest $request, Query $query, FusionManager $fusion): RedirectResponse
     {
         Gate::authorize('update', $query);
 
         $data = $request->validated();
+        $fusion = $fusion->forUser($request->user());
+        $data['oracle_tenant_id'] = $fusion->tenantId($data['tenant_key']);
 
         if (($data['mode'] ?? 'single') === 'agent') {
             $data['resource_path'] = null;
@@ -259,15 +273,18 @@ class QueryController extends Controller
     /**
      * Copy a visible query into the current user's private library.
      */
-    public function duplicate(Request $request, Query $query): RedirectResponse
+    public function duplicate(Request $request, Query $query, FusionManager $fusion): RedirectResponse
     {
         Gate::authorize('view', $query);
+        $fusion = $fusion->forUser($request->user());
+        $tenantKey = $fusion->defaultKey();
 
         $copy = $request->user()->queries()->create([
             'name' => Str::limit(__('Copie de :name', ['name' => $query->name]), 255, ''),
             'description' => $query->description,
             'resource_path' => $query->resource_path,
-            'tenant_key' => $query->tenant_key,
+            'tenant_key' => $tenantKey,
+            'oracle_tenant_id' => $fusion->tenantId($tenantKey),
             'mode' => $query->mode,
             'parameters' => $query->parameters,
             'visibility' => 'private',
@@ -284,6 +301,8 @@ class QueryController extends Controller
      */
     public function directPreview(Request $request, FusionManager $fusion, OracleQueryTool $tool): JsonResponse
     {
+        $fusion = $fusion->forUser($request->user());
+
         $validated = $request->validate([
             'resource_key' => ['required', 'string'],
             'tenant' => ['nullable', 'string', Rule::in($fusion->keys())],
@@ -328,6 +347,8 @@ class QueryController extends Controller
      */
     public function preview(Request $request, FusionManager $fusion, QueryResolver $resolver, OracleQueryTool $tool, QueryAgent $agent): JsonResponse
     {
+        $fusion = $fusion->forUser($request->user());
+
         $validated = $request->validate([
             'intent' => ['required', 'string', 'max:2000'],
             'tenant' => ['nullable', 'string', Rule::in($fusion->keys())],
@@ -360,6 +381,11 @@ class QueryController extends Controller
     public function show(Request $request, Query $query, FusionManager $fusion): Response
     {
         Gate::authorize('view', $query);
+        $fusion = $fusion->forUser($request->user());
+        $ownerPreferredTenant = $query->user_id === $request->user()->id
+            && $fusion->has($query->tenant_key)
+                ? $query->tenant_key
+                : null;
 
         return Inertia::render('queries/show', [
             'query' => [
@@ -367,7 +393,9 @@ class QueryController extends Controller
                 'name' => $query->name,
                 'description' => $query->description,
                 'resource_path' => $query->resource_path,
-                'tenant_key' => $query->tenant_key,
+                'tenant_key' => $query->user_id === $request->user()->id
+                    ? $query->tenant_key
+                    : null,
                 'mode' => $query->mode,
                 'parameters' => (object) ($query->parameters ?? []),
                 'visibility' => $query->visibility,
@@ -377,7 +405,7 @@ class QueryController extends Controller
                 ],
             ],
             'tenants' => $fusion->available(),
-            'defaultTenant' => $query->tenant_key ?: $fusion->defaultKey(),
+            'defaultTenant' => $ownerPreferredTenant ?: $fusion->defaultKey(),
         ]);
     }
 
@@ -387,8 +415,13 @@ class QueryController extends Controller
     public function run(RunQueryRequest $request, Query $query, FusionManager $fusion, QueryAgent $agent, OracleQueryTool $tool): JsonResponse
     {
         Gate::authorize('view', $query);
+        $fusion = $fusion->forUser($request->user());
 
-        $tenant = (string) ($request->validated()['tenant'] ?? $query->tenant_key ?? $fusion->defaultKey());
+        $ownerPreferredTenant = $query->user_id === $request->user()->id
+            && $fusion->has($query->tenant_key)
+                ? $query->tenant_key
+                : null;
+        $tenant = (string) ($request->validated()['tenant'] ?? $ownerPreferredTenant ?? $fusion->defaultKey());
 
         if ($query->mode === 'agent') {
             return response()->json($this->runAgent($tenant, (string) ($query->description ?? ''), $agent));

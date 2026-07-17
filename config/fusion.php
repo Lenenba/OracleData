@@ -4,11 +4,11 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Tenant Fusion par défaut
+    | Clé de bootstrap locale
     |--------------------------------------------------------------------------
     |
-    | Clé du tenant pré-sélectionné lors de l'exécution d'une requête. Doit
-    | correspondre à une clé présente dans le tableau "tenants" ci-dessous.
+    | Cette clé sert uniquement aux seeders et aux outils de migration legacy.
+    | À l'exécution, le défaut provient des tenants possédés par l'utilisateur.
     |
     */
 
@@ -38,15 +38,30 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Tenants Oracle Fusion (multi-client)
+    | Hôtes autorisés pour les connexions gérées par les utilisateurs
     |--------------------------------------------------------------------------
     |
-    | Chaque entrée représente un environnement Oracle Fusion distinct (un par
-    | client), avec son URL de base et son compte de service (Basic Auth). Les
-    | secrets sont fournis via des variables d'environnement, jamais en base.
+    | Le test de connexion effectue un appel serveur. Une liste de suffixes
+    | explicite empêche qu'il soit détourné pour sonder le réseau interne.
     |
-    | Pour ajouter un client : dupliquez un bloc et ajoutez les variables
-    | FUSION_<CLE>_BASE_URL / _USERNAME / _PASSWORD dans le .env.
+    */
+
+    'allowed_host_suffixes' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('FUSION_ALLOWED_HOST_SUFFIXES', 'oraclecloud.com')),
+    ))),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Sources de bootstrap legacy
+    |--------------------------------------------------------------------------
+    |
+    | Ces entrées servent aux seeders locaux et à une éventuelle importation
+    | contrôlée. FusionManager ne les expose jamais automatiquement : chaque
+    | connexion d'exécution doit appartenir explicitement à un utilisateur et
+    | ses identifiants sont chiffrés dans `auth_connections`.
+    |
+    | Ne pas ajouter ici un tenant destiné à devenir globalement accessible.
     |
     */
 

@@ -1,6 +1,7 @@
 import { Link } from '@inertiajs/react';
 import AppLogoIcon from '@/components/app-logo-icon';
 import { LanguageSwitcher } from '@/components/language-switcher';
+import { cn } from '@/lib/utils';
 import { home } from '@/routes';
 import type { AuthLayoutProps } from '@/types';
 
@@ -8,13 +9,19 @@ export default function AuthSimpleLayout({
     children,
     title,
     description,
+    wide = false,
 }: AuthLayoutProps) {
     return (
-        <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-6 md:p-10">
+        <div
+            className={cn(
+                'flex min-h-svh flex-col items-center gap-6 bg-background p-6 md:p-10',
+                wide ? 'justify-start xl:justify-center' : 'justify-center',
+            )}
+        >
             <div className="absolute top-4 right-4">
                 <LanguageSwitcher compact />
             </div>
-            <div className="w-full max-w-sm">
+            <div className={cn('w-full', wide ? 'max-w-xl' : 'max-w-sm')}>
                 <div className="flex flex-col gap-8">
                     <div className="flex flex-col items-center gap-4">
                         <Link

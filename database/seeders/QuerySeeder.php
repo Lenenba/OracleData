@@ -113,6 +113,11 @@ class QuerySeeder extends Seeder
      */
     private function upsertQuery(User $user, array $attributes): void
     {
+        $tenantKey = (string) ($attributes['tenant_key'] ?? '');
+        $attributes['oracle_tenant_id'] = $user->oracleTenants()
+            ->where('key', $tenantKey)
+            ->value('id');
+
         Query::query()->updateOrCreate(
             [
                 'user_id' => $user->id,

@@ -30,8 +30,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
-import { readCsrfToken } from '@/lib/csrf';
 import { useI18n } from '@/i18n/i18n-context';
+import { readCsrfToken } from '@/lib/csrf';
 import queries from '@/routes/queries';
 
 type QueryRow = {
@@ -309,9 +309,7 @@ export default function QueriesIndex({
     }
 
     function deleteQuery(id: number) {
-        if (
-            !confirm(t('queries.deleteConfirm'))
-        ) {
+        if (!confirm(t('queries.deleteConfirm'))) {
             return;
         }
 
@@ -479,8 +477,7 @@ export default function QueriesIndex({
                             ) : (
                                 <>
                                     {queryPage.from}–{queryPage.to}{' '}
-                                    {t('queries.of')}{' '}
-                                    {queryPage.total}
+                                    {t('queries.of')} {queryPage.total}
                                 </>
                             )}
                         </span>
@@ -503,8 +500,7 @@ export default function QueriesIndex({
                             </Button>
                             <span>
                                 {t('queries.page')} {queryPage.current_page}{' '}
-                                {t('queries.of')}{' '}
-                                {queryPage.last_page}
+                                {t('queries.of')} {queryPage.last_page}
                             </span>
                             <Button
                                 size="sm"

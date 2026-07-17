@@ -1,22 +1,9 @@
 <?php
 
 use App\Models\Query;
-use App\Models\User;
-
-beforeEach(function () {
-    config()->set('fusion.default', 'client_x');
-    config()->set('fusion.tenants', [
-        'client_x' => [
-            'label' => 'Client X',
-            'base_url' => 'https://client-x.fa.oraclecloud.com',
-            'username' => 'svc_x',
-            'password' => 'secret_x',
-        ],
-    ]);
-});
 
 test('owner can visit the edit page', function () {
-    $owner = User::factory()->create();
+    $owner = createConnectedUser([], ['key' => 'client_x']);
     $query = Query::factory()->create(['user_id' => $owner->id, 'mode' => 'single']);
 
     $this->actingAs($owner)
@@ -27,7 +14,7 @@ test('owner can visit the edit page', function () {
 });
 
 test('non-owner cannot visit the edit page', function () {
-    $other = User::factory()->create();
+    $other = createConnectedUser([], ['key' => 'client_x']);
     $query = Query::factory()->create(['mode' => 'single']);
 
     $this->actingAs($other)
@@ -36,7 +23,8 @@ test('non-owner cannot visit the edit page', function () {
 });
 
 test('owner can update a query', function () {
-    $owner = User::factory()->create();
+    $owner = createConnectedUser([], ['key' => 'client_x']);
+    $tenant = $owner->oracleTenants()->sole();
     $query = Query::factory()->create([
         'user_id' => $owner->id,
         'mode' => 'single',
@@ -63,10 +51,11 @@ test('owner can update a query', function () {
     expect($query->fresh()->name)->toBe('Updated name');
     expect($query->fresh()->visibility)->toBe('shared');
     expect($query->fresh()->parameters['resource_key'])->toBe('suppliers');
+    expect($query->fresh()->oracle_tenant_id)->toBe($tenant->id);
 });
 
 test('non-owner cannot update a query', function () {
-    $other = User::factory()->create();
+    $other = createConnectedUser([], ['key' => 'client_x']);
     $query = Query::factory()->create(['mode' => 'single']);
 
     $this->actingAs($other)
@@ -82,7 +71,7 @@ test('non-owner cannot update a query', function () {
 });
 
 test('update validation rejects invalid tenant', function () {
-    $owner = User::factory()->create();
+    $owner = createConnectedUser([], ['key' => 'client_x']);
     $query = Query::factory()->create(['user_id' => $owner->id, 'mode' => 'single']);
 
     $this->actingAs($owner)

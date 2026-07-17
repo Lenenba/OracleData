@@ -15,9 +15,11 @@ import Heading from '@/components/heading';
 import { StatCard } from '@/components/stat-card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useI18n } from '@/i18n/i18n-context';
 import { dashboard } from '@/routes';
 import oracleTenants from '@/routes/oracle-tenants';
 import queries from '@/routes/queries';
+import type { OracleTenant } from '@/types';
 
 type Stats = {
     totalQueries: number;
@@ -42,22 +44,12 @@ type RecentQuery = {
     can: { update: boolean };
 };
 
-type TenantDetail = {
-    key: string;
-    label: string;
-    base_url: string;
-    username: string;
-    source: 'config' | 'database';
-    is_default: boolean;
-    is_active: boolean;
-};
-
 type DashboardProps = {
     stats: Stats;
     queriesPerWeek: number[];
     domainBreakdown: DomainSlice[];
     recentQueries: RecentQuery[];
-    tenants: TenantDetail[];
+    tenants: OracleTenant[];
 };
 
 // Couleurs cycliques des barres de répartition (pastilles + remplissage)
@@ -119,26 +111,43 @@ function DomainBreakdownPanel({ slices }: { slices: DomainSlice[] }) {
     );
 }
 
-function TenantsPanel({ tenants }: { tenants: TenantDetail[] }) {
+function TenantsPanel({ tenants }: { tenants: OracleTenant[] }) {
+    const { t } = useI18n();
+
     return (
         <div className="rounded-xl border bg-card p-5">
             <div className="flex items-center justify-between gap-2">
                 <div>
                     <h3 className="text-sm font-semibold">
-                        Environnements Oracle
+                        {t('connections.title')}
                     </h3>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                        Connexions Oracle Fusion disponibles.
+                        {t('connections.description')}
                     </p>
                 </div>
                 <Button asChild variant="outline" size="sm">
-                    <Link href={oracleTenants.index()}>Gérer</Link>
+                    <Link href={oracleTenants.index()}>
+                        {t('connections.manage')}
+                    </Link>
                 </Button>
             </div>
 
             {tenants.length === 0 ? (
-                <div className="mt-6 rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                    Aucun tenant configuré.
+                <div className="mt-6 space-y-3 rounded-lg border border-dashed p-8 text-center">
+                    <div>
+                        <p className="text-sm font-medium">
+                            {t('connections.empty')}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            {t('connections.emptyDescription')}
+                        </p>
+                    </div>
+                    <Button asChild size="sm">
+                        <Link href={oracleTenants.index()}>
+                            <Plus />
+                            {t('connections.add')}
+                        </Link>
+                    </Button>
                 </div>
             ) : (
                 <ul className="mt-4 divide-y">
@@ -181,6 +190,7 @@ function TenantsPanel({ tenants }: { tenants: TenantDetail[] }) {
 }
 
 function RecentQueriesTable({ rows }: { rows: RecentQuery[] }) {
+    const { t } = useI18n();
     const columns: DataTableColumn<RecentQuery>[] = [
         {
             key: 'name',
@@ -201,7 +211,7 @@ function RecentQueriesTable({ rows }: { rows: RecentQuery[] }) {
         },
         {
             key: 'tenant',
-            header: 'Tenant',
+            header: t('connections.environment'),
             icon: Database,
             cell: (query) =>
                 query.tenant_label ? (
@@ -282,6 +292,7 @@ export default function Dashboard({
     recentQueries,
     tenants,
 }: DashboardProps) {
+    const { t } = useI18n();
     const thisWeek = queriesPerWeek.at(-1) ?? 0;
     const previousWeek = queriesPerWeek.at(-2) ?? 0;
     const weeklyTrend =
@@ -334,9 +345,9 @@ export default function Dashboard({
                             caption="Visibles par toute l'équipe"
                         />
                         <StatCard
-                            label="Tenants Oracle"
+                            label={t('connections.title')}
                             value={stats.activeTenants}
-                            caption="Environnements configurés"
+                            caption={t('connections.activeCaption')}
                         />
                     </div>
 

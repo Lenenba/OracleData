@@ -1,13 +1,16 @@
 import { Form, Head, Link, router } from '@inertiajs/react';
 import {
     Activity,
-    Database,
+    CheckCircle2,
     DatabaseZap,
+    KeyRound,
     Link2,
     MoreHorizontal,
     Pencil,
+    Plus,
     Save,
     Server,
+    ShieldAlert,
     Trash2,
     User,
 } from 'lucide-react';
@@ -16,6 +19,7 @@ import { DataTable, StopClick, TableAvatar } from '@/components/data-table';
 import type { DataTableColumn } from '@/components/data-table';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
+import { OracleConnectionTestButton } from '@/components/oracle-connection-test-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -36,36 +40,26 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
-import { readCsrfToken } from '@/lib/csrf';
+import { useI18n } from '@/i18n/i18n-context';
 import oracleTenants from '@/routes/oracle-tenants';
-
-type OracleTenant = {
-    id: number | null;
-    key: string;
-    label: string;
-    base_url: string;
-    username: string;
-    source: 'config' | 'database';
-    is_default: boolean;
-    is_active: boolean;
-};
+import type { OracleTenant } from '@/types';
 
 type OracleTenantsIndexProps = {
     tenants: OracleTenant[];
     defaultTenant: string;
 };
 
-function sourceLabel(source: OracleTenant['source']): string {
-    return source === 'database' ? 'Base' : 'Config';
-}
-
 function TenantActionsMenu({
     tenant,
+    canDelete,
     onDelete,
 }: {
-    tenant: OracleTenant & { id: number };
+    tenant: OracleTenant;
+    canDelete: boolean;
     onDelete: (id: number, label: string) => void;
 }) {
+    const { t } = useI18n();
+
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -74,7 +68,9 @@ function TenantActionsMenu({
                     size="icon"
                     variant="ghost"
                     className="size-8"
-                    aria-label={`Actions pour ${tenant.label}`}
+                    aria-label={t('connections.actionLabel', {
+                        name: tenant.label,
+                    })}
                 >
                     <MoreHorizontal className="size-4" />
                 </Button>
@@ -83,97 +79,26 @@ function TenantActionsMenu({
                 <DropdownMenuItem asChild className="cursor-pointer">
                     <Link href={oracleTenants.edit(tenant.id)}>
                         <Pencil className="size-4" />
-                        Modifier
+                        {t('common.edit')}
                     </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
+                    disabled={!canDelete}
                     className="cursor-pointer text-destructive focus:text-destructive"
+                    title={
+                        canDelete ? undefined : t('connections.keepOneActive')
+                    }
                     onSelect={(event) => {
                         event.preventDefault();
                         onDelete(tenant.id, tenant.label);
                     }}
                 >
                     <Trash2 className="size-4 text-destructive" />
-                    Supprimer
+                    {t('common.delete')}
                 </DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>
-    );
-}
-
-function TestConnectionButton() {
-    const [status, setStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>(
-        'idle',
-    );
-    const [message, setMessage] = useState('');
-
-    async function test(form: HTMLFormElement) {
-        const data = new FormData(form);
-        const payload = {
-            base_url: data.get('base_url'),
-            username: data.get('username'),
-            password: data.get('password'),
-        };
-
-        if (!payload.base_url || !payload.username || !payload.password) {
-            setStatus('error');
-            setMessage(
-                "Renseignez l'URL, le nom d'utilisateur et le mot de passe avant de tester.",
-            );
-
-            return;
-        }
-
-        setStatus('loading');
-        setMessage('');
-
-        try {
-            const res = await fetch(oracleTenants.test.url(), {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Accept: 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-XSRF-TOKEN': readCsrfToken(),
-                },
-                credentials: 'same-origin',
-                body: JSON.stringify(payload),
-            });
-            const json = (await res.json()) as { ok: boolean; message: string };
-            setStatus(json.ok ? 'ok' : 'error');
-            setMessage(json.message);
-        } catch {
-            setStatus('error');
-            setMessage('Erreur réseau.');
-        }
-    }
-
-    return (
-        <div className="space-y-2">
-            <Button
-                type="button"
-                variant="outline"
-                onClick={(e) => {
-                    const form = (e.target as HTMLElement).closest('form');
-
-                    if (form) {
-                        void test(form);
-                    }
-                }}
-                disabled={status === 'loading'}
-            >
-                {status === 'loading' && <Spinner data-icon="inline-start" />}
-                Tester la connexion
-            </Button>
-            {message && (
-                <p
-                    className={`text-sm ${status === 'ok' ? 'text-emerald-600' : 'text-destructive'}`}
-                >
-                    {message}
-                </p>
-            )}
-        </div>
     );
 }
 
@@ -181,14 +106,15 @@ export default function OracleTenantsIndex({
     tenants,
     defaultTenant,
 }: OracleTenantsIndexProps) {
+    const { t, formatDate } = useI18n();
     const [isDefault, setIsDefault] = useState(false);
+    const [testRevision, setTestRevision] = useState(0);
+    const activeConnectionCount = tenants.filter(
+        (tenant) => tenant.is_active,
+    ).length;
 
     function deleteTenant(id: number, label: string) {
-        if (
-            !confirm(
-                `Supprimer le tenant "${label}" ? Cette action est irréversible.`,
-            )
-        ) {
+        if (!confirm(t('connections.deleteConfirm', { name: label }))) {
             return;
         }
 
@@ -197,8 +123,8 @@ export default function OracleTenantsIndex({
 
     const columns: DataTableColumn<OracleTenant>[] = [
         {
-            key: 'tenant',
-            header: 'Tenant',
+            key: 'environment',
+            header: t('connections.environment'),
             icon: Server,
             cell: (tenant) => (
                 <div className="flex items-center gap-3">
@@ -214,7 +140,7 @@ export default function OracleTenantsIndex({
         },
         {
             key: 'url',
-            header: 'URL',
+            header: t('connections.url'),
             icon: Link2,
             cellClassName: 'text-muted-foreground',
             cell: (tenant) => (
@@ -222,29 +148,70 @@ export default function OracleTenantsIndex({
             ),
         },
         {
-            key: 'account',
-            header: 'Compte',
+            key: 'authentication',
+            header: t('connections.authentication'),
             icon: User,
-            cellClassName: 'text-muted-foreground',
-            cell: (tenant) => tenant.username || '—',
-        },
-        {
-            key: 'source',
-            header: 'Source',
-            icon: Database,
             cell: (tenant) => (
-                <Badge
-                    variant={
-                        tenant.source === 'database' ? 'default' : 'secondary'
-                    }
-                >
-                    {sourceLabel(tenant.source)}
-                </Badge>
+                <div className="space-y-0.5">
+                    <div className="font-medium">{tenant.username || '—'}</div>
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                        <span>
+                            {tenant.auth_type.toLowerCase() === 'basic'
+                                ? t('connections.authBasic')
+                                : tenant.auth_type}
+                        </span>
+                        <span aria-hidden="true">·</span>
+                        <span>
+                            {t('connections.authMethods', {
+                                count: tenant.connection_count,
+                            })}
+                        </span>
+                    </div>
+                </div>
             ),
         },
         {
+            key: 'verification',
+            header: t('connections.verification'),
+            icon: KeyRound,
+            cell: (tenant) => {
+                const testedAt = tenant.last_tested_at ?? tenant.verified_at;
+
+                return (
+                    <div className="space-y-0.5">
+                        <span
+                            className={`inline-flex items-center gap-1.5 text-sm font-medium ${
+                                tenant.verified_at
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : 'text-amber-600 dark:text-amber-400'
+                            }`}
+                        >
+                            {tenant.verified_at ? (
+                                <CheckCircle2 className="size-4" />
+                            ) : (
+                                <ShieldAlert className="size-4" />
+                            )}
+                            {tenant.verified_at
+                                ? t('connections.verified')
+                                : t('connections.notVerified')}
+                        </span>
+                        {testedAt && (
+                            <div className="text-xs text-muted-foreground">
+                                {t('connections.lastTested', {
+                                    date: formatDate(testedAt, {
+                                        dateStyle: 'medium',
+                                        timeStyle: 'short',
+                                    }),
+                                })}
+                            </div>
+                        )}
+                    </div>
+                );
+            },
+        },
+        {
             key: 'status',
-            header: 'Statut',
+            header: t('connections.status'),
             icon: Activity,
             cell: (tenant) => (
                 <div className="flex flex-wrap items-center gap-2">
@@ -256,67 +223,87 @@ export default function OracleTenantsIndex({
                                     : 'bg-red-400'
                             }`}
                         />
-                        {tenant.is_active ? 'Actif' : 'Inactif'}
+                        {tenant.is_active
+                            ? t('common.active')
+                            : t('common.inactive')}
                     </span>
                     {(tenant.is_default || tenant.key === defaultTenant) && (
-                        <Badge variant="secondary">Défaut</Badge>
+                        <Badge variant="secondary">{t('common.default')}</Badge>
                     )}
                 </div>
             ),
         },
         {
             key: 'actions',
-            header: 'Actions',
+            header: t('common.actions'),
             align: 'right',
             width: 'w-24',
-            cell: (tenant) => {
-                if (tenant.source !== 'database' || tenant.id === null) {
-                    return (
-                        <span className="text-xs text-muted-foreground">
-                            Lecture seule
-                        </span>
-                    );
-                }
-
-                return (
-                    <StopClick>
-                        <TenantActionsMenu
-                            tenant={{ ...tenant, id: tenant.id }}
-                            onDelete={deleteTenant}
-                        />
-                    </StopClick>
-                );
-            },
+            cell: (tenant) => (
+                <StopClick>
+                    <TenantActionsMenu
+                        tenant={tenant}
+                        canDelete={
+                            !tenant.is_active || activeConnectionCount > 1
+                        }
+                        onDelete={deleteTenant}
+                    />
+                </StopClick>
+            ),
         },
     ];
 
     return (
         <>
-            <Head title="Tenants Oracle" />
+            <Head title={t('connections.title')} />
 
-            <div className="space-y-6 px-6 py-6">
+            <div className="space-y-6">
                 <Heading
-                    title="Tenants Oracle"
-                    description="Connexions Oracle Fusion disponibles pour les requêtes."
+                    title={t('connections.title')}
+                    description={t('connections.description')}
+                    actions={
+                        <Button asChild>
+                            <a href="#add-connection">
+                                <Plus />
+                                {t('connections.add')}
+                            </a>
+                        </Button>
+                    }
                 />
 
                 <div className="overflow-hidden rounded-xl border bg-card">
                     <DataTable
                         columns={columns}
                         rows={tenants}
-                        rowKey={(tenant) => tenant.key}
-                        empty="Aucun tenant configuré."
+                        rowKey={(tenant) => tenant.id}
+                        empty={
+                            <div className="space-y-3">
+                                <div>
+                                    <p className="font-medium text-foreground">
+                                        {t('connections.empty')}
+                                    </p>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                        {t('connections.emptyDescription')}
+                                    </p>
+                                </div>
+                                <Button asChild size="sm">
+                                    <a href="#add-connection">
+                                        <Plus />
+                                        {t('connections.add')}
+                                    </a>
+                                </Button>
+                            </div>
+                        }
                     />
                 </div>
 
-                <Card className="max-w-3xl rounded-lg">
+                <Card id="add-connection" className="max-w-3xl scroll-mt-6">
                     <CardHeader>
                         <div className="flex items-center gap-2">
                             <DatabaseZap className="size-5" />
-                            <CardTitle>Ajouter un tenant</CardTitle>
+                            <CardTitle>{t('connections.add')}</CardTitle>
                         </div>
                         <CardDescription>
-                            Les identifiants sont chiffrés avant sauvegarde.
+                            {t('connections.addDescription')}
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -331,18 +318,29 @@ export default function OracleTenantsIndex({
                                 'is_default',
                             ]}
                             className="space-y-5"
+                            onChange={() =>
+                                setTestRevision((revision) => revision + 1)
+                            }
+                            onSuccess={() => {
+                                setIsDefault(false);
+                                setTestRevision((revision) => revision + 1);
+                            }}
                         >
                             {({ processing, errors }) => (
                                 <>
                                     <div className="grid gap-5 md:grid-cols-2">
                                         <div className="grid gap-2">
                                             <Label htmlFor="label">
-                                                Libellé
+                                                {t(
+                                                    'connections.environmentLabel',
+                                                )}
                                             </Label>
                                             <Input
                                                 id="label"
                                                 name="label"
-                                                placeholder="Client X Production"
+                                                placeholder={t(
+                                                    'connections.environmentPlaceholder',
+                                                )}
                                                 required
                                                 aria-invalid={Boolean(
                                                     errors.label,
@@ -354,11 +352,15 @@ export default function OracleTenantsIndex({
                                         </div>
 
                                         <div className="grid gap-2">
-                                            <Label htmlFor="key">Clé</Label>
+                                            <Label htmlFor="key">
+                                                {t('connections.key')}
+                                            </Label>
                                             <Input
                                                 id="key"
                                                 name="key"
-                                                placeholder="client_x_prod"
+                                                placeholder={t(
+                                                    'connections.keyPlaceholder',
+                                                )}
                                                 aria-invalid={Boolean(
                                                     errors.key,
                                                 )}
@@ -369,13 +371,16 @@ export default function OracleTenantsIndex({
 
                                     <div className="grid gap-2">
                                         <Label htmlFor="base_url">
-                                            URL Oracle
+                                            {t('connections.url')}
                                         </Label>
                                         <Input
                                             id="base_url"
                                             name="base_url"
                                             type="url"
-                                            placeholder="https://client.fa.oraclecloud.com"
+                                            inputMode="url"
+                                            placeholder={t(
+                                                'connections.urlPlaceholder',
+                                            )}
                                             required
                                             aria-invalid={Boolean(
                                                 errors.base_url,
@@ -387,7 +392,7 @@ export default function OracleTenantsIndex({
                                     <div className="grid gap-5 md:grid-cols-2">
                                         <div className="grid gap-2">
                                             <Label htmlFor="username">
-                                                Nom d'utilisateur
+                                                {t('connections.username')}
                                             </Label>
                                             <Input
                                                 id="username"
@@ -405,7 +410,7 @@ export default function OracleTenantsIndex({
 
                                         <div className="grid gap-2">
                                             <Label htmlFor="password">
-                                                Mot de passe
+                                                {t('connections.password')}
                                             </Label>
                                             <Input
                                                 id="password"
@@ -422,6 +427,8 @@ export default function OracleTenantsIndex({
                                             />
                                         </div>
                                     </div>
+
+                                    <InputError message={errors.connection} />
 
                                     <input
                                         name="is_default"
@@ -441,20 +448,28 @@ export default function OracleTenantsIndex({
                                             htmlFor="is_default"
                                             className="font-normal"
                                         >
-                                            Utiliser par défaut
+                                            {t('connections.makeDefault')}
                                         </Label>
                                     </div>
 
-                                    <div className="flex flex-wrap items-center gap-4">
+                                    <p className="text-xs text-muted-foreground">
+                                        {t('connections.serverRetestHint')}
+                                    </p>
+
+                                    <div className="flex flex-wrap items-start gap-4">
                                         <Button disabled={processing}>
                                             {processing ? (
                                                 <Spinner data-icon="inline-start" />
                                             ) : (
                                                 <Save data-icon="inline-start" />
                                             )}
-                                            Enregistrer
+                                            {processing
+                                                ? t('common.saving')
+                                                : t('common.save')}
                                         </Button>
-                                        <TestConnectionButton />
+                                        <OracleConnectionTestButton
+                                            key={testRevision}
+                                        />
                                     </div>
                                 </>
                             )}
@@ -467,5 +482,5 @@ export default function OracleTenantsIndex({
 }
 
 OracleTenantsIndex.layout = {
-    breadcrumbs: [{ title: 'Tenants Oracle', href: oracleTenants.index() }],
+    breadcrumbs: [{ title: 'Connexions Oracle', href: oracleTenants.index() }],
 };

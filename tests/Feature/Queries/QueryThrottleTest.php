@@ -1,7 +1,6 @@
 <?php
 
 use App\Models\Query;
-use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\RateLimiter;
 
@@ -12,16 +11,6 @@ beforeEach(function () {
         'model' => 'claude-opus-4-8',
         'version' => '2023-06-01',
     ]);
-    config()->set('fusion.default', 'client_x');
-    config()->set('fusion.tenants', [
-        'client_x' => [
-            'label' => 'Client X',
-            'base_url' => 'https://client-x.fa.oraclecloud.com',
-            'username' => 'svc_x',
-            'password' => 'secret_x',
-        ],
-    ]);
-
     // Clear rate limiter state between tests.
     RateLimiter::clear('throttle');
 });
@@ -37,7 +26,7 @@ test('preview is accessible within the limit', function () {
         ]),
     ]);
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(createConnectedUser([], ['key' => 'client_x']))
         ->postJson(route('queries.preview'), [
             'intent' => 'liste des fournisseurs',
             'tenant' => 'client_x',
@@ -48,7 +37,7 @@ test('preview is accessible within the limit', function () {
 test('run is accessible within the limit', function () {
     Http::fake(['*' => Http::response(['items' => [], 'count' => 0])]);
 
-    $user = User::factory()->create();
+    $user = createConnectedUser([], ['key' => 'client_x']);
     $query = Query::factory()->for($user)->create();
 
     $this->actingAs($user)
@@ -67,7 +56,7 @@ test('preview is throttled after 15 requests per minute', function () {
         ]),
     ]);
 
-    $user = User::factory()->create();
+    $user = createConnectedUser([], ['key' => 'client_x']);
     $this->actingAs($user);
 
     // 15 requests should succeed.
@@ -88,7 +77,7 @@ test('preview is throttled after 15 requests per minute', function () {
 test('run is throttled after 15 requests per minute', function () {
     Http::fake(['*' => Http::response(['items' => [], 'count' => 0])]);
 
-    $user = User::factory()->create();
+    $user = createConnectedUser([], ['key' => 'client_x']);
     $query = Query::factory()->for($user)->create();
     $this->actingAs($user);
 
@@ -104,7 +93,7 @@ test('run is throttled after 15 requests per minute', function () {
 test('direct-preview has its own higher limit for the live builder', function () {
     Http::fake(['*' => Http::response(['items' => [], 'count' => 0])]);
 
-    $this->actingAs(User::factory()->create());
+    $this->actingAs(createConnectedUser([], ['key' => 'client_x']));
 
     // 60 requêtes passent (aperçu live débouncé, sans LLM)…
     for ($i = 0; $i < 60; $i++) {
@@ -124,8 +113,8 @@ test('direct-preview has its own higher limit for the live builder', function ()
 test('throttle is per user — different users have independent limits', function () {
     Http::fake(['*' => Http::response(['items' => [], 'count' => 0])]);
 
-    $userA = User::factory()->create();
-    $userB = User::factory()->create();
+    $userA = createConnectedUser([], ['key' => 'client_x']);
+    $userB = createConnectedUser([], ['key' => 'client_x']);
     $queryA = Query::factory()->for($userA)->create();
     $queryB = Query::factory()->for($userB)->create();
 

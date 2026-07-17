@@ -41,6 +41,7 @@ class FusionClient
             $response = Http::withBasicAuth($this->username, $this->password)
                 ->baseUrl($this->baseUrl)
                 ->acceptJson()
+                ->withoutRedirecting()
                 ->connectTimeout((float) config('fusion.http.connect_timeout', 5))
                 ->timeout((float) config('fusion.http.timeout', 30))
                 ->retry(
@@ -92,6 +93,7 @@ class FusionClient
             return Http::withBasicAuth($this->username, $this->password)
                 ->baseUrl($this->baseUrl)
                 ->acceptJson()
+                ->withoutRedirecting()
                 ->connectTimeout((float) config('fusion.http.connect_timeout', 5))
                 ->timeout((float) config('fusion.http.timeout', 30))
                 ->get('/')
