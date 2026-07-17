@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\SafeOracleBaseUrl;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
@@ -14,7 +15,7 @@ class StoreOracleTenantRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return true;
+        return $this->user() !== null;
     }
 
     /**
@@ -59,12 +60,14 @@ class StoreOracleTenantRequest extends FormRequest
                 'string',
                 'max:64',
                 'regex:/^[a-z0-9][a-z0-9_-]*$/',
-                Rule::unique('oracle_tenants', 'key'),
+                Rule::unique('oracle_tenants', 'key')
+                    ->where(fn ($query) => $query->where('user_id', $this->user()?->id)),
             ],
             'label' => ['required', 'string', 'max:255'],
-            'base_url' => ['required', 'url', 'max:2048'],
+            'base_url' => ['required', 'url', 'max:2048', new SafeOracleBaseUrl],
             'username' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string', 'max:1000'],
+            'auth_type' => ['sometimes', Rule::in(['basic'])],
             'is_default' => ['boolean'],
             'is_active' => ['boolean'],
         ];

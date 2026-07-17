@@ -1,17 +1,15 @@
 <?php
 
-use App\Models\User;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
-    config()->set('fusion.default', 'client_x');
-    config()->set('fusion.tenants', [
-        'client_x' => [
-            'label' => 'Client X',
-            'base_url' => 'https://client-x.fa.oraclecloud.com',
-            'username' => 'svc_x',
-            'password' => 'secret_x',
-        ],
+    $this->queryUser = createConnectedUser([], [
+        'key' => 'client_x',
+        'label' => 'Client X',
+        'base_url' => 'https://client-x.fa.oraclecloud.com',
+    ], [
+        'identifier' => 'svc_x',
+        'secret' => 'secret_x',
     ]);
 });
 
@@ -34,7 +32,7 @@ test('direct-preview returns rows without calling the LLM', function () {
         ], 200),
     ]);
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs($this->queryUser)
         ->postJson(route('queries.direct-preview'), [
             'resource_key' => 'suppliers',
             'tenant' => 'client_x',
@@ -57,7 +55,7 @@ test('direct-preview projects only selected fields', function () {
         ], 200),
     ]);
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs($this->queryUser)
         ->postJson(route('queries.direct-preview'), [
             'resource_key' => 'suppliers',
             'tenant' => 'client_x',
@@ -85,7 +83,7 @@ test('direct-preview executes joins and returns nested rows plus every Oracle ca
         ]),
     ]);
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs($this->queryUser)
         ->postJson(route('queries.direct-preview'), [
             'resource_key' => 'suppliers',
             'tenant' => 'client_x',
@@ -105,7 +103,7 @@ test('direct-preview executes joins and returns nested rows plus every Oracle ca
 });
 
 test('direct-preview returns a clean error when a join target is invalid', function () {
-    $this->actingAs(User::factory()->create())
+    $this->actingAs($this->queryUser)
         ->postJson(route('queries.direct-preview'), [
             'resource_key' => 'suppliers',
             'tenant' => 'client_x',
@@ -119,7 +117,7 @@ test('direct-preview returns a clean error when a join target is invalid', funct
 test('direct-preview returns a clean error when Oracle fails, not a 500', function () {
     Http::fake(['*' => Http::response(['error' => 'boom'], 500)]);
 
-    $response = $this->actingAs(User::factory()->create())
+    $response = $this->actingAs($this->queryUser)
         ->postJson(route('queries.direct-preview'), [
             'resource_key' => 'suppliers',
             'tenant' => 'client_x',
@@ -131,7 +129,7 @@ test('direct-preview returns a clean error when Oracle fails, not a 500', functi
 });
 
 test('direct-preview returns a clean error for an unknown resource', function () {
-    $this->actingAs(User::factory()->create())
+    $this->actingAs($this->queryUser)
         ->postJson(route('queries.direct-preview'), [
             'resource_key' => 'invented_resource',
             'tenant' => 'client_x',
@@ -142,7 +140,7 @@ test('direct-preview returns a clean error for an unknown resource', function ()
 });
 
 test('direct-preview rejects a tenant not in the list', function () {
-    $this->actingAs(User::factory()->create())
+    $this->actingAs($this->queryUser)
         ->postJson(route('queries.direct-preview'), [
             'resource_key' => 'suppliers',
             'tenant' => 'unknown_tenant',

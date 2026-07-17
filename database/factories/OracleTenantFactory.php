@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\OracleTenant;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -20,11 +21,10 @@ class OracleTenantFactory extends Factory
         $key = fake()->unique()->slug(2);
 
         return [
+            'user_id' => User::factory(),
             'key' => str_replace('-', '_', $key),
             'label' => fake()->company(),
             'base_url' => 'https://'.fake()->domainName(),
-            'username' => fake()->userName(),
-            'password' => 'secret',
             'is_default' => false,
             'is_active' => true,
         ];

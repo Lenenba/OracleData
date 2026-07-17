@@ -1,29 +1,16 @@
 <?php
 
-use App\Models\OracleTenant;
 use App\Models\Query;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Inertia\Testing\AssertableInertia as Assert;
-
-beforeEach(function () {
-    config()->set('fusion.default', 'client_x');
-    config()->set('fusion.tenants', [
-        'client_x' => [
-            'label' => 'Client X',
-            'base_url' => 'https://client-x.fa.oraclecloud.com',
-            'username' => 'svc_x',
-            'password' => 'secret_x',
-        ],
-    ]);
-});
 
 test('guests are redirected to the login page', function () {
     $this->get(route('dashboard'))->assertRedirect(route('login'));
 });
 
 test('the dashboard renders the correct Inertia component', function () {
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(createConnectedUser())
         ->get(route('dashboard'))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
@@ -35,7 +22,7 @@ test('the dashboard renders the correct Inertia component', function () {
 });
 
 test('stats counts only queries accessible to the authenticated user', function () {
-    $me = User::factory()->create();
+    $me = createConnectedUser();
     $other = User::factory()->create();
 
     // 2 miennes + 1 partagée = 3 accessibles, 1 privée d'un autre = invisible
@@ -52,17 +39,20 @@ test('stats counts only queries accessible to the authenticated user', function 
 });
 
 test('stats.activeTenants reflects configured tenants', function () {
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(createConnectedUser())
         ->get(route('dashboard'))
         ->assertInertia(fn (Assert $page) => $page
             ->where('stats.activeTenants', 1)
         );
 });
 
-test('stats.activeTenants includes database tenants', function () {
-    OracleTenant::factory()->create();
+test('stats.activeTenants includes only the authenticated users active connections', function () {
+    $me = User::factory()->create();
+    createOracleTenantFor($me, ['key' => 'first']);
+    createOracleTenantFor($me, ['key' => 'second']);
+    createOracleTenantFor(User::factory()->create(), ['key' => 'other']);
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs($me)
         ->get(route('dashboard'))
         ->assertInertia(fn (Assert $page) => $page
             ->where('stats.activeTenants', 2)
@@ -70,7 +60,7 @@ test('stats.activeTenants includes database tenants', function () {
 });
 
 test('recentQueries contains at most 5 entries', function () {
-    $me = User::factory()->create();
+    $me = createConnectedUser();
     Query::factory()->count(8)->for($me)->create();
 
     $this->actingAs($me)
@@ -81,7 +71,7 @@ test('recentQueries contains at most 5 entries', function () {
 });
 
 test('recentQueries includes shared queries from other users', function () {
-    $me = User::factory()->create();
+    $me = createConnectedUser();
     $other = User::factory()->create();
     Query::factory()->for($other)->shared()->create(['name' => 'Shared one']);
 
@@ -93,7 +83,7 @@ test('recentQueries includes shared queries from other users', function () {
 });
 
 test('recentQueries does NOT include private queries from other users', function () {
-    $me = User::factory()->create();
+    $me = createConnectedUser();
     $other = User::factory()->create();
     Query::factory()->for($other)->private()->create(['name' => 'Hidden']);
 
@@ -105,7 +95,7 @@ test('recentQueries does NOT include private queries from other users', function
 });
 
 test('each recent query row contains the expected keys', function () {
-    $me = User::factory()->create();
+    $me = createConnectedUser();
     Query::factory()->for($me)->create();
 
     $this->actingAs($me)
@@ -122,7 +112,7 @@ test('each recent query row contains the expected keys', function () {
 });
 
 test('can.update is true only for the owner\'s queries', function () {
-    $me = User::factory()->create();
+    $me = createConnectedUser();
     $other = User::factory()->create();
     Query::factory()->for($me)->create(['name' => 'Mine']);
     Query::factory()->for($other)->shared()->create(['name' => 'Shared']);
@@ -137,7 +127,7 @@ test('can.update is true only for the owner\'s queries', function () {
 });
 
 test('queriesPerWeek returns 8 real weekly counts, newest last', function () {
-    $me = User::factory()->create();
+    $me = createConnectedUser();
     Query::factory()->count(2)->for($me)->create();
     Query::factory()->for($me)->create(['created_at' => now()->subWeeks(2)]);
 
@@ -152,7 +142,7 @@ test('queriesPerWeek returns 8 real weekly counts, newest last', function () {
 });
 
 test('domainBreakdown groups accessible queries by catalog domain', function () {
-    $me = User::factory()->create();
+    $me = createConnectedUser();
     Query::factory()->count(2)->for($me)->create(['parameters' => ['resource_key' => 'suppliers', 'limit' => 5]]);
     Query::factory()->for($me)->create(['parameters' => ['resource_key' => 'invoices', 'limit' => 5]]);
     Query::factory()->for($me)->create(['parameters' => ['limit' => 5]]);
@@ -168,7 +158,7 @@ test('domainBreakdown groups accessible queries by catalog domain', function () 
 });
 
 test('domainBreakdown ignores private queries from other users', function () {
-    $me = User::factory()->create();
+    $me = createConnectedUser();
     $other = User::factory()->create();
     Query::factory()->for($other)->private()->create(['parameters' => ['resource_key' => 'suppliers']]);
 
@@ -180,7 +170,10 @@ test('domainBreakdown ignores private queries from other users', function () {
 });
 
 test('tenants prop lists configured environments', function () {
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(createConnectedUser([], [
+        'key' => 'client_x',
+        'label' => 'Client X',
+    ]))
         ->get(route('dashboard'))
         ->assertInertia(fn (Assert $page) => $page
             ->where('tenants', fn (Collection $t) => $t->pluck('key')->contains('client_x'))

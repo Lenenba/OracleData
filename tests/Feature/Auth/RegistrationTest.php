@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\User;
 use Laravel\Fortify\Features;
 
 beforeEach(function () {
@@ -21,5 +22,8 @@ test('new users can register', function () {
     ]);
 
     $this->assertAuthenticated();
-    $response->assertRedirect(route('dashboard', absolute: false));
+    $response->assertRedirect(route('onboarding.connection', absolute: false));
+
+    expect(User::where('email', 'test@example.com')->sole()->onboarding_completed_at)
+        ->toBeNull();
 });

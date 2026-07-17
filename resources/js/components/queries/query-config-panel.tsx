@@ -20,6 +20,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { useI18n } from '@/i18n/i18n-context';
 import {
     FILTER_OPERATORS,
     domainIcon,
@@ -323,6 +324,7 @@ export function QueryConfigPanel({
     setLimit: (v: string) => void;
     onChangeResource: () => void;
 }) {
+    const { t } = useI18n();
     const allFields = resource.fields ?? [];
     const childResources = useMemo(
         () => resource.child_resources ?? [],
@@ -718,7 +720,7 @@ export function QueryConfigPanel({
                 </div>
             </Collapsible>
 
-            {/* ─ Tenant & limite ─ */}
+            {/* ─ Environnement & limite ─ */}
             <div className="flex flex-wrap gap-3 rounded-xl border bg-card p-4">
                 <div className="flex max-w-32 flex-col gap-1.5">
                     <Label htmlFor="qb-limit" className="text-xs font-medium">
@@ -739,7 +741,7 @@ export function QueryConfigPanel({
 
                 <div className="flex min-w-44 flex-1 flex-col gap-1.5">
                     <Label htmlFor="qb-tenant" className="text-xs font-medium">
-                        Tenant Oracle
+                        {t('queries.environment')}
                     </Label>
                     <Select
                         value={tenant}
@@ -747,7 +749,9 @@ export function QueryConfigPanel({
                         disabled={Object.keys(tenants).length === 0}
                     >
                         <SelectTrigger id="qb-tenant" className="h-9">
-                            <SelectValue placeholder="Choisir un tenant" />
+                            <SelectValue
+                                placeholder={t('queries.chooseEnvironment')}
+                            />
                         </SelectTrigger>
                         <SelectContent>
                             {Object.entries(tenants).map(([k, v]) => (

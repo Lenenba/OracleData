@@ -1,5 +1,8 @@
 <?php
 
+use App\Models\AuthConnection;
+use App\Models\OracleTenant;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -44,7 +47,52 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
-{
-    // ..
+/**
+ * Create the coherent tenant/authentication pair required by the product
+ * middleware and by FusionManager's database-only resolver.
+ *
+ * @param  array<string, mixed>  $tenantAttributes
+ * @param  array<string, mixed>  $connectionAttributes
+ */
+function createOracleTenantFor(
+    User $user,
+    array $tenantAttributes = [],
+    array $connectionAttributes = [],
+): OracleTenant {
+    $tenantAttributes += [
+        'base_url' => 'https://test.fa.oraclecloud.com',
+        'is_default' => ! $user->oracleTenants()->exists(),
+        'is_active' => true,
+    ];
+
+    $tenant = OracleTenant::factory()
+        ->for($user)
+        ->create($tenantAttributes);
+
+    AuthConnection::factory()
+        ->forTenant($tenant)
+        ->create($connectionAttributes + [
+            'is_active' => (bool) $tenant->is_active,
+        ]);
+
+    return $tenant->refresh()->load('authConnections');
+}
+
+/**
+ * Create an onboarded user who can pass EnsureOnboardingCompleted.
+ *
+ * @param  array<string, mixed>  $userAttributes
+ * @param  array<string, mixed>  $tenantAttributes
+ * @param  array<string, mixed>  $connectionAttributes
+ */
+function createConnectedUser(
+    array $userAttributes = [],
+    array $tenantAttributes = [],
+    array $connectionAttributes = [],
+): User {
+    $user = User::factory()->create($userAttributes);
+
+    createOracleTenantFor($user, $tenantAttributes, $connectionAttributes);
+
+    return $user;
 }

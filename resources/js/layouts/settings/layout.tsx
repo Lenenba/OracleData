@@ -1,4 +1,4 @@
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import type { PropsWithChildren } from 'react';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
@@ -7,17 +7,25 @@ import { useCurrentUrl } from '@/hooks/use-current-url';
 import { useI18n } from '@/i18n/i18n-context';
 import { cn, toUrl } from '@/lib/utils';
 import { edit as editAppearance } from '@/routes/appearance';
+import oracleTenants from '@/routes/oracle-tenants';
 import { edit } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
 import type { NavItem } from '@/types';
 
 export default function SettingsLayout({ children }: PropsWithChildren) {
+    const { component } = usePage();
     const { isCurrentOrParentUrl } = useCurrentUrl();
     const { t } = useI18n();
+    const isConnectionsPage = component.startsWith('oracle-tenants/');
     const sidebarNavItems: NavItem[] = [
         { title: t('settings.profile'), href: edit(), icon: null },
         { title: t('settings.security'), href: editSecurity(), icon: null },
         { title: t('settings.appearance'), href: editAppearance(), icon: null },
+        {
+            title: t('settings.connections'),
+            href: oracleTenants.index(),
+            icon: null,
+        },
     ];
 
     return (
@@ -56,8 +64,18 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
 
                 <Separator className="my-6 lg:hidden" />
 
-                <div className="flex-1 md:max-w-2xl">
-                    <section className="max-w-xl space-y-12">
+                <div
+                    className={cn(
+                        'min-w-0 flex-1',
+                        !isConnectionsPage && 'md:max-w-2xl',
+                    )}
+                >
+                    <section
+                        className={cn(
+                            'space-y-12',
+                            !isConnectionsPage && 'max-w-xl',
+                        )}
+                    >
                         {children}
                     </section>
                 </div>

@@ -32,6 +32,7 @@ class UserFactory extends Factory
             'is_super_admin' => false,
             'locale' => 'fr',
             'timezone' => 'America/Toronto',
+            'onboarding_completed_at' => now(),
             'remember_token' => Str::random(10),
             'two_factor_secret' => null,
             'two_factor_recovery_codes' => null,
@@ -56,6 +57,16 @@ class UserFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'is_super_admin' => true,
+        ]);
+    }
+
+    /**
+     * Indicate that the user still has to configure a first Oracle connection.
+     */
+    public function withoutOnboarding(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'onboarding_completed_at' => null,
         ]);
     }
 

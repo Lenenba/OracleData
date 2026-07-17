@@ -16,8 +16,8 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
-import { readCsrfToken } from '@/lib/csrf';
 import { useI18n } from '@/i18n/i18n-context';
+import { readCsrfToken } from '@/lib/csrf';
 import queries from '@/routes/queries';
 
 type QueryDetail = {

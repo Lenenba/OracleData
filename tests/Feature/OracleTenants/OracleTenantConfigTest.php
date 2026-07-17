@@ -1,8 +1,11 @@
 <?php
 
+use App\Models\AuthConnection;
 use App\Models\OracleTenant;
 use App\Models\User;
 use App\Services\FusionManager;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Http;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('guests cannot manage Oracle tenants', function () {
@@ -10,18 +13,27 @@ test('guests cannot manage Oracle tenants', function () {
     $this->post(route('oracle-tenants.store'), [])->assertRedirect(route('login'));
 });
 
-test('the tenant configuration page renders configured tenants', function () {
-    $this->actingAs(User::factory()->superAdmin()->create())
+test('the tenant configuration page renders only the authenticated users tenants', function () {
+    $user = User::factory()->create();
+    $mine = createOracleTenantFor($user, ['key' => 'mine', 'label' => 'Mine']);
+    createOracleTenantFor(User::factory()->create(), ['key' => 'theirs', 'label' => 'Theirs']);
+
+    $this->actingAs($user)
         ->get(route('oracle-tenants.index'))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('oracle-tenants/index')
-            ->has('tenants')
-            ->has('defaultTenant'));
+            ->has('tenants', 1)
+            ->where('tenants.0.id', $mine->id)
+            ->where('tenants.0.key', 'mine')
+            ->where('defaultTenant', 'mine')
+        );
 });
 
-test('an authenticated user can store an Oracle tenant with encrypted credentials', function () {
-    $user = User::factory()->superAdmin()->create();
+test('an authenticated user can store an owned tenant with encrypted credentials', function () {
+    Http::fake(['*' => Http::response([], 200)]);
+
+    $user = createConnectedUser([], ['key' => 'existing']);
 
     $this->actingAs($user)
         ->post(route('oracle-tenants.store'), [
@@ -35,20 +47,29 @@ test('an authenticated user can store an Oracle tenant with encrypted credential
         ->assertSessionHasNoErrors()
         ->assertRedirect(route('oracle-tenants.index'));
 
-    $tenant = OracleTenant::sole();
+    $tenant = OracleTenant::whereBelongsTo($user)->where('key', 'client_z')->sole();
+    $connection = $tenant->authConnections()->sole();
 
-    expect($tenant->key)->toBe('client_z')
+    expect($tenant->user_id)->toBe($user->id)
         ->and($tenant->base_url)->toBe('https://client-z.fa.oraclecloud.com')
-        ->and($tenant->password)->toBe('super-secret')
-        ->and($tenant->getRawOriginal('password'))->not->toBe('super-secret')
         ->and($tenant->is_default)->toBeTrue()
-        ->and(app(FusionManager::class)->defaultKey())->toBe('client_z');
+        ->and($connection->user_id)->toBe($user->id)
+        ->and($connection->identifier)->toBe('svc_z')
+        ->and($connection->secret)->toBe('super-secret')
+        ->and($connection->getRawOriginal('secret'))->not->toBe('super-secret')
+        ->and($connection->verified_at)->not->toBeNull()
+        ->and(app(FusionManager::class)->forUser($user)->defaultKey())->toBe('client_z');
 });
 
-test('setting a new default tenant clears the previous database default', function () {
-    $old = OracleTenant::factory()->default()->create(['key' => 'old_client']);
+test('setting a new default clears only the same users previous default', function () {
+    Http::fake(['*' => Http::response([], 200)]);
 
-    $this->actingAs(User::factory()->superAdmin()->create())
+    $user = User::factory()->create();
+    $other = User::factory()->create();
+    $old = createOracleTenantFor($user, ['key' => 'old_client', 'is_default' => true]);
+    $otherDefault = createOracleTenantFor($other, ['key' => 'old_client', 'is_default' => true]);
+
+    $this->actingAs($user)
         ->post(route('oracle-tenants.store'), [
             'key' => 'new_client',
             'label' => 'New Client',
@@ -60,5 +81,42 @@ test('setting a new default tenant clears the previous database default', functi
         ->assertSessionHasNoErrors();
 
     expect($old->refresh()->is_default)->toBeFalse()
-        ->and(OracleTenant::where('key', 'new_client')->sole()->is_default)->toBeTrue();
+        ->and($user->oracleTenants()->where('key', 'new_client')->sole()->is_default)->toBeTrue()
+        ->and($otherDefault->refresh()->is_default)->toBeTrue();
 });
+
+test('different users can reuse the same tenant key', function () {
+    Http::fake(['*' => Http::response([], 200)]);
+
+    $first = createConnectedUser([], ['key' => 'existing_first']);
+    $second = createConnectedUser([], ['key' => 'existing_second']);
+    $payload = [
+        'key' => 'production',
+        'label' => 'Production',
+        'base_url' => 'https://production.fa.oraclecloud.com',
+        'username' => 'svc',
+        'password' => 'secret',
+    ];
+
+    $this->actingAs($first)
+        ->post(route('oracle-tenants.store'), $payload)
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($second)
+        ->post(route('oracle-tenants.store'), $payload)
+        ->assertSessionHasNoErrors();
+
+    expect(OracleTenant::where('key', 'production')->count())->toBe(2)
+        ->and(AuthConnection::where('identifier', 'svc')->count())->toBe(2);
+});
+
+test('the database rejects an authentication connection owned by another tenant user', function () {
+    $owner = User::factory()->create();
+    $other = User::factory()->create();
+    $tenant = createOracleTenantFor($owner);
+
+    AuthConnection::factory()->create([
+        'user_id' => $other->id,
+        'oracle_tenant_id' => $tenant->id,
+    ]);
+})->throws(QueryException::class);

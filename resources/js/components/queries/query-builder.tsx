@@ -1,5 +1,13 @@
-import { router } from '@inertiajs/react';
-import { Braces, Code2, Globe, Lock, RotateCw, Save } from 'lucide-react';
+import { Link, router } from '@inertiajs/react';
+import {
+    Braces,
+    Code2,
+    Globe,
+    Lock,
+    RotateCw,
+    Save,
+    Server,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import AlertError from '@/components/alert-error';
 import { QueryConfigPanel } from '@/components/queries/query-config-panel';
@@ -12,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import { useLivePreview } from '@/hooks/use-live-preview';
+import { useI18n } from '@/i18n/i18n-context';
 import {
     DEFAULT_LIMIT,
     domainIcon,
@@ -26,6 +35,7 @@ import type {
     FilterRow,
     ResourceSuggestion,
 } from '@/lib/query-spec';
+import oracleTenants from '@/routes/oracle-tenants';
 import queries from '@/routes/queries';
 
 type BuilderMode = 'create' | 'edit';
@@ -68,6 +78,8 @@ export function QueryBuilder({
     mode = 'create',
     initialState,
 }: QueryBuilderProps) {
+    const { t } = useI18n();
+    const tenantKeys = Object.keys(tenants);
     const initialResourceKey = initialState?.resourceKey;
     const initialResource = useMemo(
         () =>
@@ -95,12 +107,17 @@ export function QueryBuilder({
         ),
     );
     const [orderBy, setOrderBy] = useState(initialState?.orderBy ?? '');
-    const [tenant, setTenant] = useState(
-        initialState?.tenantKey ??
-            defaultTenant ??
-            Object.keys(tenants)[0] ??
-            '',
-    );
+    const [tenant, setTenant] = useState(() => {
+        const requestedTenant = initialState?.tenantKey;
+
+        if (requestedTenant && tenantKeys.includes(requestedTenant)) {
+            return requestedTenant;
+        }
+
+        return tenantKeys.includes(defaultTenant)
+            ? defaultTenant
+            : (tenantKeys[0] ?? '');
+    });
     const [limit, setLimit] = useState(
         String(initialState?.limit ?? DEFAULT_LIMIT),
     );
@@ -260,6 +277,25 @@ export function QueryBuilder({
                 onError: () => setSaving(false),
             });
         }
+    }
+
+    if (tenantKeys.length === 0) {
+        return (
+            <div className="rounded-xl border border-dashed bg-card px-6 py-12 text-center">
+                <Server className="mx-auto size-10 text-muted-foreground" />
+                <h3 className="mt-4 font-semibold">
+                    {t('queries.noConnectionsTitle')}
+                </h3>
+                <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+                    {t('queries.noConnectionsDescription')}
+                </p>
+                <Button asChild className="mt-5">
+                    <Link href={oracleTenants.index()}>
+                        {t('queries.addConnection')}
+                    </Link>
+                </Button>
+            </div>
+        );
     }
 
     if (!resource) {

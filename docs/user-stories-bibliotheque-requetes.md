@@ -1,5 +1,7 @@
 # User Stories — Fonctionnalité « Bibliothèque de requêtes » (v1)
 
+> **Archive fonctionnelle.** Les passages de cette version qui décrivent des tenants globaux dans `config/fusion.php`, des credentials partagés ou un `FusionManager` singleton sont remplacés par la décision `User -> OracleTenant -> AuthConnection` de [`audit-evolution-performance-plateforme.md`](./audit-evolution-performance-plateforme.md). Ils ne doivent plus servir de spécification d'implémentation.
+
 > Document de pilotage. On exécute les stories **dans l'ordre** (Story 0 → 7). Chaque story est livrable et testable indépendamment.
 > Brief source : [`prompt-claude-code-bibliotheque-requetes.md`](./prompt-claude-code-bibliotheque-requetes.md)
 

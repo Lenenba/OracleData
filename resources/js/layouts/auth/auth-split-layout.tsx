@@ -22,11 +22,15 @@ export default function AuthSplitLayout({
                     {name}
                 </Link>
                 <div className="relative z-20 mt-auto">
-                    <p className="mb-2 text-2xl font-semibold leading-tight">
-                        Interrogez Oracle Fusion<br />en langage naturel
+                    <p className="mb-2 text-2xl leading-tight font-semibold">
+                        Interrogez Oracle Fusion
+                        <br />
+                        en langage naturel
                     </p>
                     <p className="text-sm text-zinc-400">
-                        Posez vos questions en français. L'IA interroge vos données Oracle et vous retourne un tableau d'analyse en quelques secondes.
+                        Posez vos questions en français. L'IA interroge vos
+                        données Oracle et vous retourne un tableau d'analyse en
+                        quelques secondes.
                     </p>
                     <ul className="mt-6 space-y-2 text-sm text-zinc-400">
                         <li className="flex items-center gap-2">
@@ -35,7 +39,8 @@ export default function AuthSplitLayout({
                         </li>
                         <li className="flex items-center gap-2">
                             <span className="inline-block size-1.5 rounded-full bg-emerald-400" />
-                            Analyses multi-ressources avec jointures automatiques
+                            Analyses multi-ressources avec jointures
+                            automatiques
                         </li>
                         <li className="flex items-center gap-2">
                             <span className="inline-block size-1.5 rounded-full bg-emerald-400" />

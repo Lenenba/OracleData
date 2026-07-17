@@ -3,18 +3,6 @@
 use App\Models\Query;
 use App\Models\User;
 
-beforeEach(function () {
-    config()->set('fusion.default', 'client_x');
-    config()->set('fusion.tenants', [
-        'client_x' => [
-            'label' => 'Client X',
-            'base_url' => 'https://client-x.fa.oraclecloud.com',
-            'username' => 'svc_x',
-            'password' => 'secret_x',
-        ],
-    ]);
-});
-
 // ─── destroy ─────────────────────────────────────────────────────────────────
 
 test('guests cannot delete a query', function () {

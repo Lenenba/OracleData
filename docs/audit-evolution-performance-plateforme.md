@@ -2,7 +2,143 @@
 
 ## 1. Objectif
 
-Ce document formalise les améliorations recommandées pour faire évoluer OracleData vers une bibliothèque de requêtes plus rapide, mieux organisée et plus collaborative.
+Ce document formalise les améliorations recommandées pour faire évoluer OracleData vers une bibliothèque de requêtes plus rapide, mieux organisée et plus collaborative. La décision prioritaire est désormais de rendre les environnements Oracle et leurs connexions d'authentification personnels à chaque utilisateur.
+
+## Décision d'architecture prioritaire — tenants et connexions par utilisateur
+
+Cette décision remplace toute recommandation antérieure réservant la création ou la gestion des tenants au `super_admin`, ainsi que toute résolution globale des identifiants Oracle depuis `config/fusion.php` ou les variables `FUSION_<CLE>_*`.
+
+### Décision fonctionnelle
+
+- chaque utilisateur authentifié possède et gère ses propres environnements Oracle depuis « Paramètres > Connexions Oracle » ;
+- un environnement, appelé `OracleTenant`, décrit une cible Oracle : libellé, clé locale, URL de base, état actif et caractère par défaut ;
+- une `AuthConnection` décrit comment son propriétaire s'authentifie sur cet environnement ;
+- un tenant peut recevoir plusieurs connexions d'authentification, même si la première livraison n'expose qu'une connexion Basic principale ;
+- l'inscription n'est achevée qu'après la création et la vérification serveur d'une première connexion Basic active et définie par défaut ;
+- après l'onboarding, l'utilisateur peut ajouter, tester, modifier, désactiver et supprimer ses connexions, sous réserve de conserver au moins une connexion active ;
+- le `super_admin` gouverne la plateforme, les politiques et l'audit, mais ne devient ni propriétaire des tenants utilisateurs ni lecteur de leurs secrets.
+
+### Schéma relationnel cible
+
+```text
+users
+- id
+- onboarding_completed_at nullable
+- autres attributs du profil
+
+oracle_tenants
+- id
+- user_id FK -> users.id, non nullable à l'issue de la migration
+- key
+- label
+- base_url
+- is_default
+- is_active
+- timestamps
+
+Contraintes :
+- unique (user_id, key)
+- index (user_id, is_active, is_default)
+- un seul tenant actif par défaut par utilisateur, préservé transactionnellement par le service métier
+
+auth_connections
+- id
+- oracle_tenant_id FK -> oracle_tenants.id, suppression en cascade
+- user_id FK -> users.id, champ de cloisonnement dénormalisé si conservé
+- name
+- auth_type: basic aujourd'hui, types supplémentaires ultérieurement
+- identifier
+- secret chiffré
+- configuration JSON chiffrée nullable
+- is_default
+- is_active
+- verified_at nullable
+- last_tested_at nullable
+- last_test_succeeded_at nullable
+- timestamps
+
+Contraintes :
+- unique (oracle_tenant_id, name)
+- index (user_id, is_active)
+- auth_connections.user_id = oracle_tenants.user_id si le champ dénormalisé est conservé
+- une seule connexion active par défaut par tenant
+
+queries
+- oracle_tenant_id FK nullable -> oracle_tenants.id
+- la FK représente uniquement la cible préférée du propriétaire, jamais un droit transmis à un lecteur
+```
+
+La chaîne d'autorité est `User -> OracleTenant -> AuthConnection`. Les identifiants, secrets et options d'authentification ne doivent plus être portés directement par `oracle_tenants`. Le champ `tenant_key` peut rester transitoirement pour la compatibilité de migration, mais les nouvelles relations utilisent les identifiants internes et un périmètre utilisateur explicite.
+
+### Invariants d'isolation
+
+- toute lecture ou mutation d'un tenant est filtrée par `user_id = utilisateur courant` et vérifiée par une Policy ;
+- un identifiant de tenant ou de connexion soumis par le navigateur n'est jamais accepté sans vérification de propriété ;
+- les clés de tenant ne sont uniques que dans le périmètre d'un utilisateur ; deux utilisateurs peuvent employer la même clé ;
+- les caches et la mémoïsation sont indexés par utilisateur et invalidés après chaque mutation ;
+- les secrets sont chiffrés au repos, exclus des payloads Inertia, des logs, des exceptions et des événements d'audit ;
+- les jobs et commandes reçoivent un `user_id` d'exécution explicite et recréent un résolveur de connexions dans ce périmètre ;
+- aucune solution de repli vers un tenant global ou les identifiants d'un autre utilisateur n'est autorisée ;
+- la désactivation ou la suppression de la dernière connexion active est refusée après l'onboarding.
+
+### Règle d'exécution des requêtes personnelles et partagées
+
+La définition d'une requête est partageable ; les accès Oracle ne le sont pas.
+
+1. Pour sa propre requête, l'auteur peut enregistrer un `oracle_tenant_id` lui appartenant comme cible préférée.
+2. Pour une requête partagée, le lecteur choisit une connexion active qui lui appartient ; son tenant par défaut peut être présélectionné dans l'interface.
+3. Le `oracle_tenant_id` du propriétaire de la requête n'est jamais utilisé pour le lecteur et ne lui donne aucun accès à l'URL ou aux secrets du propriétaire.
+4. À terme, une préférence personnelle par requête pourra mémoriser le tenant choisi par le lecteur, à condition qu'elle référence l'un de ses propres tenants.
+5. Le backend autorise d'abord l'accès à la définition de requête, puis résout séparément la connexion du lecteur et vérifie qu'elle est active et vérifiée.
+6. Le futur journal d'exécution devra enregistrer l'utilisateur exécutant, le tenant et la connexion réellement utilisés, et non la cible préférée de l'auteur.
+7. Si aucune connexion personnelle compatible n'est disponible, l'exécution est bloquée avec une invitation à en configurer une ; aucun fallback implicite n'est tenté.
+
+Le clonage d'une requête partagée l'associe au tenant par défaut du nouveau propriétaire ; celui-ci peut ensuite choisir une autre connexion qui lui appartient.
+
+### Responsabilités des contrôleurs et services
+
+- `OnboardingController` affiche le formulaire initial et délègue à un service transactionnel le test puis la création du tenant et de sa connexion Basic ;
+- `OracleTenantController` liste uniquement les tenants de l'utilisateur courant et gère création, test, modification, activation, choix par défaut et suppression après autorisation ;
+- `QueryController` ne doit jamais convertir la cible d'une requête partagée en accès au tenant de son auteur ; il exige ou résout la connexion personnelle de l'exécutant ;
+- `FusionManager` ou son successeur est toujours lié à un utilisateur (`forUser(...)` pour les jobs) et ne consulte plus les credentials globaux ;
+- `TenantConnectionService` centralise transactions, chiffrement, test de connectivité, unicité des valeurs par défaut et protection de la dernière connexion active ;
+- les contrôleurs restent minces : aucune résolution de secret ou règle d'isolation ne doit être dupliquée dans React ou dans les actions HTTP.
+
+### Parcours d'onboarding détaillé
+
+1. L'utilisateur crée son compte ou confirme son adresse selon le parcours d'inscription retenu.
+2. Tant que `onboarding_completed_at` est vide, un middleware l'oriente vers la page « Configurer ma première connexion Oracle » ; les pages métier et le dashboard restent inaccessibles.
+3. Le formulaire demande un nom d'environnement, une clé locale, l'URL Oracle, l'identifiant Basic et le mot de passe. La première version fixe `auth_type = basic`.
+4. Le frontend peut proposer « Tester la connexion », mais la validation décisive est toujours rejouée côté serveur avec une URL autorisée, des timeouts courts et sans exposer le détail technique de l'échec.
+5. Si le test échoue, rien n'est persisté et l'utilisateur reste sur l'étape avec un message actionnable.
+6. Si le test réussit, une transaction crée le `OracleTenant` actif et par défaut, crée l'`AuthConnection` Basic active, vérifiée et par défaut, puis renseigne `onboarding_completed_at`.
+7. Le cache des tenants de cet utilisateur est invalidé, puis l'utilisateur est redirigé vers le dashboard avec la nouvelle connexion présélectionnée.
+8. Une reprise est idempotente : un utilisateur ayant terminé l'onboarding est redirigé vers le dashboard et le service verrouille sa ligne pendant la transaction afin qu'un double envoi ne crée pas deux connexions.
+9. Depuis ses paramètres, l'utilisateur peut ensuite ajouter plusieurs tenants et, à terme, plusieurs `AuthConnection` par tenant ; il peut changer la valeur par défaut sans perdre ses requêtes.
+
+`onboarding_completed_at` sert de marqueur de parcours, mais l'accès effectif à Oracle reste conditionné à l'existence d'au moins une connexion active et vérifiée. Les services de mutation préservent cet invariant après l'onboarding.
+
+### Migration des tenants globaux et de la configuration
+
+La migration doit être progressive et contrôlée :
+
+1. ajouter `users.onboarding_completed_at`, `oracle_tenants.user_id`, `auth_connections` et `queries.oracle_tenant_id` ; seul `oracle_tenants.user_id` est temporairement nullable pendant son backfill ;
+2. inventorier les tenants de base et ceux déclarés dans `config/fusion.php` ou `FUSION_<CLE>_*`, sans écrire leurs secrets dans les logs ;
+3. affecter chaque tenant historique à un propriétaire explicite ; la migration accepte le seul utilisateur d'une installation mono-utilisateur ou le premier super-administrateur, et s'arrête avant toute mutation si l'affectation reste ambiguë ;
+4. créer pour chaque tenant migré une connexion `basic` principale et chiffrée, sans dupliquer ses secrets pour tous les utilisateurs ;
+5. rattacher les requêtes historiques par le couple `(queries.user_id, tenant_key)` et laisser les cas ambigus à `null` avec un rapport de migration ;
+6. retirer `username` et `password` de `oracle_tenants`, puis rendre `oracle_tenants.user_id` non nullable lorsque tous les cas sont résolus ;
+7. supprimer tout fallback d'exécution vers `FUSION_DEFAULT_TENANT` et `FUSION_<CLE>_{BASE_URL,USERNAME,PASSWORD}` ; les entrées de credentials peuvent subsister temporairement pour le seeding ou l'import legacy local, mais ne sont jamais résolues au runtime et doivent être retirées ou tournées après migration ;
+8. invalider tous les caches de résolution, tester l'isolation avec au moins deux utilisateurs et faire tourner les credentials ayant transité historiquement en clair dans l'environnement ;
+9. prévoir un rollback qui refuse de recréer un espace global si des clés identiques existent chez plusieurs utilisateurs.
+
+Les tenants historiques ne doivent jamais être attribués à tous les comptes par commodité. Une connexion sans propriétaire explicite reste inactive jusqu'à résolution.
+
+### Préparation au SSO sans l'implémenter maintenant
+
+La connexion globale à OracleData et le SSO Oracle sont reportés. Le modèle prépare néanmoins cette évolution avec `auth_connections.auth_type` et `configuration` chiffrée. La première livraison accepte uniquement `basic` ; les futures stratégies (`oauth2`, `oidc_delegated`, compte de service ou mode hybride) seront ajoutées derrière une interface de résolution commune, sans modifier la relation de propriété.
+
+Le futur SSO de la plateforme utilisera des tables d'identité distinctes et ne remplacera pas automatiquement l'autorisation vers Oracle. Aucun jeton SSO, fournisseur d'identité ni flux « on behalf of » n'est requis pour valider la présente étape.
 
 ### Suivi d'avancement
 
@@ -12,7 +148,7 @@ Dernière mise à jour : 17 juillet 2026.
 | ---: | --- | --- |
 | 1 | Stabilisation et sécurité immédiate | **Fait — 17 juillet 2026** |
 | 2 | Fondation multilingue FR/EN/ES | **En cours — 17 juillet 2026** |
-| 3 | Administration et contrôle d'accès | À faire |
+| 3 | Tenants personnels, onboarding et contrôle d'accès | **En cours — fondation livrée le 17 juillet 2026** |
 | 4 | Bibliothèque organisée | À faire |
 | 5 | Partage ciblé et collaboration | À faire |
 | 6 | Gouvernance et templates officiels | À faire |
@@ -26,7 +162,7 @@ Dernière mise à jour : 17 juillet 2026.
 
 Progression de l'étape 1 :
 
-- [x] protéger l'administration des tenants ;
+- [x] protéger l'accès aux tenants pendant la phase de stabilisation ;
 - [x] mémoïser les tenants et invalider après mutation ;
 - [x] ajouter pagination, recherche serveur et index ;
 - [x] configurer les timeouts et erreurs Oracle ;
@@ -37,20 +173,21 @@ Résultat de l'étape 1 :
 
 - rôle minimal `super_admin` non attribuable depuis l'interface ;
 - commande sécurisée `php artisan user:grant-super-admin {email}` ;
-- routes de gestion des tenants interdites aux utilisateurs standards ;
-- entrée « Tenants Oracle » masquée pour les non-administrateurs ;
-- résolution des tenants mémoïsée et invalidée après mutation ;
+- gestion des tenants réorientée vers leur propriétaire : les utilisateurs standards gèrent uniquement leurs propres connexions ;
+- entrée « Connexions Oracle » disponible dans les paramètres utilisateur après l'onboarding ;
+- résolution des tenants mémoïsée par utilisateur et invalidée après mutation ;
 - bibliothèque paginée à 25 éléments avec recherche serveur différée ;
 - index composites sur propriétaire/visibilité et date de mise à jour ;
 - colonne « Visibilité » retirée de la page exclusivement partagée ;
 - timeouts Oracle configurables, retries bornés et messages sans fuite technique ;
 - identifiant de corrélation et mesure `Server-Timing` sur chaque réponse ;
 - journalisation structurée des appels Oracle et requêtes HTTP lentes ;
-- migrations locales appliquées et `test@example.com` promu super-administrateur ;
-- 208 tests et 874 assertions validés ;
+- migrations de stabilisation locales appliquées et `test@example.com` promu super-administrateur ;
+- migration multi-tenant prête, avec arrêt sécurisé si les tenants historiques n'ont pas de propriétaire non ambigu ;
+- 227 tests et 1028 assertions validés ;
 - PHPStan, ESLint, TypeScript et build de production validés.
 
-Prochaine étape : **Étape 2 — Fondation multilingue FR/EN/ES**.
+Chantier parallèle restant : **Étape 2 — finaliser la fondation multilingue FR/EN/ES**.
 
 Progression de l'étape 2 :
 
@@ -62,6 +199,17 @@ Progression de l'étape 2 :
 - [ ] ajouter glossaire, workflow XLIFF et tests de complétude ;
 - [ ] valider les tests, l'analyse statique et le build de production.
 
+Progression de l'étape 3 :
+
+- [x] créer la relation `User -> OracleTenant -> AuthConnection` et chiffrer les secrets ;
+- [x] livrer l'onboarding obligatoire avec test serveur et création atomique de la première connexion ;
+- [x] ouvrir la gestion des connexions personnelles à tous les utilisateurs ;
+- [x] isoler CRUD, résolution de clients et requêtes partagées dans le périmètre du lecteur ;
+- [x] supprimer le fallback d'exécution vers les credentials globaux ;
+- [x] couvrir onboarding, IDOR, connexions actives et requêtes partagées par des tests ;
+- [ ] appliquer la migration sur chaque environnement après sauvegarde et vérification du propriétaire legacy ;
+- [ ] ajouter le journal d'audit des mutations et exécutions sans secrets.
+
 Fonctionnalités couvertes :
 
 - tags et catégories ;
@@ -70,6 +218,8 @@ Fonctionnalités couvertes :
 - statistiques d'usage ;
 - demandes de modification ;
 - templates officiels verrouillés et clonables ;
+- onboarding avec première connexion Basic active, vérifiée et par défaut ;
+- gestion de plusieurs tenants et connexions par utilisateur ;
 - partage ciblé avec des utilisateurs ou des groupes ;
 - super-administration et gouvernance globale ;
 - interface et contenus officiels multilingues en français, anglais et espagnol ;
@@ -112,9 +262,9 @@ Recommandations :
 
 ### 3.2 Lectures répétées des tenants
 
-`FusionManager` peut relire la table des tenants chaque fois qu'un libellé est demandé. Dans une liste, cela peut produire un N+1.
+`FusionManager` peut relire la table des tenants chaque fois qu'un libellé est demandé. Dans une liste, cela peut produire un N+1 et, si le cache n'est pas correctement segmenté, une fuite de métadonnées entre utilisateurs.
 
-Recommandation : mémoïser la liste des tenants pendant toute la requête HTTP et invalider ce cache après création, modification ou suppression d'un tenant.
+Recommandation : mémoïser la liste des tenants du seul utilisateur courant pendant toute la requête HTTP, inclure son `user_id` dans toute clé de cache persistante et invalider ce cache après création, modification ou suppression d'un tenant.
 
 ### 3.3 Index insuffisants
 
@@ -261,7 +411,7 @@ query_versions
 - name
 - description
 - resource_path
-- tenant_key
+- oracle_tenant_id nullable, cible préférée du propriétaire uniquement
 - mode
 - parameters JSON
 - change_summary
@@ -296,8 +446,9 @@ Contrainte unique : (query_id, version_number)
 query_executions
 - id
 - query_id nullable si l'historique doit survivre à la suppression
-- user_id
-- tenant_key
+- user_id, utilisateur ayant réellement exécuté la requête
+- oracle_tenant_id, tenant appartenant à cet utilisateur
+- auth_connection_id, connexion réellement utilisée
 - status
 - duration_ms
 - rows_count
@@ -326,7 +477,7 @@ last_executed_at
 last_successful_execution_at
 ```
 
-Les compteurs doivent être mis à jour atomiquement.
+Les compteurs doivent être mis à jour atomiquement. Pour une requête partagée, `oracle_tenant_id` et `auth_connection_id` proviennent du lecteur qui lance l'exécution, jamais de la connexion enregistrée par l'auteur.
 
 ### Indicateurs
 
@@ -409,10 +560,17 @@ La Policy Laravel reste la source d'autorité. Masquer un bouton dans React ne s
 
 ```text
 users
+  ├── oracle_tenants
+  │     └── auth_connections
   ├── queries
   ├── query_user_preferences
   ├── query_executions
   └── query_change_requests
+
+oracle_tenants
+  ├── user propriétaire
+  ├── auth_connections
+  └── queries du propriétaire qui le prennent comme cible préférée
 
 queries
   ├── category
@@ -479,6 +637,8 @@ Ces valeurs devront être adaptées à l'infrastructure réelle.
 ## 13. Sécurité et fiabilité
 
 - appliquer toutes les autorisations côté serveur ;
+- vérifier la propriété du tenant et de la connexion à chaque résolution ;
+- segmenter caches, jobs et métriques par utilisateur exécutant ;
 - introduire des permissions pour les templates officiels ;
 - ne jamais exposer les secrets Oracle ;
 - normaliser les erreurs ;
@@ -492,7 +652,7 @@ Ces valeurs devront être adaptées à l'infrastructure réelle.
 
 ### Phase 1 — Fondations de performance
 
-1. Mémoïser les tenants.
+1. Mémoïser les tenants par utilisateur.
 2. Paginer la bibliothèque côté serveur.
 3. Déplacer recherche et filtres côté serveur.
 4. Ajouter les index principaux.
@@ -537,6 +697,12 @@ Ces valeurs devront être adaptées à l'infrastructure réelle.
 
 - pagination et filtrage des requêtes accessibles ;
 - absence de N+1 sur les tenants ;
+- création d'un tenant limitée à son utilisateur propriétaire ;
+- refus des accès croisés par identifiant deviné ;
+- onboarding impossible sans connexion Basic testée, active, vérifiée et par défaut ;
+- refus de désactiver ou supprimer la dernière connexion active ;
+- exécution d'une requête partagée avec la connexion du lecteur uniquement ;
+- jobs résolus dans le périmètre explicite de leur utilisateur ;
 - favoris propres à chaque utilisateur ;
 - ordre des épingles ;
 - création et restauration des versions ;
@@ -555,6 +721,9 @@ Ces valeurs devront être adaptées à l'infrastructure réelle.
 - rollback des actions optimistes ;
 - affichage des badges et statistiques ;
 - états vides, chargement et erreur ;
+- redirection vers l'onboarding tant que la première connexion n'est pas validée ;
+- ajout et gestion de plusieurs connexions depuis les paramètres ;
+- sélecteur des seuls tenants du lecteur sur une requête partagée ;
 - navigation dans l'historique ;
 - progression d'une exécution asynchrone.
 
@@ -577,6 +746,10 @@ La plateforme aura franchi un niveau supérieur lorsque :
 - les modifications seront traçables et restaurables ;
 - les statistiques distingueront tentatives, succès et échecs ;
 - les requêtes partagées pourront recevoir des demandes de modification ;
+- chaque utilisateur pourra configurer plusieurs tenants sans intervention d'un administrateur ;
+- aucun utilisateur ne pourra voir ou utiliser le tenant ou les secrets d'un autre ;
+- le dashboard sera inaccessible avant la vérification de la première connexion Basic ;
+- une requête partagée s'exécutera avec une connexion appartenant à son lecteur ;
 - les templates officiels seront verrouillés, versionnés et clonables ;
 - les analyses longues ne bloqueront plus les requêtes HTTP ;
 - les performances et erreurs seront mesurées ;
@@ -674,7 +847,7 @@ Un groupe permet de gérer les droits d'une équipe une seule fois. Le retrait d
 ### Permissions recommandées
 
 - `view` : consulter les informations ;
-- `execute` : exécuter sur les tenants autorisés ;
+- `execute` : exécuter la définition avec l'une des connexions actives appartenant au lecteur ;
 - `clone` : créer une copie personnelle ;
 - `manage` : gérer le partage, pour le propriétaire ou un délégataire explicite.
 
@@ -696,9 +869,10 @@ La modification directe de la source ne devrait pas être accordée par défaut.
 - ne pas charger toute la liste des utilisateurs dans le navigateur ;
 - journaliser partage, acceptation, changement de permission et révocation ;
 - interdire qu'un destinataire repartage sans permission `manage` ;
-- croiser l'accès à la requête avec l'accès au tenant ciblé.
+- autoriser séparément l'accès à la définition puis la connexion choisie par le lecteur ;
+- ne jamais transmettre, réutiliser ou révéler le tenant et les credentials du propriétaire lors du partage.
 
-## 20. Administrateur général
+## 20. Administrateur général et limites de son périmètre
 
 ### Rôle cible
 
@@ -707,7 +881,7 @@ Créer un rôle `super_admin` capable d'administrer :
 - utilisateurs, groupes et statuts de comptes ;
 - rôles et permissions ;
 - requêtes, partages et templates officiels ;
-- tenants Oracle et méthodes d'authentification ;
+- politiques globales de connexion, domaines autorisés, quotas et incidents, sans lire les secrets utilisateurs ;
 - catégories et tags administrés ;
 - demandes de modification ;
 - exécutions, files d'attente et incidents ;
@@ -722,7 +896,7 @@ Créer un rôle `super_admin` capable d'administrer :
 roles
 - id
 - name
-- scope: global | tenant | group
+- scope: global | group
 
 permissions
 - id
@@ -743,7 +917,6 @@ Rôles initiaux possibles :
 
 - `super_admin` ;
 - `platform_admin` ;
-- `tenant_admin` ;
 - `template_publisher` ;
 - `auditor` ;
 - `group_manager` ;
@@ -756,8 +929,8 @@ Les permissions sont évaluées côté serveur. Un `Gate::before` peut simplifie
 - tableau de santé général ;
 - gestion et suspension des utilisateurs ;
 - attribution des rôles ;
-- matrice utilisateurs-tenants ;
-- gestion des tenants et tests de connexion ;
+- inventaire technique minimal des tenants (propriétaire, état, domaine et dernier test), sans identifiant ni secret ;
+- politiques réseau et capacité de suspendre une connexion compromise avec justification auditée ;
 - approbation et publication des templates ;
 - consultation et annulation des jobs ;
 - statistiques d'adoption et de performance ;
@@ -771,37 +944,63 @@ Les permissions sont évaluées côté serveur. Un `Gate::before` peut simplifie
 - confirmation renforcée des opérations destructives ;
 - journal immuable des actions administratives ;
 - justification des accès exceptionnels aux données utilisateur ;
+- aucun affichage, export ou usage des credentials d'un utilisateur ;
+- aucune réattribution silencieuse d'un tenant personnel ;
 - session administrative plus courte ;
 - compte d'urgence séparé et surveillé ;
 - impersonation uniquement si nécessaire, visible et auditée.
 
 Le « contrôle total » signifie une capacité opérationnelle complète, pas un accès silencieux et non traçable aux données métier.
 
-### Risque actuel à corriger
+### Règle de propriété
 
-Les routes de gestion des tenants sont actuellement placées sous la seule authentification générale. Elles doivent être protégées rapidement par des permissions administratives avant une ouverture large de la plateforme.
+Les routes de gestion des tenants ne sont pas des routes de super-administration : elles sont accessibles aux utilisateurs authentifiés ayant terminé l'onboarding, puis protégées par la propriété de chaque ressource. Le `super_admin` peut appliquer une suspension de sécurité ou consulter des métadonnées d'exploitation auditées, mais il ne configure pas à la place de l'utilisateur une connexion personnelle et ne peut jamais récupérer son secret.
 
-## 21. SSO plateforme et SSO Oracle par tenant
+## 21. Authentification actuelle et trajectoire SSO différée
 
-### Deux problèmes différents
+### Périmètre de la présente évolution
 
-Il faut séparer :
+La présente évolution implémente uniquement le stockage et la résolution de connexions Oracle personnelles. Le type obligatoire pour l'onboarding est `basic`. La connexion à OracleData continue d'utiliser le mécanisme d'authentification de plateforme existant.
+
+```text
+OracleTenant appartenant à un User
+  └── AuthConnection
+        ├── auth_type = basic
+        ├── identifier
+        ├── secret chiffré
+        ├── configuration chiffrée nullable
+        ├── is_active / is_default
+        └── verified_at / last_tested_at
+```
+
+`auth_type` appartient à la connexion, pas au tenant : un même environnement pourra plus tard proposer plusieurs stratégies. Le code de résolution doit donc dépendre d'un contrat commun de fournisseur d'authentification et refuser un type inconnu, même si seule l'implémentation Basic existe aujourd'hui.
+
+### Deux évolutions futures distinctes
+
+Il faudra toujours séparer :
 
 1. le SSO de connexion à OracleData, qui authentifie l'utilisateur sur la plateforme ;
-2. l'authentification déléguée auprès d'un tenant Oracle, qui détermine sous quelle identité les données Oracle sont consultées.
+2. l'authentification déléguée auprès d'Oracle, qui détermine sous quelle identité un tenant est consulté.
 
-Une connexion SSO à OracleData ne garantit pas automatiquement qu'Oracle Fusion acceptera le même jeton. Chaque tenant doit être évalué selon sa configuration d'identité.
+Une session SSO OracleData ne constitue jamais, à elle seule, un droit d'accès à Oracle Fusion. La propriété `User -> OracleTenant -> AuthConnection` reste la frontière d'autorisation, sauf si un futur modèle explicite de délégation est conçu et audité.
 
-### Étape A — SSO de la plateforme
+### Préparation de modèle, sans flux SSO maintenant
 
-Supporter OIDC en priorité, puis SAML si nécessaire :
+Les futurs types pourront compléter `auth_connections` sans déplacer les credentials dans `oracle_tenants` :
 
-- connexion via l'Identity Provider de l'organisation ;
-- association par identifiant immuable de l'IdP, pas uniquement par e-mail ;
-- MFA pilotée par l'IdP ;
-- révocation et désactivation des comptes ;
-- accès d'urgence contrôlé ;
-- provisionnement et déprovisionnement SCIM à terme.
+```text
+auth_type
+- basic
+- oauth2_client_credentials, futur
+- oidc_delegated, futur
+- service_account, futur si nécessaire
+
+configuration chiffrée
+- références de coffre, scopes, audience et endpoints selon la stratégie
+- aucun secret ou jeton persistant dans le navigateur
+```
+
+Les tables ci-dessous ne seront créées qu'à l'étape SSO de la feuille de route :
 
 ```text
 identity_providers
@@ -810,7 +1009,7 @@ identity_providers
 - protocol: oidc | saml
 - issuer
 - client_id
-- encrypted_client_secret
+- encrypted_client_secret ou référence de coffre
 - discovery_url
 - is_active
 
@@ -822,53 +1021,9 @@ user_identities
 - claims JSON limitées
 ```
 
-### Étape B — Autorisation par tenant
+Le précédent modèle `user_tenant_access` n'est pas nécessaire pour les connexions personnelles : l'accès découle directement de `oracle_tenants.user_id`. Si des tenants d'équipe ou des délégations sont introduits plus tard, ils devront utiliser une table de délégation séparée, explicite, révocable et sans partage des secrets du propriétaire.
 
-Même avec le SSO plateforme, l'utilisateur ne doit voir que les tenants autorisés.
-
-```text
-user_tenant_access
-- user_id
-- oracle_tenant_id
-- role_id nullable
-- can_execute
-- granted_by
-- expires_at nullable
-- timestamps
-```
-
-Les sélecteurs, validations backend et statistiques doivent tous respecter cette matrice.
-
-### Étape C — Identité déléguée vers Oracle
-
-Pour les tenants compatibles, remplacer progressivement le compte de service partagé par un flux OAuth/OIDC délégué ou « on behalf of » supporté par l'environnement Oracle concerné.
-
-Principes :
-
-- jetons courts et chiffrés ;
-- refresh tokens seulement si indispensables ;
-- secrets dans un coffre en production ;
-- scopes minimaux ;
-- révocation et expiration contrôlées ;
-- aucun jeton persistant dans le navigateur ;
-- corrélation entre l'utilisateur OracleData et l'identité Oracle ;
-- audit de chaque exécution sous identité déléguée.
-
-Le compte de service peut rester disponible pour les jobs planifiés et les tenants non compatibles, mais son usage doit être explicite, restreint et audité.
-
-### Configuration par tenant
-
-```text
-authentication_mode
-- service_account
-- delegated_oauth
-- hybrid
-
-identity_provider_id nullable
-oauth_configuration chiffrée
-```
-
-Avant l'implémentation, réaliser une preuve de concept sur un tenant réel pour valider les flux supportés, les scopes, la durée des jetons et les contraintes Oracle.
+Avant toute prise en charge OAuth Oracle, réaliser une preuve de concept sur un environnement réel pour valider les flux supportés, les scopes, la durée et la révocation des jetons. Cette preuve de concept ne bloque ni l'onboarding Basic ni la gestion multi-connexions actuelle.
 
 ## 22. Capacités complémentaires pour devenir plus compétitif
 
@@ -927,7 +1082,8 @@ Ces capacités forment un catalogue cible à prioriser selon la valeur métier, 
 users
   ├── roles et permissions
   ├── user identities
-  ├── user tenant access
+  ├── Oracle tenants
+  │     └── auth connections
   ├── groups
   ├── query shares
   └── query preferences
@@ -942,7 +1098,7 @@ queries
 
 platform
   ├── identity providers
-  ├── Oracle tenants et stratégies d'authentification
+  ├── politiques réseau et stratégies d'authentification supportées
   ├── roles et permissions
   ├── jobs et notifications
   └── audit global
@@ -950,13 +1106,15 @@ platform
 
 ## 24. Feuille de route étendue
 
-### Phase 3 — Gouvernance renforcée
+### Phase 3 — Tenants personnels, onboarding et gouvernance renforcée
 
 1. Ajouter rôles, permissions et super-administrateur.
-2. Protéger l'administration des tenants.
-3. Créer la console d'administration et l'audit.
-4. Créer et verrouiller les templates officiels.
-5. Ajouter historique, comparaison et restauration.
+2. Migrer les tenants globaux vers des propriétaires explicites et des `auth_connections`.
+3. Livrer l'onboarding avec première connexion Basic vérifiée.
+4. Protéger chaque tenant par sa Policy de propriété et supprimer le fallback de configuration globale.
+5. Créer la console d'administration et l'audit sans exposer les secrets.
+6. Créer et verrouiller les templates officiels.
+7. Ajouter historique, comparaison et restauration.
 
 ### Phase 4 — Collaboration ciblée
 
@@ -978,7 +1136,7 @@ platform
 
 1. Déployer le SSO OIDC ou SAML de la plateforme.
 2. Ajouter provisionnement et déprovisionnement.
-3. Mettre en place la matrice utilisateurs-tenants.
+3. Conserver la propriété des connexions par utilisateur et concevoir séparément toute délégation d'équipe nécessaire.
 4. Réaliser une preuve de concept Oracle déléguée.
 5. Activer OAuth pour les tenants compatibles.
 6. Conserver un mode hybride audité pour les autres cas.
@@ -988,7 +1146,12 @@ platform
 - partage direct et partage de groupe ;
 - acceptation, révocation et expiration ;
 - interdiction du repartage non autorisé ;
-- refus d'exécution sans accès au tenant ;
+- onboarding bloqué jusqu'à la réussite du test Basic et création atomique des valeurs par défaut ;
+- ajout, modification et suppression des seuls tenants du propriétaire ;
+- refus de désactiver ou supprimer la dernière connexion active ;
+- refus d'exécution avec un tenant ou une connexion appartenant à un autre utilisateur ;
+- exécution d'une requête partagée avec la connexion sélectionnée par le lecteur ;
+- absence de fallback vers `config/fusion.php` et les variables de credentials globales ;
 - impossibilité d'auto-promotion en super-administrateur ;
 - audit des actions administratives ;
 - connexion SSO et liaison d'identité ;
@@ -1001,9 +1164,9 @@ platform
 
 Le menu « Requêtes partagées » permet de simplifier l'interface, mais il ne remplace pas le modèle d'autorisation. La colonne de visibilité peut disparaître de cette page dédiée, tandis qu'un niveau d'accès explicite doit rester visible dans les vues où plusieurs origines sont mélangées.
 
-L'évolution structurante consiste à passer d'un partage global binaire à un contrôle d'accès combinant propriétaire, utilisateurs, groupes, organisation et tenants autorisés. Ce modèle doit être gouverné par des rôles, une super-administration fortement sécurisée et un audit complet.
+L'évolution structurante combine deux frontières : le partage d'une définition de requête entre utilisateurs ou groupes, et la propriété strictement personnelle des tenants et connexions qui servent à l'exécuter. Partager une requête ne partage jamais une connexion Oracle. Ce modèle doit être gouverné par des Policies de propriété, une super-administration sans accès aux secrets et un audit complet.
 
-Le SSO doit être livré en deux temps : authentification centralisée sur OracleData, puis identité Oracle déléguée uniquement pour les tenants qui la supportent. Cette séparation réduit les risques et permet de conserver un mode hybride pour les automatisations.
+Le SSO sera livré dans un second temps : authentification centralisée sur OracleData, puis éventuellement identité Oracle déléguée pour les environnements compatibles. D'ici là, `auth_type` prépare l'extension tandis que l'onboarding exige une connexion Basic personnelle, active et vérifiée.
 
 L'ordre stratégique recommandé est : performance et observabilité, internationalisation, rôles et administration, partage ciblé, gouvernance et versions, couche sémantique, automatisation, IA et extensibilité, puis SSO plateforme et identité Oracle déléguée en dernier.
 
@@ -1279,8 +1442,8 @@ Cette feuille de route remplace l'ordre indicatif des sections précédentes. Ch
 
 ### Étape 1 — Stabilisation et sécurité immédiate
 
-- protéger l'administration des tenants ;
-- mémoïser les tenants ;
+- protéger l'accès aux tenants avant leur décentralisation ;
+- mémoïser les tenants par utilisateur ;
 - ajouter pagination, recherche serveur et index ;
 - configurer timeouts et erreurs Oracle ;
 - ajouter métriques de base et identifiants de corrélation.
@@ -1293,13 +1456,16 @@ Cette feuille de route remplace l'ordre indicatif des sections précédentes. Ch
 - traduire navigation, authentification, bibliothèque et erreurs ;
 - mettre en place glossaire, XLIFF et tests de catalogues.
 
-### Étape 3 — Administration et contrôle d'accès
+### Étape 3 — Tenants personnels, onboarding et contrôle d'accès
 
-- rôles et permissions ;
-- super-administrateur sécurisé ;
-- console d'administration ;
-- audit des actions ;
-- matrice initiale utilisateurs-tenants.
+- relation `User -> OracleTenant -> AuthConnection` et contraintes d'isolation ;
+- migration contrôlée des tenants globaux, des credentials et des requêtes historiques ;
+- onboarding obligatoire avec première connexion Basic active, vérifiée et par défaut ;
+- paramètres permettant à chaque utilisateur d'ajouter et gérer plusieurs connexions ;
+- résolution des connexions strictement liée à l'utilisateur courant, y compris dans les jobs ;
+- exécution des requêtes partagées avec la connexion du lecteur ;
+- suppression des fallbacks `FUSION_DEFAULT_TENANT` et `FUSION_<CLE>_*` contenant des credentials ;
+- Policies de propriété, audit sans secrets et super-administrateur sécurisé.
 
 ### Étape 4 — Bibliothèque organisée
 
@@ -1377,9 +1543,9 @@ Cette feuille de route remplace l'ordre indicatif des sections précédentes. Ch
 
 - SSO OIDC ou SAML de la plateforme ;
 - provisionnement et déprovisionnement ;
-- finalisation de la matrice utilisateurs-tenants ;
+- ajout éventuel de délégations explicites pour les tenants d'équipe, sans modifier la propriété des connexions personnelles ;
 - preuve de concept OAuth Oracle sur un tenant réel ;
-- identité Oracle déléguée pour les tenants compatibles ;
+- nouvelles stratégies `auth_type` et identité Oracle déléguée pour les tenants compatibles ;
 - mode hybride audité pour les jobs et tenants non compatibles ;
 - tests complets de révocation, isolation et accès d'urgence.
 
@@ -1389,6 +1555,8 @@ Une étape est terminée uniquement lorsque :
 
 - les critères d'acceptation sont validés ;
 - les tests fonctionnels et de sécurité sont verts ;
+- les tests d'isolation entre au moins deux utilisateurs sont verts ;
+- aucune connexion ou secret global obsolète n'est encore résolu par l'application ;
 - les métriques de performance ne régressent pas ;
 - la documentation utilisateur et administrateur est à jour ;
 - les trois langues sont complètes pour les fonctions livrées ;

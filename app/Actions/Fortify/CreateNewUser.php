@@ -19,6 +19,9 @@ class CreateNewUser implements CreatesNewUsers
      */
     public function create(array $input): User
     {
+        $input['locale'] ??= (string) config('app.locale', 'fr');
+        $input['timezone'] ??= (string) config('app.timezone', 'UTC');
+
         Validator::make($input, [
             ...$this->profileRules(),
             'password' => $this->passwordRules(),
@@ -28,6 +31,8 @@ class CreateNewUser implements CreatesNewUsers
             'name' => $input['name'],
             'email' => $input['email'],
             'password' => $input['password'],
+            'locale' => $input['locale'],
+            'timezone' => $input['timezone'],
         ]);
     }
 }

@@ -1,81 +1,59 @@
 <?php
 
-use App\Models\OracleTenant;
+use App\Models\User;
 use App\Services\FusionClient;
 use App\Services\FusionManager;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
-beforeEach(function () {
-    config()->set('fusion.default', 'client_x');
-    config()->set('fusion.tenants', [
-        'client_x' => [
-            'label' => 'Client X (Production)',
-            'base_url' => 'https://client-x.fa.oraclecloud.com',
-            'username' => 'svc_x',
-            'password' => 'secret_x',
-        ],
-        'client_y' => [
-            'label' => 'Client Y',
-            'base_url' => 'https://client-y.fa.oraclecloud.com',
-            'username' => 'svc_y',
-            'password' => 'secret_y',
-        ],
-    ]);
+test('tenant resolves a FusionClient from an owned database connection', function () {
+    $user = User::factory()->create();
+    createOracleTenantFor($user, ['key' => 'client_x']);
+
+    expect(app(FusionManager::class)->forUser($user)->tenant('client_x'))
+        ->toBeInstanceOf(FusionClient::class);
 });
 
-test('tenant() resolves a FusionClient for a configured tenant', function () {
-    expect(app(FusionManager::class)->tenant('client_x'))->toBeInstanceOf(FusionClient::class);
-});
+test('tenant throws for an unknown or unowned tenant', function () {
+    $owner = User::factory()->create();
+    $reader = User::factory()->create();
+    createOracleTenantFor($owner, ['key' => 'private_tenant']);
 
-test('tenant() throws for an unknown tenant', function () {
-    app(FusionManager::class)->tenant('unknown');
+    app(FusionManager::class)->forUser($reader)->tenant('private_tenant');
 })->throws(InvalidArgumentException::class);
 
-test('default() resolves the configured default tenant', function () {
+test('configuration-file tenants are no longer resolver inputs', function () {
+    config()->set('fusion.tenants', [
+        'legacy' => [
+            'label' => 'Legacy',
+            'base_url' => 'https://legacy.fa.oraclecloud.com',
+            'username' => 'legacy',
+            'password' => 'legacy',
+        ],
+    ]);
+
+    expect(app(FusionManager::class)->forUser(User::factory()->create())->available())
+        ->toBe([]);
+});
+
+test('default targets the owned default tenant with its active basic credentials', function () {
     Http::fake(['*' => Http::response(['items' => []])]);
 
-    app(FusionManager::class)->default()->get('/hcmRestApi/resources/11.13.18.05/workers');
-
-    Http::assertSent(fn ($request) => str_starts_with($request->url(), 'https://client-x.fa.oraclecloud.com'));
-});
-
-test('different tenants target different base urls', function () {
-    Http::fake([
-        'client-x.fa.oraclecloud.com/*' => Http::response(['items' => [['t' => 'x']]]),
-        'client-y.fa.oraclecloud.com/*' => Http::response(['items' => [['t' => 'y']]]),
-    ]);
-
-    $manager = app(FusionManager::class);
-    $x = $manager->tenant('client_x')->list('/hcmRestApi/resources/11.13.18.05/workers');
-    $y = $manager->tenant('client_y')->list('/hcmRestApi/resources/11.13.18.05/workers');
-
-    expect($x[0]['t'])->toBe('x')
-        ->and($y[0]['t'])->toBe('y');
-});
-
-test('available() returns configured tenant keys and labels', function () {
-    expect(app(FusionManager::class)->available())->toBe([
-        'client_x' => 'Client X (Production)',
-        'client_y' => 'Client Y',
-    ]);
-});
-
-test('database tenants are available and can become the default tenant', function () {
-    OracleTenant::factory()->default()->create([
+    $user = User::factory()->create();
+    createOracleTenantFor($user, [
         'key' => 'client_z',
         'label' => 'Client Z',
         'base_url' => 'https://client-z.fa.oraclecloud.com',
-        'username' => 'svc_z',
-        'password' => 'secret_z',
+        'is_default' => true,
+    ], [
+        'identifier' => 'svc_z',
+        'secret' => 'secret_z',
     ]);
 
-    Http::fake(['*' => Http::response(['items' => []])]);
-
-    $manager = app(FusionManager::class);
+    $manager = app(FusionManager::class)->forUser($user);
 
     expect($manager->defaultKey())->toBe('client_z')
-        ->and($manager->available())->toHaveKey('client_z', 'Client Z');
+        ->and($manager->available())->toBe(['client_z' => 'Client Z']);
 
     $manager->default()->get('/hcmRestApi/resources/11.13.18.05/workers');
 
@@ -83,48 +61,109 @@ test('database tenants are available and can become the default tenant', functio
         && $request->hasHeader('Authorization', 'Basic '.base64_encode('svc_z:secret_z')));
 });
 
-test('details() includes database tenant ids for management actions', function () {
-    $tenant = OracleTenant::factory()->create([
-        'key' => 'client_z',
-        'label' => 'Client Z',
+test('the same key resolves independently for different users', function () {
+    Http::fake(['*' => Http::response(['items' => []])]);
+
+    $first = User::factory()->create();
+    $second = User::factory()->create();
+    createOracleTenantFor($first, [
+        'key' => 'production',
+        'base_url' => 'https://first.fa.oraclecloud.com',
+    ], [
+        'identifier' => 'first_user',
+        'secret' => 'first_secret',
+    ]);
+    createOracleTenantFor($second, [
+        'key' => 'production',
+        'base_url' => 'https://second.fa.oraclecloud.com',
+    ], [
+        'identifier' => 'second_user',
+        'secret' => 'second_secret',
     ]);
 
-    $details = collect(app(FusionManager::class)->details())
+    app(FusionManager::class)->forUser($first)
+        ->tenant('production')
+        ->get('/hcmRestApi/resources/11.13.18.05/workers');
+    app(FusionManager::class)->forUser($second)
+        ->tenant('production')
+        ->get('/hcmRestApi/resources/11.13.18.05/workers');
+
+    Http::assertSent(fn ($request) => str_starts_with($request->url(), 'https://first.fa.oraclecloud.com')
+        && $request->hasHeader('Authorization', 'Basic '.base64_encode('first_user:first_secret')));
+    Http::assertSent(fn ($request) => str_starts_with($request->url(), 'https://second.fa.oraclecloud.com')
+        && $request->hasHeader('Authorization', 'Basic '.base64_encode('second_user:second_secret')));
+});
+
+test('available exposes only active owned tenants backed by verified active connections', function () {
+    $user = User::factory()->create();
+    $other = User::factory()->create();
+    createOracleTenantFor($user, ['key' => 'available', 'label' => 'Available']);
+    createOracleTenantFor($user, ['key' => 'inactive_tenant', 'is_active' => false]);
+    createOracleTenantFor($user, ['key' => 'inactive_connection'], ['is_active' => false]);
+    createOracleTenantFor($user, ['key' => 'unverified_connection'], ['verified_at' => null]);
+    createOracleTenantFor($user, ['key' => 'unsupported_connection'], ['auth_type' => 'oauth2']);
+    createOracleTenantFor($other, ['key' => 'unowned']);
+
+    $manager = app(FusionManager::class)->forUser($user);
+
+    expect($manager->available())->toBe(['available' => 'Available'])
+        ->and($manager->keys())->toBe(['available'])
+        ->and($manager->has('available'))->toBeTrue()
+        ->and($manager->has('inactive_tenant'))->toBeFalse()
+        ->and($manager->has('inactive_connection'))->toBeFalse()
+        ->and($manager->has('unverified_connection'))->toBeFalse()
+        ->and($manager->has('unsupported_connection'))->toBeFalse()
+        ->and($manager->has('unowned'))->toBeFalse();
+});
+
+test('details returns non-sensitive management metadata for all owned connections', function () {
+    $user = User::factory()->create();
+    $tenant = createOracleTenantFor($user, [
+        'key' => 'client_z',
+        'label' => 'Client Z',
+    ], [
+        'identifier' => 'svc_z',
+        'secret' => 'do-not-expose',
+    ]);
+
+    $details = collect(app(FusionManager::class)->forUser($user)->details())
         ->firstWhere('key', 'client_z');
 
     expect($details)->not->toBeNull()
         ->and($details['id'])->toBe($tenant->id)
-        ->and($details['source'])->toBe('database');
+        ->and($details['source'])->toBe('database')
+        ->and($details['username'])->toBe('svc_z')
+        ->and($details['connection_count'])->toBe(1)
+        ->and($details)->not->toHaveKeys(['password', 'secret']);
 });
 
-test('has() reflects configured tenants', function () {
-    $manager = app(FusionManager::class);
+test('default throws when the user has no active connection', function () {
+    app(FusionManager::class)->forUser(User::factory()->create())->default();
+})->throws(InvalidArgumentException::class, 'Aucune connexion Oracle active');
 
-    expect($manager->has('client_x'))->toBeTrue()
-        ->and($manager->has('nope'))->toBeFalse();
-});
-
-test('the manager is registered as a singleton', function () {
+test('the manager is scoped in the application container', function () {
     expect(app(FusionManager::class))->toBe(app(FusionManager::class));
 });
 
-test('database tenants are resolved only once until explicitly forgotten', function () {
-    OracleTenant::factory()->create(['key' => 'memoized']);
-    $manager = app(FusionManager::class);
+test('database tenants are memoized until explicitly forgotten', function () {
+    $user = User::factory()->create();
+    createOracleTenantFor($user, ['key' => 'memoized']);
+    $manager = app(FusionManager::class)->forUser($user);
 
     DB::flushQueryLog();
     DB::enableQueryLog();
 
     $manager->available();
-    $queryCountAfterFirstResolution = count(DB::getQueryLog());
+    $manager->details();
+    $queryCountAfterResolution = count(DB::getQueryLog());
 
     $manager->keys();
     $manager->label('memoized');
     $manager->details();
 
-    expect(count(DB::getQueryLog()))->toBe($queryCountAfterFirstResolution);
+    expect(count(DB::getQueryLog()))->toBe($queryCountAfterResolution);
 
-    OracleTenant::factory()->create(['key' => 'added_later']);
+    createOracleTenantFor($user, ['key' => 'added_later']);
 
     expect($manager->available())->not->toHaveKey('added_later');
 

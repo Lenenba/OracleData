@@ -16,14 +16,16 @@ use Illuminate\Support\Carbon;
  * @property string|null $description
  * @property string|null $resource_path
  * @property string|null $tenant_key
+ * @property int|null $oracle_tenant_id
  * @property string $mode
  * @property array<string, mixed>|null $parameters
  * @property string $visibility
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read User $user
+ * @property-read OracleTenant|null $oracleTenant
  */
-#[Fillable(['name', 'description', 'resource_path', 'tenant_key', 'mode', 'parameters', 'visibility'])]
+#[Fillable(['name', 'description', 'resource_path', 'tenant_key', 'oracle_tenant_id', 'mode', 'parameters', 'visibility'])]
 class Query extends Model
 {
     /** @use HasFactory<QueryFactory> */
@@ -49,5 +51,17 @@ class Query extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * The owner's preferred Oracle environment for this query.
+     *
+     * Shared readers must always resolve their own execution environment.
+     *
+     * @return BelongsTo<OracleTenant, $this>
+     */
+    public function oracleTenant(): BelongsTo
+    {
+        return $this->belongsTo(OracleTenant::class);
     }
 }

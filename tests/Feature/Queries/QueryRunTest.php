@@ -11,20 +11,25 @@ beforeEach(function () {
         'model' => 'claude-opus-4-8',
         'version' => '2023-06-01',
     ]);
-    config()->set('fusion.default', 'client_x');
-    config()->set('fusion.tenants', [
-        'client_x' => [
-            'label' => 'Client X',
-            'base_url' => 'https://client-x.fa.oraclecloud.com',
-            'username' => 'svc_x',
-            'password' => 'secret_x',
-        ],
-        'client_y' => [
-            'label' => 'Client Y',
-            'base_url' => 'https://client-y.fa.oraclecloud.com',
-            'username' => 'svc_y',
-            'password' => 'secret_y',
-        ],
+
+    $this->runner = User::factory()->create();
+    $this->clientX = createOracleTenantFor($this->runner, [
+        'key' => 'client_x',
+        'label' => 'Client X',
+        'base_url' => 'https://client-x.fa.oraclecloud.com',
+        'is_default' => true,
+    ], [
+        'identifier' => 'svc_x',
+        'secret' => 'secret_x',
+    ]);
+    $this->clientY = createOracleTenantFor($this->runner, [
+        'key' => 'client_y',
+        'label' => 'Client Y',
+        'base_url' => 'https://client-y.fa.oraclecloud.com',
+        'is_default' => false,
+    ], [
+        'identifier' => 'svc_y',
+        'secret' => 'secret_y',
     ]);
 });
 
@@ -35,9 +40,11 @@ test('the owner can run a query and receives items with metadata', function () {
         'hasMore' => true,
     ])]);
 
-    $user = User::factory()->create();
+    $user = $this->runner;
     $query = Query::factory()->for($user)->create([
         'resource_path' => '/hcmRestApi/resources/11.13.18.05/workers',
+        'tenant_key' => 'client_x',
+        'oracle_tenant_id' => $this->clientX->id,
         'parameters' => ['limit' => 25],
     ]);
 
@@ -67,9 +74,11 @@ test('a wizard-saved query with joins re-executes them through the guarded tool'
         ]),
     ]);
 
-    $user = User::factory()->create();
+    $user = $this->runner;
     $query = Query::factory()->for($user)->create([
         'resource_path' => '/fscmRestApi/resources/11.13.18.05/suppliers',
+        'tenant_key' => 'client_x',
+        'oracle_tenant_id' => $this->clientX->id,
         'parameters' => [
             'resource_key' => 'suppliers',
             'expand' => 'sites',
@@ -111,7 +120,7 @@ test('a single-resource request is resolved by the LLM and previewed', function 
         ]),
     ]);
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs($this->runner)
         ->postJson(route('queries.preview'), [
             'intent' => 'fournisseurs actifs avec nom, numéro, contacts et sites',
             'tenant' => 'client_x',
@@ -153,7 +162,7 @@ test('a multi-resource analysis is previewed through the agent', function () {
         'client-x.fa.oraclecloud.com/*' => Http::response(['items' => [['Supplier' => 'Acme']], 'count' => 1]),
     ]);
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs($this->runner)
         ->postJson(route('queries.preview'), [
             'intent' => 'lier les fournisseurs et les factures et analyser',
             'tenant' => 'client_x',
@@ -173,7 +182,7 @@ test('an ambiguous request returns a clarification question', function () {
         'stop_reason' => 'end_turn',
     ])]);
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs($this->runner)
         ->postJson(route('queries.preview'), [
             'intent' => 'donne-moi les trucs',
             'tenant' => 'client_x',
@@ -196,8 +205,11 @@ test('an agent query is executed by the agent at run time', function () {
         'client-x.fa.oraclecloud.com/*' => Http::response(['items' => [['Supplier' => 'Acme']], 'count' => 1]),
     ]);
 
-    $user = User::factory()->create();
-    $query = Query::factory()->for($user)->agent()->create();
+    $user = $this->runner;
+    $query = Query::factory()->for($user)->agent()->create([
+        'tenant_key' => 'client_x',
+        'oracle_tenant_id' => $this->clientX->id,
+    ]);
 
     $this->actingAs($user)
         ->postJson(route('queries.run', $query), ['tenant' => 'client_x'])
@@ -214,7 +226,7 @@ test('running targets the selected tenant base url', function () {
         'client-y.fa.oraclecloud.com/*' => Http::response(['items' => [['t' => 'y']]]),
     ]);
 
-    $user = User::factory()->create();
+    $user = $this->runner;
     $query = Query::factory()->for($user)->create();
 
     $this->actingAs($user)
@@ -230,8 +242,11 @@ test('running falls back to the query tenant when none is submitted', function (
         'client-y.fa.oraclecloud.com/*' => Http::response(['items' => [['t' => 'saved']]]),
     ]);
 
-    $user = User::factory()->create();
-    $query = Query::factory()->for($user)->create(['tenant_key' => 'client_y']);
+    $user = $this->runner;
+    $query = Query::factory()->for($user)->create([
+        'tenant_key' => 'client_y',
+        'oracle_tenant_id' => $this->clientY->id,
+    ]);
 
     $this->actingAs($user)
         ->postJson(route('queries.run', $query), [])
@@ -241,7 +256,7 @@ test('running falls back to the query tenant when none is submitted', function (
 });
 
 test('an unknown tenant is rejected', function () {
-    $user = User::factory()->create();
+    $user = $this->runner;
     $query = Query::factory()->for($user)->create();
 
     $this->actingAs($user)
@@ -252,7 +267,7 @@ test('an unknown tenant is rejected', function () {
 test('a Fusion error is returned as a clean message, not a 500', function () {
     Http::fake(['*' => Http::response(['error' => 'boom'], 500)]);
 
-    $user = User::factory()->create();
+    $user = $this->runner;
     $query = Query::factory()->for($user)->create();
 
     $response = $this->actingAs($user)
@@ -263,25 +278,50 @@ test('a Fusion error is returned as a clean message, not a 500', function () {
         ->and($response->json('items'))->toBe([]);
 });
 
-test('a shared query can be run by another user', function () {
-    Http::fake(['*' => Http::response(['items' => []])]);
+test('a shared query runs with the readers default connection, never the owners', function () {
+    Http::fake(['*' => Http::response([
+        'items' => [['source' => 'reader']],
+        'count' => 1,
+    ])]);
 
     $owner = User::factory()->create();
-    $other = User::factory()->create();
-    $query = Query::factory()->for($owner)->shared()->create();
+    $ownerTenant = createOracleTenantFor($owner, [
+        'key' => 'owner_tenant',
+        'base_url' => 'https://owner.fa.oraclecloud.com',
+    ], [
+        'identifier' => 'owner_user',
+        'secret' => 'owner_secret',
+    ]);
+    $reader = createConnectedUser([], [
+        'key' => 'reader_tenant',
+        'base_url' => 'https://reader.fa.oraclecloud.com',
+    ], [
+        'identifier' => 'reader_user',
+        'secret' => 'reader_secret',
+    ]);
+    $query = Query::factory()->for($owner)->shared()->create([
+        'tenant_key' => 'owner_tenant',
+        'oracle_tenant_id' => $ownerTenant->id,
+    ]);
 
-    $this->actingAs($other)
-        ->postJson(route('queries.run', $query), ['tenant' => 'client_x'])
-        ->assertOk();
+    $this->actingAs($reader)
+        ->postJson(route('queries.run', $query))
+        ->assertOk()
+        ->assertJsonPath('tenant', 'reader_tenant')
+        ->assertJsonPath('items.0.source', 'reader');
+
+    Http::assertSent(fn ($request) => str_starts_with($request->url(), 'https://reader.fa.oraclecloud.com')
+        && $request->hasHeader('Authorization', 'Basic '.base64_encode('reader_user:reader_secret')));
+    Http::assertNotSent(fn ($request) => str_starts_with($request->url(), 'https://owner.fa.oraclecloud.com'));
 });
 
 test('a private query cannot be run by another user', function () {
     $owner = User::factory()->create();
-    $other = User::factory()->create();
+    $other = createConnectedUser([], ['key' => 'reader_tenant']);
     $query = Query::factory()->for($owner)->private()->create();
 
     $this->actingAs($other)
-        ->postJson(route('queries.run', $query), ['tenant' => 'client_x'])
+        ->postJson(route('queries.run', $query), ['tenant' => 'reader_tenant'])
         ->assertForbidden();
 });
 

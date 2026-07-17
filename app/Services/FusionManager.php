@@ -2,240 +2,276 @@
 
 namespace App\Services;
 
+use App\Models\AuthConnection;
 use App\Models\OracleTenant;
+use App\Models\User;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
-use Throwable;
 
 /**
- * Résout un {@see FusionClient} par tenant (client).
- *
- * Multi-tenant : chaque client possède son propre environnement Oracle Fusion
- * (URL + compte de service). Le tenant cible est choisi à l'exécution.
- * Les tenants en base priment sur `config/fusion.php`, qui reste un fallback.
+ * Resolve Oracle clients exclusively from the current user's active
+ * environments and authentication connections.
  */
 class FusionManager
 {
-    /**
-     * Clients déjà instanciés, mémoïsés par clé de tenant.
-     *
-     * @var array<string, FusionClient>
-     */
+    /** @var array<string, FusionClient> */
     protected array $clients = [];
 
-    /**
-     * Combined tenant configuration resolved once for the current application request.
-     *
-     * @var array<string, array<string, mixed>>|null
-     */
-    protected ?array $resolvedTenants = null;
+    /** @var array<string, array<string, mixed>>|null */
+    protected ?array $resolvedActiveTenants = null;
+
+    /** @var array<string, array<string, mixed>>|null */
+    protected ?array $resolvedManagedTenants = null;
+
+    protected ?int $explicitUserId = null;
+
+    protected ?int $resolvedForUserId = null;
 
     /**
-     * Active database tenants resolved once for the current application request.
-     *
-     * @var array<string, array<string, mixed>>|null
+     * Return an isolated resolver context for jobs, commands and explicit
+     * application flows that cannot rely on the web authentication guard.
      */
-    protected ?array $resolvedDatabaseTenants = null;
+    public function forUser(User|int $user): self
+    {
+        $scoped = clone $this;
+        $scoped->explicitUserId = $user instanceof User ? $user->id : $user;
+        $scoped->forgetResolvedTenants();
+
+        return $scoped;
+    }
 
     /**
-     * Résout le client d'un tenant configuré.
-     *
-     * @throws InvalidArgumentException si la clé de tenant est inconnue
+     * @throws InvalidArgumentException when the environment is not owned,
+     *                                  active and backed by a verified connection
      */
     public function tenant(string $key): FusionClient
     {
         if (! $this->has($key)) {
-            throw new InvalidArgumentException("Tenant Fusion inconnu : [{$key}].");
+            throw new InvalidArgumentException("Tenant Fusion inconnu ou non autorisé : [{$key}].");
         }
 
         return $this->clients[$key] ??= $this->build($key);
     }
 
-    /**
-     * Résout le client du tenant par défaut (`config('fusion.default')`).
-     */
     public function default(): FusionClient
     {
-        return $this->tenant($this->defaultKey());
+        $key = $this->defaultKey();
+
+        if ($key === '') {
+            throw new InvalidArgumentException('Aucune connexion Oracle active n’est disponible.');
+        }
+
+        return $this->tenant($key);
     }
 
-    /**
-     * Indique si un tenant est configuré.
-     */
-    public function has(string $key): bool
+    public function has(?string $key): bool
     {
-        return array_key_exists($key, $this->tenants());
+        return $key !== null
+            && $key !== ''
+            && array_key_exists($key, $this->activeTenants());
     }
 
-    /**
-     * Clé du tenant par défaut, ou le premier disponible.
-     */
     public function defaultKey(): string
     {
-        foreach ($this->databaseTenants() as $key => $tenant) {
+        foreach ($this->activeTenants() as $key => $tenant) {
             if ($tenant['is_default'] ?? false) {
                 return $key;
             }
         }
 
-        $configuredDefault = (string) config('fusion.default');
-
-        if ($configuredDefault !== '' && $this->has($configuredDefault)) {
-            return $configuredDefault;
-        }
-
-        return (string) array_key_first($this->tenants());
+        return (string) (array_key_first($this->activeTenants()) ?? '');
     }
 
-    /**
-     * Liste des clés de tenants utilisables pour la validation.
-     *
-     * @return array<int, string>
-     */
+    /** @return list<string> */
     public function keys(): array
     {
-        return array_keys($this->tenants());
+        return array_keys($this->activeTenants());
     }
 
-    /**
-     * Liste des tenants disponibles, sous la forme `clé => libellé` (pour l'UI).
-     *
-     * @return array<string, string>
-     */
+    /** @return array<string, string> */
     public function available(): array
     {
-        return (new Collection($this->tenants()))
-            ->map(fn (array $config, string $key): string => $config['label'] ?? $key)
+        return (new Collection($this->activeTenants()))
+            ->map(fn (array $config, string $key): string => (string) ($config['label'] ?? $key))
             ->all();
     }
 
     /**
-     * Détails non sensibles des tenants pour la page de configuration.
+     * Non-sensitive details for the owner's connection settings.
      *
-     * @return array<int, array{id: int|null, key: string, label: string, base_url: string, username: string, source: string, is_default: bool, is_active: bool}>
+     * @return array<int, array<string, mixed>>
      */
     public function details(): array
     {
-        return (new Collection($this->tenants()))
+        return (new Collection($this->managedTenants()))
             ->map(fn (array $config, string $key): array => [
-                'id' => $config['id'] ?? null,
+                'id' => $config['id'],
                 'key' => $key,
-                'label' => (string) ($config['label'] ?? $key),
-                'base_url' => (string) ($config['base_url'] ?? ''),
+                'label' => (string) $config['label'],
+                'base_url' => (string) $config['base_url'],
                 'username' => (string) ($config['username'] ?? ''),
-                'source' => $config['source'] ?? 'config',
-                'is_default' => $key === $this->defaultKey(),
-                'is_active' => (bool) ($config['is_active'] ?? true),
+                'source' => 'database',
+                'auth_type' => (string) ($config['auth_type'] ?? 'basic'),
+                'connection_count' => (int) ($config['connection_count'] ?? 0),
+                'verified_at' => $config['verified_at']?->toISOString(),
+                'last_tested_at' => $config['last_tested_at']?->toISOString(),
+                'is_default' => (bool) $config['is_default'],
+                'is_active' => (bool) $config['is_active']
+                    && (bool) ($config['connection_is_active'] ?? false)
+                    && (bool) ($config['connection_is_supported'] ?? false)
+                    && $config['verified_at'] !== null,
             ])
             ->values()
             ->all();
     }
 
-    /**
-     * Libellé d'un tenant.
-     */
     public function label(?string $key): ?string
     {
         if ($key === null || $key === '') {
             return null;
         }
 
-        $tenant = $this->tenants()[$key] ?? null;
-
-        return $tenant['label'] ?? $key;
+        return $this->managedTenants()[$key]['label'] ?? null;
     }
 
-    /**
-     * Instancie un client à partir de la config d'un tenant.
-     */
+    public function tenantId(?string $key): ?int
+    {
+        if ($key === null || $key === '') {
+            return null;
+        }
+
+        $id = $this->activeTenants()[$key]['id'] ?? null;
+
+        return $id === null ? null : (int) $id;
+    }
+
+    public function forgetResolvedTenants(): void
+    {
+        $this->resolvedActiveTenants = null;
+        $this->resolvedManagedTenants = null;
+        $this->resolvedForUserId = null;
+        $this->clients = [];
+    }
+
+    /** @return array<string, array<string, mixed>> */
+    protected function activeTenants(): array
+    {
+        $this->ensureUserContext();
+
+        return $this->resolvedActiveTenants ??= $this->loadTenants(onlyActive: true);
+    }
+
+    /** @return array<string, array<string, mixed>> */
+    protected function managedTenants(): array
+    {
+        $this->ensureUserContext();
+
+        return $this->resolvedManagedTenants ??= $this->loadTenants(onlyActive: false);
+    }
+
     protected function build(string $key): FusionClient
     {
-        /** @var array{base_url?: string, username?: string, password?: string} $config */
-        $config = $this->tenants()[$key];
+        $config = $this->activeTenants()[$key];
 
         return new FusionClient(
-            baseUrl: (string) ($config['base_url'] ?? ''),
-            username: (string) ($config['username'] ?? ''),
-            password: (string) ($config['password'] ?? ''),
+            baseUrl: (string) $config['base_url'],
+            username: (string) $config['username'],
+            password: (string) $config['password'],
         );
     }
 
     /**
-     * Configuration fusion combinée : config locale + tenants enregistrés.
-     *
      * @return array<string, array<string, mixed>>
      */
-    protected function tenants(): array
+    private function loadTenants(bool $onlyActive): array
     {
-        return $this->resolvedTenants ??= array_replace($this->configuredTenants(), $this->databaseTenants());
-    }
+        $userId = $this->currentUserId();
 
-    /**
-     * Forget memoized tenant configuration after an administrative mutation.
-     */
-    public function forgetResolvedTenants(): void
-    {
-        $this->resolvedTenants = null;
-        $this->resolvedDatabaseTenants = null;
-        $this->clients = [];
-    }
-
-    /**
-     * Tenants déclarés dans config/fusion.php.
-     *
-     * @return array<string, array<string, mixed>>
-     */
-    protected function configuredTenants(): array
-    {
-        /** @var array<string, array<string, mixed>> $tenants */
-        $tenants = config('fusion.tenants', []);
-
-        return (new Collection($tenants))
-            ->map(fn (array $config): array => [
-                ...$config,
-                'source' => 'config',
-                'is_active' => true,
-            ])
-            ->all();
-    }
-
-    /**
-     * Tenants actifs enregistrés en base.
-     *
-     * @return array<string, array<string, mixed>>
-     */
-    protected function databaseTenants(): array
-    {
-        if ($this->resolvedDatabaseTenants !== null) {
-            return $this->resolvedDatabaseTenants;
+        if ($userId === null
+            || ! Schema::hasTable('oracle_tenants')
+            || ! Schema::hasTable('auth_connections')) {
+            return [];
         }
 
-        try {
-            if (! Schema::hasTable('oracle_tenants')) {
-                return $this->resolvedDatabaseTenants = [];
-            }
-
-            return $this->resolvedDatabaseTenants = OracleTenant::query()
-                ->where('is_active', true)
+        $query = OracleTenant::query()
+            ->where('user_id', $userId)
+            ->with(['authConnections' => fn ($query) => $query
                 ->orderByDesc('is_default')
-                ->orderBy('label')
-                ->get()
-                ->mapWithKeys(fn (OracleTenant $tenant): array => [
+                ->orderBy('id')])
+            ->orderByDesc('is_default')
+            ->orderBy('label');
+
+        if ($onlyActive) {
+            $query
+                ->where('is_active', true)
+                ->whereHas('authConnections', fn ($query) => $query
+                    ->where('auth_type', 'basic')
+                    ->where('is_active', true)
+                    ->whereNotNull('verified_at'));
+        }
+
+        return $query
+            ->get()
+            ->mapWithKeys(function (OracleTenant $tenant) use ($onlyActive): array {
+                /** @var AuthConnection|null $connection */
+                $connection = $onlyActive
+                    ? $tenant->authConnections->first(
+                        fn (AuthConnection $connection): bool => $connection->is_active
+                            && $connection->auth_type === 'basic'
+                            && $connection->verified_at !== null,
+                    )
+                    : $tenant->authConnections->first();
+
+                if ($connection === null) {
+                    return [];
+                }
+
+                return [
                     $tenant->key => [
                         'id' => $tenant->id,
                         'label' => $tenant->label,
                         'base_url' => $tenant->base_url,
-                        'username' => $tenant->username,
-                        'password' => $tenant->password,
-                        'source' => 'database',
+                        'username' => $connection->identifier,
+                        'password' => $connection->secret,
+                        'auth_type' => $connection->auth_type,
+                        'connection_id' => $connection->id,
+                        'connection_count' => $tenant->authConnections->count(),
+                        'connection_is_active' => $connection->is_active,
+                        'connection_is_supported' => $connection->auth_type === 'basic',
+                        'verified_at' => $connection->verified_at,
+                        'last_tested_at' => $connection->last_tested_at,
                         'is_default' => $tenant->is_default,
                         'is_active' => $tenant->is_active,
                     ],
-                ])
-                ->all();
-        } catch (Throwable) {
-            return $this->resolvedDatabaseTenants = [];
+                ];
+            })
+            ->all();
+    }
+
+    private function ensureUserContext(): void
+    {
+        $userId = $this->currentUserId();
+
+        if ($this->resolvedForUserId === $userId) {
+            return;
         }
+
+        $this->resolvedActiveTenants = null;
+        $this->resolvedManagedTenants = null;
+        $this->clients = [];
+        $this->resolvedForUserId = $userId;
+    }
+
+    private function currentUserId(): ?int
+    {
+        if ($this->explicitUserId !== null) {
+            return $this->explicitUserId;
+        }
+
+        $user = Auth::user();
+
+        return $user instanceof User ? $user->id : null;
     }
 }

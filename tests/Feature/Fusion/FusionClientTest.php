@@ -71,7 +71,7 @@ test('get() returns a safe message without leaking the upstream response', funct
         makeFusionClient()->get('/hcmRestApi/resources/11.13.18.05/workers');
     } catch (RuntimeException $exception) {
         expect($exception->getMessage())
-            ->toBe('Oracle Fusion est temporairement indisponible. Réessayez plus tard.')
+            ->toBe(__('Oracle Fusion est temporairement indisponible. Réessayez plus tard.'))
             ->not->toContain('sensitive upstream detail')
             ->not->toContain('client-x.fa.oraclecloud.com');
     }

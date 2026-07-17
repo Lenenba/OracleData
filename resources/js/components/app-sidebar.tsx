@@ -1,4 +1,4 @@
-import { Link, usePage } from '@inertiajs/react';
+import { Link } from '@inertiajs/react';
 import { Database, LayoutGrid, Server, Share2 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
@@ -19,23 +19,17 @@ import queries from '@/routes/queries';
 import type { NavItem } from '@/types';
 
 export function AppSidebar() {
-    const { auth } = usePage().props;
     const { t } = useI18n();
-    const baseNavItems: NavItem[] = [
+    const mainNavItems: NavItem[] = [
         { title: t('nav.dashboard'), href: dashboard(), icon: LayoutGrid },
         { title: t('nav.queries'), href: queries.index(), icon: Database },
         { title: t('nav.sharedQueries'), href: queries.shared(), icon: Share2 },
+        {
+            title: t('nav.oracleConnections'),
+            href: oracleTenants.index(),
+            icon: Server,
+        },
     ];
-    const mainNavItems = auth.user.is_super_admin
-        ? [
-              ...baseNavItems,
-              {
-                  title: t('nav.oracleTenants'),
-                  href: oracleTenants.index(),
-                  icon: Server,
-              },
-          ]
-        : baseNavItems;
 
     return (
         <Sidebar collapsible="icon" variant="sidebar">
