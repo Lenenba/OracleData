@@ -136,6 +136,49 @@ test('can.update is true only for the owner\'s queries', function () {
         );
 });
 
+test('queriesPerWeek returns 8 real weekly counts, newest last', function () {
+    $me = User::factory()->create();
+    Query::factory()->count(2)->for($me)->create();
+    Query::factory()->for($me)->create(['created_at' => now()->subWeeks(2)]);
+
+    $this->actingAs($me)
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('queriesPerWeek', fn (Collection $weeks) => $weeks->count() === 8
+                && $weeks->last() === 2
+                && $weeks->get(5) === 1
+                && $weeks->sum() === 3)
+        );
+});
+
+test('domainBreakdown groups accessible queries by catalog domain', function () {
+    $me = User::factory()->create();
+    Query::factory()->count(2)->for($me)->create(['parameters' => ['resource_key' => 'suppliers', 'limit' => 5]]);
+    Query::factory()->for($me)->create(['parameters' => ['resource_key' => 'invoices', 'limit' => 5]]);
+    Query::factory()->for($me)->create(['parameters' => ['limit' => 5]]);
+
+    $this->actingAs($me)
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('domainBreakdown', fn (Collection $rows) => $rows->first()['domain'] === 'Procurement'
+                && $rows->first()['count'] === 2
+                && $rows->pluck('domain')->contains('Finance')
+                && $rows->pluck('domain')->contains('Autre'))
+        );
+});
+
+test('domainBreakdown ignores private queries from other users', function () {
+    $me = User::factory()->create();
+    $other = User::factory()->create();
+    Query::factory()->for($other)->private()->create(['parameters' => ['resource_key' => 'suppliers']]);
+
+    $this->actingAs($me)
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('domainBreakdown', fn (Collection $rows) => $rows->isEmpty())
+        );
+});
+
 test('tenants prop lists configured environments', function () {
     $this->actingAs(User::factory()->create())
         ->get(route('dashboard'))

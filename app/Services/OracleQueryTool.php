@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use InvalidArgumentException;
+use RuntimeException;
 
 /**
  * Exécute une requête Oracle structurée en lecture seule (un GET).
@@ -194,7 +195,7 @@ class OracleQueryTool
             array_values($values),
         );
 
-        $params = ['q' => implode(' OR ', $conditions), 'limit' => 500];
+        $params = ['limit' => 500];
 
         if ($joinFields !== []) {
             $fetchFields = in_array($remoteKey, $joinFields, true)
@@ -203,14 +204,26 @@ class OracleQueryTool
             $params['fields'] = implode(',', $fetchFields);
         }
 
-        $payload = $this->fusion->tenant($tenantKey)->get($targetResource['path'], $params);
+        // On filtre la ressource distante sur les clés collectées via un finder
+        // multi-valeurs (`key = v1 OR key = v2 …`). Certaines ressources Oracle
+        // (ex. purchaseOrders) rejettent l'OR/IN et renvoient un 500 : on
+        // retombe alors sur une lecture bornée non filtrée, puis on regroupe
+        // localement — jointure au mieux plutôt qu'erreur.
+        $usedParams = array_merge($params, ['q' => implode(' OR ', $conditions)]);
+
+        try {
+            $payload = $this->fusion->tenant($tenantKey)->get($targetResource['path'], $usedParams);
+        } catch (RuntimeException) {
+            $usedParams = $params;
+            $payload = $this->fusion->tenant($tenantKey)->get($targetResource['path'], $usedParams);
+        }
 
         /** @var array<int, mixed> $rows */
         $rows = self::withoutLinks($payload['items'] ?? []);
 
         $calls[] = [
             'resource' => $target,
-            'params' => $params,
+            'params' => $usedParams,
             'count' => $payload['count'] ?? count($rows),
         ];
 

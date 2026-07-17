@@ -1,4 +1,10 @@
-import { ArrowDown, ArrowUp, ArrowUpDown, Download, Search } from 'lucide-react';
+import {
+    ArrowDown,
+    ArrowUp,
+    ArrowUpDown,
+    Download,
+    Search,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -114,7 +120,9 @@ export function ResultsTable({
         () =>
             columns && columns.length > 0
                 ? columns
-                : Array.from(new Set(items.flatMap((item) => Object.keys(item)))),
+                : Array.from(
+                      new Set(items.flatMap((item) => Object.keys(item))),
+                  ),
         [items, columns],
     );
 
@@ -192,9 +200,7 @@ export function ResultsTable({
                     <Button
                         variant="outline"
                         size="sm"
-                        onClick={() =>
-                            exportCsv(resolvedColumns, sortedItems)
-                        }
+                        onClick={() => exportCsv(resolvedColumns, sortedItems)}
                         disabled={sortedItems.length === 0}
                     >
                         <Download className="mr-1.5 size-3.5" />
@@ -203,14 +209,14 @@ export function ResultsTable({
                 </div>
             )}
 
-            <div className="overflow-x-auto rounded-xl border">
-                <table className="w-full text-left text-sm">
-                    <thead className="border-b bg-muted/50 text-muted-foreground">
+            <div className="overflow-x-auto rounded-xl border bg-card">
+                <table className="w-full border-collapse text-left text-sm">
+                    <thead>
                         <tr>
                             {resolvedColumns.map((column) => (
                                 <th
                                     key={column}
-                                    className="cursor-pointer px-4 py-2 font-medium whitespace-nowrap hover:bg-muted/80"
+                                    className="cursor-pointer border-b border-border bg-muted/30 px-4 py-3 font-medium whitespace-nowrap text-muted-foreground not-first:border-l hover:bg-muted/60"
                                     onClick={() => toggleSort(column)}
                                 >
                                     {column}
@@ -219,23 +225,26 @@ export function ResultsTable({
                             ))}
                         </tr>
                     </thead>
-                    <tbody className="divide-y">
+                    <tbody className="[&>tr:last-child>td]:border-b-0">
                         {sortedItems.length === 0 ? (
                             <tr>
                                 <td
                                     colSpan={resolvedColumns.length}
-                                    className="px-4 py-8 text-center text-sm text-muted-foreground"
+                                    className="px-4 py-10 text-center text-sm text-muted-foreground"
                                 >
                                     Aucun résultat pour ce filtre.
                                 </td>
                             </tr>
                         ) : (
                             sortedItems.map((item, rowIndex) => (
-                                <tr key={rowIndex} className="hover:bg-muted/40">
+                                <tr
+                                    key={rowIndex}
+                                    className="transition-colors hover:bg-muted/30"
+                                >
                                     {resolvedColumns.map((column) => (
                                         <td
                                             key={column}
-                                            className="px-4 py-2 align-top whitespace-nowrap"
+                                            className="border-b border-border px-4 py-3 align-top whitespace-nowrap not-first:border-l"
                                         >
                                             <Cell value={item[column]} />
                                         </td>
