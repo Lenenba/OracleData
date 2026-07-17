@@ -144,6 +144,33 @@ test('tenant_key must be configured', function () {
         ->assertInvalid('tenant_key');
 });
 
+test('joins and child_fields from the wizard are persisted', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->post(route('queries.store'), [
+        'name' => 'Fournisseurs + factures',
+        'mode' => 'single',
+        'resource_path' => '/fscmRestApi/resources/11.13.18.05/suppliers',
+        'tenant_key' => 'client_x',
+        'parameters' => [
+            'limit' => 25,
+            'expand' => 'sites',
+            'joins' => 'invoices',
+            'child_fields' => ['invoices' => ['InvoiceNumber', 'InvoiceAmount']],
+            'resource_key' => 'suppliers',
+        ],
+        'visibility' => 'private',
+    ])->assertSessionHasNoErrors();
+
+    expect(Query::sole()->parameters)->toBe([
+        'limit' => 25,
+        'expand' => 'sites',
+        'joins' => 'invoices',
+        'child_fields' => ['invoices' => ['InvoiceNumber', 'InvoiceAmount']],
+        'resource_key' => 'suppliers',
+    ]);
+});
+
 test('unknown parameter keys are stripped before saving', function () {
     $user = User::factory()->create();
 

@@ -51,6 +51,44 @@ test('the owner can run a query and receives items with metadata', function () {
         ->assertJsonCount(2, 'items');
 });
 
+test('a wizard-saved query with joins re-executes them through the guarded tool', function () {
+    Http::fake([
+        'https://client-x.fa.oraclecloud.com/fscmRestApi/resources/11.13.18.05/suppliers*' => Http::response([
+            'items' => [[
+                'SupplierNumber' => '79768',
+                'Supplier' => 'Acme',
+                'sites' => ['items' => [['SupplierSite' => 'HQ']]],
+            ]],
+            'count' => 1,
+        ]),
+        'https://client-x.fa.oraclecloud.com/fscmRestApi/resources/11.13.18.05/invoices*' => Http::response([
+            'items' => [['SupplierNumber' => '79768', 'InvoiceNumber' => 'INV-10']],
+            'count' => 1,
+        ]),
+    ]);
+
+    $user = User::factory()->create();
+    $query = Query::factory()->for($user)->create([
+        'resource_path' => '/fscmRestApi/resources/11.13.18.05/suppliers',
+        'parameters' => [
+            'resource_key' => 'suppliers',
+            'expand' => 'sites',
+            'joins' => 'invoices',
+            'child_fields' => ['invoices' => ['InvoiceNumber']],
+            'limit' => 25,
+        ],
+    ]);
+
+    $this->actingAs($user)
+        ->postJson(route('queries.run', $query), ['tenant' => 'client_x'])
+        ->assertOk()
+        ->assertJsonPath('error', null)
+        ->assertJsonPath('items.0.invoices.0.InvoiceNumber', 'INV-10')
+        ->assertJsonPath('items.0.sites.items.0.SupplierSite', 'HQ');
+
+    Http::assertSentCount(2);
+});
+
 test('a single-resource request is resolved by the LLM and previewed', function () {
     Http::fake([
         'api.anthropic.com/*' => Http::response([

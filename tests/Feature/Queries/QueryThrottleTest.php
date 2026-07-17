@@ -101,6 +101,26 @@ test('run is throttled after 15 requests per minute', function () {
         ->assertTooManyRequests();
 });
 
+test('direct-preview has its own higher limit for the live builder', function () {
+    Http::fake(['*' => Http::response(['items' => [], 'count' => 0])]);
+
+    $this->actingAs(User::factory()->create());
+
+    // 60 requêtes passent (aperçu live débouncé, sans LLM)…
+    for ($i = 0; $i < 60; $i++) {
+        $this->postJson(route('queries.direct-preview'), [
+            'resource_key' => 'suppliers',
+            'tenant' => 'client_x',
+        ])->assertOk();
+    }
+
+    // …la 61e est refusée.
+    $this->postJson(route('queries.direct-preview'), [
+        'resource_key' => 'suppliers',
+        'tenant' => 'client_x',
+    ])->assertTooManyRequests();
+});
+
 test('throttle is per user — different users have independent limits', function () {
     Http::fake(['*' => Http::response(['items' => [], 'count' => 0])]);
 
