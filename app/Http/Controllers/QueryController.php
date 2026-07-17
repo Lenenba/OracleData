@@ -31,7 +31,7 @@ class QueryController extends Controller
      *
      * @var array<int, string>
      */
-    private const ALLOWED_PARAMETER_KEYS = ['limit', 'q', 'fields', 'expand', 'orderBy', 'offset'];
+    private const ALLOWED_PARAMETER_KEYS = ['limit', 'q', 'fields', 'expand', 'joins', 'child_fields', 'orderBy', 'offset'];
 
     /**
      * List the user's own queries plus every shared query.
@@ -202,7 +202,7 @@ class QueryController extends Controller
 
     /**
      * Execute a direct Oracle query from the wizard (resource already chosen — no LLM needed).
-     * Accepts: resource_key, tenant, fields[], limit.
+     * Accepts: resource_key, tenant, fields[], expand[], joins[], child_fields{}, limit.
      */
     public function directPreview(Request $request, FusionManager $fusion, OracleQueryTool $tool): JsonResponse
     {
@@ -213,6 +213,11 @@ class QueryController extends Controller
             'fields.*' => ['string'],
             'expand' => ['nullable', 'array'],
             'expand.*' => ['string'],
+            'joins' => ['nullable', 'array'],
+            'joins.*' => ['string'],
+            'child_fields' => ['nullable', 'array'],
+            'child_fields.*' => ['array'],
+            'child_fields.*.*' => ['string', 'max:100'],
             'filter_q' => ['nullable', 'string', 'max:500'],
             'order_by' => ['nullable', 'string', 'max:200'],
             'limit' => ['nullable', 'integer', 'min:1', 'max:500'],
@@ -224,6 +229,8 @@ class QueryController extends Controller
             'resource' => $validated['resource_key'],
             'fields' => $validated['fields'] ?? [],
             'expand' => $validated['expand'] ?? [],
+            'joins' => $validated['joins'] ?? [],
+            'child_fields' => $validated['child_fields'] ?? [],
             'limit' => $validated['limit'] ?? 25,
         ];
 
@@ -296,7 +303,7 @@ class QueryController extends Controller
     /**
      * Execute the query against the selected tenant and return the rows.
      */
-    public function run(RunQueryRequest $request, Query $query, FusionManager $fusion, QueryAgent $agent): JsonResponse
+    public function run(RunQueryRequest $request, Query $query, FusionManager $fusion, QueryAgent $agent, OracleQueryTool $tool): JsonResponse
     {
         Gate::authorize('view', $query);
 
@@ -306,8 +313,16 @@ class QueryController extends Controller
             return response()->json($this->runAgent($tenant, (string) ($query->description ?? ''), $agent));
         }
 
+        $parameters = $query->parameters ?? [];
+
+        // Requête issue du wizard (resource_key présent) : rejouée via l'outil
+        // garde-fou, ce qui ré-applique validation, projection et jointures.
+        if (! empty($parameters['resource_key'])) {
+            return response()->json($this->runSingle($tenant, $this->toolQueryFromParameters($parameters), $tool));
+        }
+
         try {
-            $payload = $fusion->tenant($tenant)->get((string) $query->resource_path, $query->parameters ?? []);
+            $payload = $fusion->tenant($tenant)->get((string) $query->resource_path, $parameters);
         } catch (InvalidArgumentException|RuntimeException $e) {
             return response()->json($this->basePayload($tenant, 'single', $e->getMessage()));
         }
@@ -323,6 +338,33 @@ class QueryController extends Controller
     }
 
     /**
+     * Reconstruit la requête structurée de l'outil Oracle à partir des
+     * paramètres persistés d'une requête créée par le wizard.
+     *
+     * @param  array<string, mixed>  $parameters
+     * @return array<string, mixed>
+     */
+    private function toolQueryFromParameters(array $parameters): array
+    {
+        $toolQuery = [
+            'resource' => (string) $parameters['resource_key'],
+            'fields' => $parameters['fields'] ?? [],
+            'expand' => $parameters['expand'] ?? [],
+            'joins' => $parameters['joins'] ?? [],
+            'child_fields' => $parameters['child_fields'] ?? [],
+            'limit' => $parameters['limit'] ?? 25,
+        ];
+
+        foreach (['q', 'orderBy', 'offset'] as $key) {
+            if (isset($parameters[$key]) && $parameters[$key] !== '') {
+                $toolQuery[$key] = $parameters[$key];
+            }
+        }
+
+        return $toolQuery;
+    }
+
+    /**
      * Execute a resolved single-resource query through the guarded Oracle tool.
      *
      * @param  array<string, mixed>  $query
@@ -332,21 +374,22 @@ class QueryController extends Controller
     {
         try {
             $result = $tool->run($tenant, $query);
-        } catch (InvalidArgumentException $e) {
+        } catch (InvalidArgumentException|RuntimeException $e) {
             return $this->basePayload($tenant, 'single', $e->getMessage());
         }
 
         return array_replace($this->basePayload($tenant, 'single'), [
             'resource' => $result['resource'],
-            'parameters' => (object) $result['params'],
+            // Spécification canonique rejouable (resource_key, joins…), pas les
+            // paramètres REST bruts : c'est elle que le front persiste.
+            'parameters' => (object) $result['query'],
             'items' => $result['items'],
             'count' => $result['count'],
             'hasMore' => $result['hasMore'],
-            'oracleCalls' => [[
-                'resource' => $result['resource']['key'],
-                'params' => (object) $result['params'],
-                'count' => $result['count'],
-            ]],
+            'oracleCalls' => array_map(
+                fn (array $call): array => array_replace($call, ['params' => (object) $call['params']]),
+                $result['calls'],
+            ),
         ]);
     }
 

@@ -69,6 +69,67 @@ test('direct-preview projects only selected fields', function () {
         ->assertJsonPath('items.0.Supplier', 'Acme');
 });
 
+test('direct-preview executes joins and returns nested rows plus every Oracle call', function () {
+    Http::fake([
+        'https://client-x.fa.oraclecloud.com/fscmRestApi/resources/11.13.18.05/suppliers*' => Http::response([
+            'items' => [[
+                'SupplierNumber' => '79768',
+                'Supplier' => 'Acme',
+                'sites' => ['items' => [['SupplierSite' => 'HQ', 'Email' => 'hq@acme.test']]],
+            ]],
+            'count' => 1,
+        ]),
+        'https://client-x.fa.oraclecloud.com/fscmRestApi/resources/11.13.18.05/invoices*' => Http::response([
+            'items' => [['SupplierNumber' => '79768', 'InvoiceNumber' => 'INV-10', 'InvoiceAmount' => 100]],
+            'count' => 1,
+        ]),
+    ]);
+
+    $this->actingAs(User::factory()->create())
+        ->postJson(route('queries.direct-preview'), [
+            'resource_key' => 'suppliers',
+            'tenant' => 'client_x',
+            'expand' => ['sites'],
+            'joins' => ['invoices'],
+            'child_fields' => ['invoices' => ['InvoiceNumber', 'InvoiceAmount']],
+            'limit' => 10,
+        ])
+        ->assertOk()
+        ->assertJsonPath('error', null)
+        ->assertJsonPath('items.0.invoices.0.InvoiceNumber', 'INV-10')
+        ->assertJsonCount(2, 'oracleCalls')
+        ->assertJsonPath('parameters.resource_key', 'suppliers')
+        ->assertJsonPath('parameters.expand', 'sites')
+        ->assertJsonPath('parameters.joins', 'invoices')
+        ->assertJsonPath('parameters.child_fields.invoices.0', 'InvoiceNumber');
+});
+
+test('direct-preview returns a clean error when a join target is invalid', function () {
+    $this->actingAs(User::factory()->create())
+        ->postJson(route('queries.direct-preview'), [
+            'resource_key' => 'suppliers',
+            'tenant' => 'client_x',
+            'joins' => ['ghosts'],
+        ])
+        ->assertOk()
+        ->assertJsonPath('mode', 'single')
+        ->assertJsonStructure(['error']);
+});
+
+test('direct-preview returns a clean error when Oracle fails, not a 500', function () {
+    Http::fake(['*' => Http::response(['error' => 'boom'], 500)]);
+
+    $response = $this->actingAs(User::factory()->create())
+        ->postJson(route('queries.direct-preview'), [
+            'resource_key' => 'suppliers',
+            'tenant' => 'client_x',
+        ])
+        ->assertOk();
+
+    expect($response->json('error'))->toBeString()
+        ->and($response->json('items'))->toBe([]);
+});
+
 test('direct-preview returns a clean error for an unknown resource', function () {
     $this->actingAs(User::factory()->create())
         ->postJson(route('queries.direct-preview'), [

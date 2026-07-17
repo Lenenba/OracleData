@@ -54,9 +54,10 @@ class OracleResourceCatalog
                     'addresses' => ['AddressId', 'AddressName', 'AddressLine1', 'City', 'State', 'PostalCode', 'Country', 'AddressPurpose'],
                 ],
                 'join_keys' => [
-                    'invoices' => ['local_key' => 'SupplierId', 'remote_key' => 'SupplierId', 'label' => 'Factures de ce fournisseur'],
+                    // La ressource invoices n'expose pas SupplierId : la clé
+                    // commune vérifiée sur le tenant réel est SupplierNumber.
+                    'invoices' => ['local_key' => 'SupplierNumber', 'remote_key' => 'SupplierNumber', 'label' => 'Factures de ce fournisseur'],
                     'purchase_orders' => ['local_key' => 'SupplierId', 'remote_key' => 'SupplierId', 'label' => 'Bons de commande de ce fournisseur'],
-                    'payments' => ['local_key' => 'SupplierId', 'remote_key' => 'SupplierId', 'label' => 'Paiements à ce fournisseur'],
                 ],
             ],
             [
@@ -78,7 +79,8 @@ class OracleResourceCatalog
                 'join_keys' => [
                     'suppliers' => ['local_key' => 'SupplierId', 'remote_key' => 'SupplierId', 'label' => 'Détail du fournisseur'],
                     'receipts' => ['local_key' => 'POHeaderId', 'remote_key' => 'POHeaderId', 'label' => 'Réceptions liées'],
-                    'invoices' => ['local_key' => 'POHeaderId', 'remote_key' => 'POHeaderId', 'label' => 'Factures issues de ce PO'],
+                    // invoices ne porte pas POHeaderId : le lien réel est le numéro de commande.
+                    'invoices' => ['local_key' => 'OrderNumber', 'remote_key' => 'PurchaseOrderNumber', 'label' => 'Factures issues de ce PO'],
                 ],
             ],
             [
@@ -126,7 +128,7 @@ class OracleResourceCatalog
                 'method' => 'GET',
                 'path' => '/fscmRestApi/resources/11.13.18.05/invoices',
                 'keywords' => ['facture', 'factures', 'invoice', 'invoices', 'payable', 'payables', 'ap', 'comptes fournisseurs'],
-                'fields' => ['InvoiceId', 'InvoiceNumber', 'InvoiceAmount', 'InvoiceDate', 'Supplier', 'SupplierId', 'InvoiceCurrency', 'PaymentStatus', 'Description', 'LegalEntityId', 'BusinessUnit'],
+                'fields' => ['InvoiceId', 'InvoiceNumber', 'InvoiceAmount', 'AmountPaid', 'InvoiceDate', 'Supplier', 'SupplierNumber', 'SupplierSite', 'InvoiceCurrency', 'PaidStatus', 'ValidationStatus', 'ApprovalStatus', 'Description', 'BusinessUnit', 'PurchaseOrderNumber', 'CreationDate'],
                 'preview_fields' => ['InvoiceId', 'InvoiceNumber', 'InvoiceAmount', 'InvoiceDate', 'Supplier'],
                 'child_resources' => ['invoiceLines', 'invoiceInstallments'],
                 'child_fields' => [
@@ -134,8 +136,7 @@ class OracleResourceCatalog
                     'invoiceInstallments' => ['InstallmentId', 'DueDate', 'GrossAmount', 'DiscountDate', 'DiscountAmount', 'PaymentMethod', 'PaymentStatus'],
                 ],
                 'join_keys' => [
-                    'suppliers' => ['local_key' => 'SupplierId', 'remote_key' => 'SupplierId', 'label' => 'Détail du fournisseur'],
-                    'payments' => ['local_key' => 'InvoiceId', 'remote_key' => 'InvoiceId', 'label' => 'Paiements de cette facture'],
+                    'suppliers' => ['local_key' => 'SupplierNumber', 'remote_key' => 'SupplierNumber', 'label' => 'Détail du fournisseur'],
                 ],
             ],
             [
@@ -155,36 +156,17 @@ class OracleResourceCatalog
                 'join_keys' => [],
             ],
             [
-                'key' => 'payments',
-                'label' => 'Paiements fournisseurs',
-                'description' => 'Paiements Oracle Payables (AP payments), statuts et montants réglés.',
+                'key' => 'gl_journal_entries',
+                'label' => 'Lots de journaux (GL)',
+                'description' => 'Lots d\'écritures comptables Oracle General Ledger (Journal Batches) : statut, période et totaux comptabilisés.',
                 'domain' => 'Finance',
                 'method' => 'GET',
-                'path' => '/fscmRestApi/resources/11.13.18.05/payments',
-                'keywords' => ['paiement', 'paiements', 'payment', 'payments', 'virement', 'cheque', 'chèque', 'reglement', 'règlement'],
-                'fields' => ['PaymentId', 'PaymentNumber', 'PaymentDate', 'PaymentAmount', 'PaymentCurrency', 'Supplier', 'SupplierId', 'PaymentMethod', 'Status', 'BankAccountName'],
-                'preview_fields' => ['PaymentId', 'PaymentNumber', 'PaymentDate', 'PaymentAmount', 'Supplier'],
+                'path' => '/fscmRestApi/resources/11.13.18.05/journalBatches',
+                'keywords' => ['journal', 'journaux', 'ecriture', 'ecritures', 'écriture', 'écritures', 'gl', 'general ledger', 'comptabilite', 'comptabilité', 'batch', 'lot'],
+                'fields' => ['JeBatchId', 'BatchName', 'BatchDescription', 'Status', 'StatusMeaning', 'DefaultPeriodName', 'PostedDate', 'RunningTotalAccountedDr', 'RunningTotalAccountedCr', 'ApprovalStatusMeaning', 'CreatedBy', 'CreationDate'],
+                'preview_fields' => ['JeBatchId', 'BatchName', 'DefaultPeriodName', 'Status'],
                 'child_resources' => [],
                 'child_fields' => [],
-                'join_keys' => [
-                    'suppliers' => ['local_key' => 'SupplierId', 'remote_key' => 'SupplierId', 'label' => 'Détail du fournisseur'],
-                    'invoices' => ['local_key' => 'InvoiceId', 'remote_key' => 'InvoiceId', 'label' => 'Factures payées'],
-                ],
-            ],
-            [
-                'key' => 'gl_journal_entries',
-                'label' => 'Journaux comptables (GL)',
-                'description' => 'Écritures comptables Oracle General Ledger (GL), en-têtes et lignes.',
-                'domain' => 'Finance',
-                'method' => 'GET',
-                'path' => '/fscmRestApi/resources/11.13.18.05/journals',
-                'keywords' => ['journal', 'journaux', 'ecriture', 'ecritures', 'écriture', 'écritures', 'gl', 'general ledger', 'comptabilite', 'comptabilité'],
-                'fields' => ['JournalId', 'JournalName', 'Category', 'Status', 'Period', 'AccountingDate', 'LedgerId', 'LedgerName', 'TotalDebit', 'TotalCredit', 'CreatedBy'],
-                'preview_fields' => ['JournalId', 'JournalName', 'Category', 'Period', 'Status'],
-                'child_resources' => ['lines'],
-                'child_fields' => [
-                    'lines' => ['LineNumber', 'AccountCombination', 'AccountDescription', 'DebitAmount', 'CreditAmount', 'Description', 'ProjectNumber', 'TaskNumber', 'AnalysisCode'],
-                ],
                 'join_keys' => [],
             ],
 
@@ -197,8 +179,10 @@ class OracleResourceCatalog
                 'method' => 'GET',
                 'path' => '/hcmRestApi/resources/11.13.18.05/workers',
                 'keywords' => ['employe', 'employes', 'employé', 'employés', 'worker', 'workers', 'collaborateur', 'personnel', 'salarie', 'salarié', 'rh', 'hcm'],
-                'fields' => ['PersonId', 'PersonNumber', 'DisplayName', 'FirstName', 'LastName', 'WorkEmail', 'HireDate', 'TerminationDate', 'PersonType', 'EffectiveStartDate'],
-                'preview_fields' => ['PersonId', 'PersonNumber', 'DisplayName', 'WorkEmail'],
+                // La racine workers est volontairement mince côté Oracle : les noms,
+                // emails et affectations sont dans les enfants (names, emails, assignments).
+                'fields' => ['PersonId', 'PersonNumber', 'DateOfBirth', 'CountryOfBirth', 'CorrespondenceLanguage', 'ApplicantNumber', 'CreationDate', 'LastUpdateDate'],
+                'preview_fields' => ['PersonId', 'PersonNumber', 'CreationDate'],
                 'child_resources' => ['assignments', 'addresses', 'emails', 'phones', 'names'],
                 'child_fields' => [
                     'assignments' => ['AssignmentId', 'AssignmentNumber', 'JobTitle', 'DepartmentName', 'LocationName', 'GradeCode', 'ManagerName', 'AssignmentStatus', 'EffectiveStartDate', 'EffectiveEndDate'],
@@ -217,7 +201,7 @@ class OracleResourceCatalog
                 'description' => 'Absences et congés Oracle HCM (Absence Management), par employé.',
                 'domain' => 'HCM',
                 'method' => 'GET',
-                'path' => '/hcmRestApi/resources/11.13.18.05/absenceRecords',
+                'path' => '/hcmRestApi/resources/11.13.18.05/absences',
                 'keywords' => ['absence', 'absences', 'conge', 'congé', 'congés', 'conges', 'leave', 'leaves', 'rtt', 'maladie', 'arret', 'arrêt'],
                 'fields' => ['AbsenceRecordId', 'PersonNumber', 'DisplayName', 'AbsenceTypeName', 'StartDate', 'EndDate', 'ApprovalStatus', 'Duration', 'UnitOfMeasure'],
                 'preview_fields' => ['AbsenceRecordId', 'PersonNumber', 'DisplayName', 'AbsenceTypeName', 'StartDate'],
@@ -237,36 +221,17 @@ class OracleResourceCatalog
                 'method' => 'GET',
                 'path' => '/fscmRestApi/resources/11.13.18.05/projects',
                 'keywords' => ['projet', 'projets', 'project', 'projects', 'ppm', 'portfolio', 'tache', 'tâche', 'wbs'],
-                'fields' => ['ProjectId', 'ProjectNumber', 'ProjectName', 'ProjectStatus', 'ProjectType', 'StartDate', 'CompletionDate', 'ProjectManagerName', 'BillingType', 'LegalEntityId'],
+                'fields' => ['ProjectId', 'ProjectNumber', 'ProjectName', 'ProjectStatus', 'ProjectTypeName', 'ProjectStartDate', 'ProjectEndDate', 'ProjectManagerName', 'ProjectDescription', 'BusinessUnitName', 'ProjectCurrencyCode', 'CreationDate'],
                 'preview_fields' => ['ProjectId', 'ProjectNumber', 'ProjectName', 'ProjectStatus'],
                 'child_resources' => ['tasks', 'projectResources'],
                 'child_fields' => [
                     'tasks' => ['TaskId', 'TaskNumber', 'TaskName', 'Description', 'StartDate', 'FinishDate', 'Status', 'BillableIndicator', 'ChargableIndicator', 'BudgetedCost', 'BudgetedHours'],
                     'projectResources' => ['ResourceId', 'PersonNumber', 'DisplayName', 'ResourceRole', 'StartDate', 'EndDate', 'PlannedHours', 'ActualHours', 'BillingTitle'],
                 ],
-                'join_keys' => [
-                    'purchase_orders' => ['local_key' => 'ProjectId', 'remote_key' => 'ProjectId', 'label' => 'Bons de commande liés au projet'],
-                    'invoices' => ['local_key' => 'ProjectId', 'remote_key' => 'ProjectId', 'label' => 'Factures liées au projet'],
-                ],
-            ],
-            [
-                'key' => 'fixed_assets',
-                'label' => 'Actifs fixes',
-                'description' => 'Immobilisations Oracle Assets (FA), avec amortissements et catégories.',
-                'domain' => 'Actifs',
-                'method' => 'GET',
-                'path' => '/fscmRestApi/resources/11.13.18.05/assets',
-                'keywords' => ['actif', 'actifs', 'immobilisation', 'immobilisations', 'asset', 'assets', 'amortissement', 'amortissements', 'fa', 'fixed asset'],
-                'fields' => ['AssetId', 'AssetNumber', 'Description', 'AssetType', 'Category', 'CostAccountingValue', 'BookValue', 'AcquisitionDate', 'RetirementDate', 'DepreciationMethod', 'LifeInMonths'],
-                'preview_fields' => ['AssetId', 'AssetNumber', 'Description', 'AssetType', 'BookValue'],
-                'child_resources' => ['assignments', 'transactions'],
-                'child_fields' => [
-                    'assignments' => ['AssignmentId', 'Location', 'AssignedTo', 'AssignedToName', 'StartDate', 'EndDate', 'Units', 'EmployeeNumber'],
-                    'transactions' => ['TransactionId', 'TransactionType', 'TransactionDate', 'TransactionAmount', 'BookName', 'Units', 'Description'],
-                ],
-                'join_keys' => [
-                    'gl_journal_entries' => ['local_key' => 'AssetId', 'remote_key' => 'AssetId', 'label' => 'Écritures d\'amortissement (GL)'],
-                ],
+                // Ni invoices ni purchaseOrders n'exposent ProjectId en tête :
+                // le lien projet se fait au niveau des lignes/distributions,
+                // hors de portée d'une jointure d'en-têtes.
+                'join_keys' => [],
             ],
         ];
     }
