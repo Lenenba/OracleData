@@ -173,6 +173,42 @@ test('a join fetches the related resource once and nests matching rows per paren
     });
 });
 
+test('a join falls back to an unfiltered fetch when the remote finder rejects OR', function () {
+    Http::fake([
+        'https://client-x.fa.oraclecloud.com/fscmRestApi/resources/11.13.18.05/suppliers*' => Http::response([
+            'items' => [
+                ['SupplierId' => 11, 'Supplier' => 'Acme'],
+                ['SupplierId' => 22, 'Supplier' => 'Beta'],
+            ],
+            'count' => 2,
+        ]),
+        // purchaseOrders : 500 sur le finder multi-valeurs, puis OK sans filtre.
+        'https://client-x.fa.oraclecloud.com/fscmRestApi/resources/11.13.18.05/purchaseOrders*' => Http::sequence()
+            ->pushStatus(500)
+            ->push([
+                'items' => [
+                    ['SupplierId' => 11, 'OrderNumber' => 'PO-1'],
+                    ['SupplierId' => 33, 'OrderNumber' => 'PO-9'],
+                ],
+                'count' => 2,
+            ]),
+    ]);
+
+    $result = app(OracleQueryTool::class)->run('client_x', [
+        'resource' => 'suppliers',
+        'joins' => ['purchase_orders'],
+    ]);
+
+    // Regroupement local : seul le fournisseur 11 a un PO correspondant.
+    expect($result['items'][0]['purchase_orders'])->toHaveCount(1)
+        ->and($result['items'][0]['purchase_orders'][0]['OrderNumber'])->toBe('PO-1')
+        ->and($result['items'][1]['purchase_orders'])->toBe([])
+        ->and($result['calls'][1]['resource'])->toBe('purchase_orders');
+
+    // Deux tentatives sur purchaseOrders : filtrée (500) puis non filtrée.
+    Http::assertSentCount(3);
+});
+
 test('join fields are validated, fetched with the remote key, and projected', function () {
     Http::fake([
         'https://client-x.fa.oraclecloud.com/fscmRestApi/resources/11.13.18.05/suppliers*' => Http::response([
@@ -212,8 +248,9 @@ test('string join key values are quoted even when they look numeric', function (
             'items' => [['PersonId' => 1, 'PersonNumber' => '300000048']],
             'count' => 1,
         ]),
+        // absences expose personNumber en minuscule (clé distante de la jointure).
         'https://client-x.fa.oraclecloud.com/hcmRestApi/resources/11.13.18.05/absences*' => Http::response([
-            'items' => [['PersonNumber' => '300000048', 'AbsenceTypeName' => 'RTT']],
+            'items' => [['personNumber' => '300000048', 'absenceType' => 'RTT']],
             'count' => 1,
         ]),
     ]);
@@ -232,7 +269,7 @@ test('string join key values are quoted even when they look numeric', function (
 
         parse_str(parse_url($request->url(), PHP_URL_QUERY) ?: '', $query);
 
-        return $query['q'] === "PersonNumber = '300000048'";
+        return $query['q'] === "personNumber = '300000048'";
     });
 });
 

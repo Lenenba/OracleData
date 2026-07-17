@@ -52,7 +52,7 @@ export default function EditQuery({
         <>
             <Head title={`Modifier — ${query.name}`} />
 
-            <div className="px-4 py-6">
+            <div className="px-6 py-6">
                 <Heading
                     title={`Modifier : ${query.name}`}
                     description="Ajustez les paramètres — l'aperçu se met à jour en direct — puis enregistrez."

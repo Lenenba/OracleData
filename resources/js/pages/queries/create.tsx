@@ -19,7 +19,7 @@ export default function CreateQuery({
         <>
             <Head title="Nouvelle requête" />
 
-            <div className="px-4 py-6">
+            <div className="px-6 py-6">
                 <Heading
                     title="Nouvelle requête"
                     description="Configurez votre requête Oracle : l'aperçu se met à jour en direct à chaque modification."

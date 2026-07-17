@@ -68,7 +68,7 @@ class OracleResourceCatalog
                 'method' => 'GET',
                 'path' => '/fscmRestApi/resources/11.13.18.05/purchaseOrders',
                 'keywords' => ['bon de commande', 'bons de commande', 'commande', 'commandes', 'purchase order', 'purchase orders', 'po', 'procurement'],
-                'fields' => ['POHeaderId', 'OrderNumber', 'Supplier', 'SupplierId', 'Status', 'CurrencyCode', 'CreationDate', 'Description', 'BuyerEmail', 'TotalAmount'],
+                'fields' => ['POHeaderId', 'OrderNumber', 'Supplier', 'SupplierId', 'SupplierSite', 'Status', 'Buyer', 'CurrencyCode', 'Total', 'OrderedAmountBeforeAdjustments', 'Description', 'OrderDate', 'CreationDate'],
                 'preview_fields' => ['POHeaderId', 'OrderNumber', 'Supplier', 'Status'],
                 'child_resources' => ['lines', 'schedules', 'distributions'],
                 'child_fields' => [
@@ -91,8 +91,8 @@ class OracleResourceCatalog
                 'method' => 'GET',
                 'path' => '/fscmRestApi/resources/11.13.18.05/purchaseAgreements',
                 'keywords' => ['contrat', 'contrats', 'accord', 'accords', 'accord-cadre', 'blanket', 'cpa', 'purchase agreement'],
-                'fields' => ['AgreementId', 'AgreementNumber', 'Supplier', 'SupplierId', 'Status', 'AgreementType', 'EffectiveDate', 'ExpirationDate', 'CurrencyCode', 'TotalAmount'],
-                'preview_fields' => ['AgreementId', 'AgreementNumber', 'Supplier', 'Status'],
+                'fields' => ['AgreementHeaderId', 'AgreementNumber', 'Supplier', 'SupplierId', 'SupplierSite', 'Status', 'StartDate', 'EndDate', 'AgreementAmount', 'CurrencyCode', 'Description', 'CreationDate'],
+                'preview_fields' => ['AgreementHeaderId', 'AgreementNumber', 'Supplier', 'Status'],
                 'child_resources' => ['lines'],
                 'child_fields' => [
                     'lines' => ['LineId', 'LineNumber', 'ItemDescription', 'CategoryName', 'AgreedQuantity', 'AgreedAmount', 'UnitPrice', 'LineStatus', 'ExpirationDate'],
@@ -147,12 +147,10 @@ class OracleResourceCatalog
                 'method' => 'GET',
                 'path' => '/fscmRestApi/resources/11.13.18.05/receivablesInvoices',
                 'keywords' => ['facture client', 'factures clients', 'ar', 'receivable', 'receivables', 'comptes clients', 'client', 'clients'],
-                'fields' => ['TransactionId', 'TransactionNumber', 'CustomerName', 'CustomerId', 'TransactionDate', 'DueDate', 'TotalAmount', 'RemainingAmount', 'Currency', 'Status', 'BusinessUnit'],
-                'preview_fields' => ['TransactionId', 'TransactionNumber', 'CustomerName', 'TotalAmount', 'Status'],
-                'child_resources' => ['lines'],
-                'child_fields' => [
-                    'lines' => ['LineNumber', 'LineType', 'Description', 'Quantity', 'UnitPrice', 'LineAmount', 'TaxAmount', 'AccountCombination'],
-                ],
+                'fields' => ['CustomerTransactionId', 'TransactionNumber', 'BillToCustomerName', 'BillToCustomerNumber', 'TransactionDate', 'DueDate', 'EnteredAmount', 'InvoiceBalanceAmount', 'InvoiceCurrencyCode', 'InvoiceStatus', 'BusinessUnit', 'TransactionType', 'PurchaseOrder'],
+                'preview_fields' => ['CustomerTransactionId', 'TransactionNumber', 'BillToCustomerName', 'EnteredAmount', 'InvoiceStatus'],
+                'child_resources' => [],
+                'child_fields' => [],
                 'join_keys' => [],
             ],
             [
@@ -192,7 +190,8 @@ class OracleResourceCatalog
                     'names' => ['PersonNameId', 'NameType', 'FirstName', 'LastName', 'MiddleName', 'Title'],
                 ],
                 'join_keys' => [
-                    'absence_records' => ['local_key' => 'PersonNumber', 'remote_key' => 'PersonNumber', 'label' => 'Absences de cet employé'],
+                    // workers.PersonNumber (majuscule) ↔ absences.personNumber (minuscule).
+                    'absence_records' => ['local_key' => 'PersonNumber', 'remote_key' => 'personNumber', 'label' => 'Absences de cet employé'],
                 ],
             ],
             [
@@ -203,12 +202,14 @@ class OracleResourceCatalog
                 'method' => 'GET',
                 'path' => '/hcmRestApi/resources/11.13.18.05/absences',
                 'keywords' => ['absence', 'absences', 'conge', 'congé', 'congés', 'conges', 'leave', 'leaves', 'rtt', 'maladie', 'arret', 'arrêt'],
-                'fields' => ['AbsenceRecordId', 'PersonNumber', 'DisplayName', 'AbsenceTypeName', 'StartDate', 'EndDate', 'ApprovalStatus', 'Duration', 'UnitOfMeasure'],
-                'preview_fields' => ['AbsenceRecordId', 'PersonNumber', 'DisplayName', 'AbsenceTypeName', 'StartDate'],
+                // Oracle Absences expose des attributs en camelCase minuscule.
+                'fields' => ['personAbsenceEntryId', 'personNumber', 'absenceType', 'absenceReason', 'startDate', 'endDate', 'absenceDispStatus', 'duration', 'unitOfMeasure', 'employer', 'assignmentNumber'],
+                'preview_fields' => ['personAbsenceEntryId', 'personNumber', 'absenceType', 'startDate', 'absenceDispStatus'],
                 'child_resources' => [],
                 'child_fields' => [],
                 'join_keys' => [
-                    'workers' => ['local_key' => 'PersonNumber', 'remote_key' => 'PersonNumber', 'label' => 'Détail de l\'employé'],
+                    // absences.personNumber (minuscule) ↔ workers.PersonNumber (majuscule).
+                    'workers' => ['local_key' => 'personNumber', 'remote_key' => 'PersonNumber', 'label' => 'Détail de l\'employé'],
                 ],
             ],
 

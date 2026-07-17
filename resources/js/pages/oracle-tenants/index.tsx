@@ -1,6 +1,18 @@
 import { Form, Head, Link, router } from '@inertiajs/react';
-import { DatabaseZap, Pencil, Save, Trash2 } from 'lucide-react';
+import {
+    Activity,
+    Database,
+    DatabaseZap,
+    Link2,
+    Pencil,
+    Save,
+    Server,
+    Trash2,
+    User,
+} from 'lucide-react';
 import { useState } from 'react';
+import { DataTable, StopClick, TableAvatar } from '@/components/data-table';
+import type { DataTableColumn } from '@/components/data-table';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
@@ -40,9 +52,9 @@ function sourceLabel(source: OracleTenant['source']): string {
 }
 
 function TestConnectionButton() {
-    const [status, setStatus] = useState<
-        'idle' | 'loading' | 'ok' | 'error'
-    >('idle');
+    const [status, setStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>(
+        'idle',
+    );
     const [message, setMessage] = useState('');
 
     async function test(form: HTMLFormElement) {
@@ -55,7 +67,9 @@ function TestConnectionButton() {
 
         if (!payload.base_url || !payload.username || !payload.password) {
             setStatus('error');
-            setMessage("Renseignez l'URL, le nom d'utilisateur et le mot de passe avant de tester.");
+            setMessage(
+                "Renseignez l'URL, le nom d'utilisateur et le mot de passe avant de tester.",
+            );
 
             return;
         }
@@ -119,142 +133,135 @@ export default function OracleTenantsIndex({
     const [isDefault, setIsDefault] = useState(false);
 
     function deleteTenant(id: number, label: string) {
-        if (!confirm(`Supprimer le tenant "${label}" ? Cette action est irréversible.`)) {
+        if (
+            !confirm(
+                `Supprimer le tenant "${label}" ? Cette action est irréversible.`,
+            )
+        ) {
             return;
         }
 
         router.delete(oracleTenants.destroy(id));
     }
 
+    const columns: DataTableColumn<OracleTenant>[] = [
+        {
+            key: 'tenant',
+            header: 'Tenant',
+            icon: Server,
+            cell: (tenant) => (
+                <div className="flex items-center gap-3">
+                    <TableAvatar label={tenant.label} />
+                    <div className="min-w-0">
+                        <div className="font-medium">{tenant.label}</div>
+                        <code className="text-xs text-muted-foreground">
+                            {tenant.key}
+                        </code>
+                    </div>
+                </div>
+            ),
+        },
+        {
+            key: 'url',
+            header: 'URL',
+            icon: Link2,
+            cellClassName: 'text-muted-foreground',
+            cell: (tenant) => (
+                <span className="break-all">{tenant.base_url || '—'}</span>
+            ),
+        },
+        {
+            key: 'account',
+            header: 'Compte',
+            icon: User,
+            cellClassName: 'text-muted-foreground',
+            cell: (tenant) => tenant.username || '—',
+        },
+        {
+            key: 'source',
+            header: 'Source',
+            icon: Database,
+            cell: (tenant) => (
+                <Badge
+                    variant={
+                        tenant.source === 'database' ? 'default' : 'secondary'
+                    }
+                >
+                    {sourceLabel(tenant.source)}
+                </Badge>
+            ),
+        },
+        {
+            key: 'status',
+            header: 'Statut',
+            icon: Activity,
+            cell: (tenant) => (
+                <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-sm">
+                        <span
+                            className={`inline-block size-2 rounded-full ${
+                                tenant.is_active
+                                    ? 'bg-emerald-500'
+                                    : 'bg-red-400'
+                            }`}
+                        />
+                        {tenant.is_active ? 'Actif' : 'Inactif'}
+                    </span>
+                    {(tenant.is_default || tenant.key === defaultTenant) && (
+                        <Badge variant="secondary">Défaut</Badge>
+                    )}
+                </div>
+            ),
+        },
+        {
+            key: 'actions',
+            header: 'Actions',
+            align: 'right',
+            cell: (tenant) =>
+                tenant.source === 'database' ? (
+                    <StopClick>
+                        <Button asChild size="sm" variant="outline">
+                            <Link href={oracleTenants.edit(tenant.id)}>
+                                <Pencil className="size-3.5" />
+                                Modifier
+                            </Link>
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() =>
+                                deleteTenant(tenant.id, tenant.label)
+                            }
+                        >
+                            <Trash2 className="size-3.5" />
+                        </Button>
+                    </StopClick>
+                ) : (
+                    <span className="text-xs text-muted-foreground">
+                        Lecture seule
+                    </span>
+                ),
+        },
+    ];
+
     return (
         <>
             <Head title="Tenants Oracle" />
 
-            <div className="space-y-6 px-4 py-6">
+            <div className="space-y-6 px-6 py-6">
                 <Heading
                     title="Tenants Oracle"
                     description="Connexions Oracle Fusion disponibles pour les requêtes."
                 />
 
-                <div className="overflow-x-auto rounded-xl border">
-                    <table className="w-full text-left text-sm">
-                        <thead className="border-b bg-muted/50 text-muted-foreground">
-                            <tr>
-                                <th className="px-4 py-3 font-medium">
-                                    Tenant
-                                </th>
-                                <th className="px-4 py-3 font-medium">URL</th>
-                                <th className="px-4 py-3 font-medium">
-                                    Compte
-                                </th>
-                                <th className="px-4 py-3 font-medium">
-                                    Source
-                                </th>
-                                <th className="px-4 py-3 font-medium">
-                                    Statut
-                                </th>
-                                <th className="px-4 py-3 text-right font-medium">
-                                    Actions
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                            {tenants.length === 0 ? (
-                                <tr>
-                                    <td
-                                        colSpan={6}
-                                        className="px-4 py-10 text-center text-muted-foreground"
-                                    >
-                                        Aucun tenant configuré.
-                                    </td>
-                                </tr>
-                            ) : (
-                                tenants.map((tenant) => (
-                                    <tr
-                                        key={tenant.key}
-                                        className="hover:bg-muted/40"
-                                    >
-                                        <td className="px-4 py-3">
-                                            <div className="font-medium">
-                                                {tenant.label}
-                                            </div>
-                                            <code className="text-xs text-muted-foreground">
-                                                {tenant.key}
-                                            </code>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <span className="break-all text-muted-foreground">
-                                                {tenant.base_url || '-'}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            {tenant.username || '-'}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <Badge
-                                                variant={
-                                                    tenant.source === 'database'
-                                                        ? 'default'
-                                                        : 'secondary'
-                                                }
-                                            >
-                                                {sourceLabel(tenant.source)}
-                                            </Badge>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <div className="flex flex-wrap gap-2">
-                                                <Badge variant="outline">
-                                                    {tenant.is_active
-                                                        ? 'Actif'
-                                                        : 'Inactif'}
-                                                </Badge>
-                                                {(tenant.is_default ||
-                                                    tenant.key ===
-                                                        defaultTenant) && (
-                                                    <Badge>Défaut</Badge>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="px-4 py-3 text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                {tenant.source === 'database' && (
-                                                    <>
-                                                        <Button
-                                                            asChild
-                                                            size="sm"
-                                                            variant="outline"
-                                                        >
-                                                            <Link
-                                                                href={oracleTenants.edit(
-                                                                    tenant.id,
-                                                                )}
-                                                            >
-                                                                <Pencil className="size-3.5" />
-                                                                Modifier
-                                                            </Link>
-                                                        </Button>
-                                                        <Button
-                                                            size="sm"
-                                                            variant="ghost"
-                                                            className="text-destructive hover:text-destructive"
-                                                            onClick={() =>
-                                                                deleteTenant(
-                                                                    tenant.id,
-                                                                    tenant.label,
-                                                                )
-                                                            }
-                                                        >
-                                                            <Trash2 className="size-3.5" />
-                                                        </Button>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
+                <div className="overflow-hidden rounded-xl border bg-card">
+                    <DataTable
+                        columns={columns}
+                        rows={tenants}
+                        rowKey={(tenant) => tenant.key}
+                        empty="Aucun tenant configuré."
+                    />
                 </div>
 
                 <Card className="max-w-3xl rounded-lg">
@@ -415,7 +422,5 @@ export default function OracleTenantsIndex({
 }
 
 OracleTenantsIndex.layout = {
-    breadcrumbs: [
-        { title: 'Tenants Oracle', href: oracleTenants.index() },
-    ],
+    breadcrumbs: [{ title: 'Tenants Oracle', href: oracleTenants.index() }],
 };

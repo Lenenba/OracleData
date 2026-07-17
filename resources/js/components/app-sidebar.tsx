@@ -1,9 +1,5 @@
 import { Link } from '@inertiajs/react';
-import {
-    Database,
-    LayoutGrid,
-    Server,
-} from 'lucide-react';
+import { Database, LayoutGrid, Server } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -41,7 +37,7 @@ const mainNavItems: NavItem[] = [
 
 export function AppSidebar() {
     return (
-        <Sidebar collapsible="icon" variant="inset">
+        <Sidebar collapsible="icon" variant="sidebar">
             <SidebarHeader>
                 <SidebarMenu>
                     <SidebarMenuItem>
