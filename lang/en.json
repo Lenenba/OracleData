@@ -1,0 +1,21 @@
+{
+    "Pouvez-vous préciser votre demande ?": "Could you clarify your request?",
+    "Oracle Fusion ne répond pas dans le délai attendu. Réessayez plus tard.": "Oracle Fusion did not respond in time. Please try again later.",
+    "L'authentification Oracle de cet environnement a été refusée.": "Oracle authentication was rejected for this environment.",
+    "Oracle Fusion reçoit trop de demandes. Réessayez dans quelques instants.": "Oracle Fusion is receiving too many requests. Please try again shortly.",
+    "Oracle Fusion est temporairement indisponible. Réessayez plus tard.": "Oracle Fusion is temporarily unavailable. Please try again later.",
+    "Les données fournies sont invalides.": "The supplied data is invalid.",
+    "Requête enregistrée.": "Query saved.",
+    "Requête mise à jour.": "Query updated.",
+    "Requête supprimée.": "Query deleted.",
+    "Visibilité mise à jour.": "Visibility updated.",
+    "Copie de :name": "Copy of :name",
+    "Copie créée. Vous pouvez maintenant la modifier.": "Copy created. You can now edit it.",
+    "Profile updated.": "Profile updated.",
+    "Password updated.": "Password updated.",
+    "Tenant Oracle enregistré.": "Oracle tenant saved.",
+    "Connexion Oracle réussie.": "Oracle connection successful.",
+    "Impossible de joindre cet environnement Oracle. Vérifiez l'URL et les identifiants.": "Unable to reach this Oracle environment. Check the URL and credentials.",
+    "Tenant Oracle mis à jour.": "Oracle tenant updated.",
+    "Tenant Oracle supprimé.": "Oracle tenant deleted."
+}

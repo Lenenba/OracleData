@@ -12,11 +12,11 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { useI18n } from '@/i18n/i18n-context';
 import { dashboard } from '@/routes';
 import oracleTenants from '@/routes/oracle-tenants';
 import queries from '@/routes/queries';
 import type { NavItem } from '@/types';
-import { useI18n } from '@/i18n/i18n-context';
 
 export function AppSidebar() {
     const { auth } = usePage().props;

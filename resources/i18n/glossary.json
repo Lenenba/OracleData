@@ -1,0 +1,30 @@
+[
+    {
+        "term": "Oracle Fusion",
+        "fr": "Oracle Fusion",
+        "en": "Oracle Fusion",
+        "es": "Oracle Fusion",
+        "note": "Nom de produit, ne pas traduire."
+    },
+    {
+        "term": "tenant",
+        "fr": "tenant",
+        "en": "tenant",
+        "es": "tenant",
+        "note": "Conserver le terme technique Oracle/Microsoft."
+    },
+    { "term": "query", "fr": "requête", "en": "query", "es": "consulta" },
+    {
+        "term": "shared query",
+        "fr": "requête partagée",
+        "en": "shared query",
+        "es": "consulta compartida"
+    },
+    {
+        "term": "dashboard",
+        "fr": "tableau de bord",
+        "en": "dashboard",
+        "es": "panel de control"
+    },
+    { "term": "run", "fr": "exécuter", "en": "run", "es": "ejecutar" }
+]

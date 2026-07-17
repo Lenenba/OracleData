@@ -17,6 +17,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import { readCsrfToken } from '@/lib/csrf';
+import { useI18n } from '@/i18n/i18n-context';
 import queries from '@/routes/queries';
 
 type QueryDetail = {
@@ -42,6 +43,7 @@ export default function ShowQuery({
     tenants,
     defaultTenant,
 }: ShowProps) {
+    const { t } = useI18n();
     const tenantKeys = Object.keys(tenants);
     const [tenant, setTenant] = useState(
         query.tenant_key && tenantKeys.includes(query.tenant_key)
@@ -85,7 +87,7 @@ export default function ShowQuery({
             if (!response.ok || data === null) {
                 setFetchError(
                     (data as { message?: string } | null)?.message ??
-                        "Échec de l'exécution de la requête.",
+                        t('queries.runError'),
                 );
                 setStatus('done');
 
@@ -95,9 +97,7 @@ export default function ShowQuery({
             setResult(data);
             setStatus('done');
         } catch {
-            setFetchError(
-                'Erreur réseau lors de la communication avec le serveur.',
-            );
+            setFetchError(t('queries.networkError'));
             setStatus('done');
         }
     }
@@ -122,14 +122,14 @@ export default function ShowQuery({
                                     onClick={cloneQuery}
                                 >
                                     <Copy className="size-3.5" />
-                                    Cloner
+                                    {t('queries.clone')}
                                 </Button>
                             )}
                             {query.can.update && (
                                 <Button asChild variant="outline" size="sm">
                                     <Link href={queries.edit(query.id)}>
                                         <Pencil className="size-3.5" />
-                                        Modifier
+                                        {t('queries.edit')}
                                     </Link>
                                 </Button>
                             )}
@@ -147,16 +147,18 @@ export default function ShowQuery({
                             }
                         >
                             {query.visibility === 'shared'
-                                ? 'Partagée'
-                                : 'Privée'}
+                                ? t('queries.sharedBadge')
+                                : t('queries.privateBadge')}
                         </Badge>
                         <Badge variant="outline">
-                            {query.mode === 'agent' ? 'Analyse' : 'Requête'}
+                            {query.mode === 'agent'
+                                ? t('queries.analysis')
+                                : t('queries.queryMode')}
                         </Badge>
                         <Badge variant="outline">
                             {tenants[query.tenant_key ?? ''] ??
                                 query.tenant_key ??
-                                'Aucun tenant'}
+                                t('queries.noEnvironment')}
                         </Badge>
                         {query.resource_path && (
                             <code className="text-xs">
@@ -168,11 +170,15 @@ export default function ShowQuery({
                     <div className="flex flex-wrap items-end gap-3 rounded-xl border p-4">
                         <div className="grid gap-2">
                             <Label htmlFor="tenant">
-                                Environnement (tenant)
+                                {t('queries.environment')}
                             </Label>
                             <Select value={tenant} onValueChange={setTenant}>
                                 <SelectTrigger id="tenant" className="w-64">
-                                    <SelectValue placeholder="Choisir un client" />
+                                    <SelectValue
+                                        placeholder={t(
+                                            'queries.chooseEnvironment',
+                                        )}
+                                    />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {tenantKeys.map((key) => (
@@ -189,7 +195,7 @@ export default function ShowQuery({
                             disabled={status === 'loading' || tenant === ''}
                         >
                             {status === 'loading' && <Spinner />}
-                            Exécuter
+                            {t('queries.run')}
                         </Button>
                     </div>
 
