@@ -1,7 +1,7 @@
 import { Head } from '@inertiajs/react';
 import Heading from '@/components/heading';
-import type { ResourceSuggestion } from '@/components/queries/query-form';
-import { QueryWizard } from '@/components/queries/query-wizard';
+import { QueryBuilder } from '@/components/queries/query-builder';
+import type { ResourceSuggestion } from '@/lib/query-spec';
 import queries from '@/routes/queries';
 
 type CreateQueryProps = {
@@ -22,10 +22,10 @@ export default function CreateQuery({
             <div className="px-4 py-6">
                 <Heading
                     title="Nouvelle requête"
-                    description="Suivez les 3 étapes pour configurer, prévisualiser et enregistrer votre requête Oracle."
+                    description="Configurez votre requête Oracle : l'aperçu se met à jour en direct à chaque modification."
                 />
 
-                <QueryWizard
+                <QueryBuilder
                     resourceSuggestions={resourceSuggestions}
                     tenants={tenants}
                     defaultTenant={defaultTenant}

@@ -1,7 +1,8 @@
 import { Head } from '@inertiajs/react';
 import Heading from '@/components/heading';
-import type { ResourceSuggestion } from '@/components/queries/query-form';
-import { QueryWizard } from '@/components/queries/query-wizard';
+import { QueryBuilder } from '@/components/queries/query-builder';
+import { parseChildFields, parseCsv } from '@/lib/query-spec';
+import type { ResourceSuggestion } from '@/lib/query-spec';
 import queries from '@/routes/queries';
 
 type EditQueryProps = {
@@ -20,21 +21,6 @@ type EditQueryProps = {
     defaultTenant: string;
 };
 
-/**
- * Parse CSV string stored in parameters.fields / parameters.expand back to string[].
- */
-function parseCsv(value: unknown): string[] {
-    if (typeof value === 'string' && value.trim()) {
-        return value.split(',').map((s) => s.trim()).filter(Boolean);
-    }
-
-    if (Array.isArray(value)) {
-        return (value as unknown[]).map(String).filter(Boolean);
-    }
-
-    return [];
-}
-
 export default function EditQuery({
     query,
     resourceSuggestions,
@@ -47,12 +33,18 @@ export default function EditQuery({
         queryId: query.id,
         name: query.name,
         visibility: query.visibility,
-        resourceKey: typeof params.resource_key === 'string' ? params.resource_key : undefined,
+        resourceKey:
+            typeof params.resource_key === 'string'
+                ? params.resource_key
+                : undefined,
         tenantKey: query.tenant_key ?? undefined,
         fields: parseCsv(params.fields),
         expand: parseCsv(params.expand),
+        joins: parseCsv(params.joins),
+        childFields: parseChildFields(params.child_fields),
         filterQ: typeof params.q === 'string' ? params.q : undefined,
-        orderBy: typeof params.orderBy === 'string' ? params.orderBy : undefined,
+        orderBy:
+            typeof params.orderBy === 'string' ? params.orderBy : undefined,
         limit: typeof params.limit === 'number' ? params.limit : undefined,
     };
 
@@ -63,10 +55,10 @@ export default function EditQuery({
             <div className="px-4 py-6">
                 <Heading
                     title={`Modifier : ${query.name}`}
-                    description="Ajustez les paramètres, testez, puis enregistrez les modifications."
+                    description="Ajustez les paramètres — l'aperçu se met à jour en direct — puis enregistrez."
                 />
 
-                <QueryWizard
+                <QueryBuilder
                     resourceSuggestions={resourceSuggestions}
                     tenants={tenants}
                     defaultTenant={defaultTenant}
