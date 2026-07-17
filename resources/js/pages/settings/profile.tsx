@@ -7,6 +7,7 @@ import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useI18n } from '@/i18n/i18n-context';
 import { edit } from '@/routes/profile';
 import { send } from '@/routes/verification';
 import type { Auth } from '@/types';
@@ -23,18 +24,19 @@ export default function Profile({
     status?: string;
 }) {
     const { auth } = usePage<PageProps>().props;
+    const { t } = useI18n();
 
     return (
         <>
-            <Head title="Profile settings" />
+            <Head title={t('profile.title')} />
 
-            <h1 className="sr-only">Profile settings</h1>
+            <h1 className="sr-only">{t('profile.title')}</h1>
 
             <div className="space-y-6">
                 <Heading
                     variant="small"
-                    title="Profile"
-                    description="Update your name and email address"
+                    title={t('settings.profile')}
+                    description={t('profile.description')}
                 />
 
                 <Form
@@ -47,7 +49,9 @@ export default function Profile({
                     {({ processing, errors }) => (
                         <>
                             <div className="grid gap-2">
-                                <Label htmlFor="name">Name</Label>
+                                <Label htmlFor="name">
+                                    {t('profile.name')}
+                                </Label>
 
                                 <Input
                                     id="name"
@@ -56,7 +60,7 @@ export default function Profile({
                                     name="name"
                                     required
                                     autoComplete="name"
-                                    placeholder="Full name"
+                                    placeholder={t('profile.fullName')}
                                 />
 
                                 <InputError
@@ -66,7 +70,9 @@ export default function Profile({
                             </div>
 
                             <div className="grid gap-2">
-                                <Label htmlFor="email">Email address</Label>
+                                <Label htmlFor="email">
+                                    {t('profile.email')}
+                                </Label>
 
                                 <Input
                                     id="email"
@@ -83,6 +89,48 @@ export default function Profile({
                                     className="mt-2"
                                     message={errors.email}
                                 />
+                            </div>
+
+                            <div className="grid gap-2 sm:grid-cols-2">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="locale">
+                                        {t('profile.language')}
+                                    </Label>
+                                    <select
+                                        id="locale"
+                                        name="locale"
+                                        defaultValue={auth.user.locale}
+                                        className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs"
+                                    >
+                                        <option value="fr">Français</option>
+                                        <option value="en">English</option>
+                                        <option value="es">Español</option>
+                                    </select>
+                                    <InputError message={errors.locale} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="timezone">
+                                        {t('profile.timezone')}
+                                    </Label>
+                                    <select
+                                        id="timezone"
+                                        name="timezone"
+                                        defaultValue={auth.user.timezone}
+                                        className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs"
+                                    >
+                                        <option value="America/Toronto">
+                                            America/Toronto
+                                        </option>
+                                        <option value="UTC">UTC</option>
+                                        <option value="Europe/Paris">
+                                            Europe/Paris
+                                        </option>
+                                        <option value="Europe/Madrid">
+                                            Europe/Madrid
+                                        </option>
+                                    </select>
+                                    <InputError message={errors.timezone} />
+                                </div>
                             </div>
 
                             {mustVerifyEmail &&
@@ -115,7 +163,7 @@ export default function Profile({
                                     disabled={processing}
                                     data-test="update-profile-button"
                                 >
-                                    Save
+                                    {t('common.save')}
                                 </Button>
                             </div>
                         </>

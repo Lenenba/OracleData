@@ -1,6 +1,7 @@
 import { Head } from '@inertiajs/react';
 import Heading from '@/components/heading';
 import { QueryBuilder } from '@/components/queries/query-builder';
+import { useI18n } from '@/i18n/i18n-context';
 import { parseChildFields, parseCsv } from '@/lib/query-spec';
 import type { ResourceSuggestion } from '@/lib/query-spec';
 import queries from '@/routes/queries';
@@ -27,6 +28,7 @@ export default function EditQuery({
     tenants,
     defaultTenant,
 }: EditQueryProps) {
+    const { t } = useI18n();
     const params = query.parameters ?? {};
 
     const initialState = {
@@ -50,12 +52,12 @@ export default function EditQuery({
 
     return (
         <>
-            <Head title={`Modifier — ${query.name}`} />
+            <Head title={t('queries.editTitle', { name: query.name })} />
 
             <div className="px-6 py-6">
                 <Heading
-                    title={`Modifier : ${query.name}`}
-                    description="Ajustez les paramètres — l'aperçu se met à jour en direct — puis enregistrez."
+                    title={t('queries.editTitle', { name: query.name })}
+                    description={t('queries.editDescription')}
                 />
 
                 <QueryBuilder

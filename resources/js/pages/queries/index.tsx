@@ -31,6 +31,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { readCsrfToken } from '@/lib/csrf';
+import { useI18n } from '@/i18n/i18n-context';
 import queries from '@/routes/queries';
 
 type QueryRow = {
@@ -75,6 +76,7 @@ function VisibilityToggle({
     onToggle: (id: number, newVisibility: 'private' | 'shared') => void;
 }) {
     const [loading, setLoading] = useState(false);
+    const { t } = useI18n();
 
     async function toggle() {
         setLoading(true);
@@ -100,7 +102,7 @@ function VisibilityToggle({
 
             onToggle(query.id, next);
         } catch {
-            toast.error("La visibilité n'a pas pu être mise à jour.");
+            toast.error(t('queries.visibilityError'));
         } finally {
             setLoading(false);
         }
@@ -110,7 +112,9 @@ function VisibilityToggle({
         <Badge
             variant={query.visibility === 'shared' ? 'default' : 'secondary'}
         >
-            {query.visibility === 'shared' ? 'Partagée' : 'Privée'}
+            {query.visibility === 'shared'
+                ? t('queries.sharedBadge')
+                : t('queries.privateBadge')}
         </Badge>
     );
 
@@ -124,7 +128,7 @@ function VisibilityToggle({
             onClick={toggle}
             disabled={loading}
             className="inline-flex items-center gap-1"
-            title="Cliquez pour changer la visibilité"
+            title={t('queries.visibilityHint')}
         >
             {loading ? (
                 <Spinner className="size-3" />
@@ -146,6 +150,8 @@ function QueryActionsMenu({
     onClone: (id: number) => void;
     onDelete: (id: number) => void;
 }) {
+    const { t } = useI18n();
+
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -154,7 +160,7 @@ function QueryActionsMenu({
                     size="icon"
                     variant="ghost"
                     className="size-8"
-                    aria-label={`Actions pour ${query.name}`}
+                    aria-label={t('queries.actionLabel', { name: query.name })}
                 >
                     <MoreHorizontal className="size-4" />
                 </Button>
@@ -163,7 +169,7 @@ function QueryActionsMenu({
                 <DropdownMenuItem asChild className="cursor-pointer">
                     <Link href={queries.show(query.id)}>
                         <PlayCircle className="size-4" />
-                        Exécuter
+                        {t('queries.run')}
                     </Link>
                 </DropdownMenuItem>
 
@@ -176,7 +182,7 @@ function QueryActionsMenu({
                         }}
                     >
                         <Copy className="size-4" />
-                        Cloner
+                        {t('queries.clone')}
                     </DropdownMenuItem>
                 )}
 
@@ -186,7 +192,7 @@ function QueryActionsMenu({
                         <DropdownMenuItem asChild className="cursor-pointer">
                             <Link href={queries.edit(query.id)}>
                                 <Pencil className="size-4" />
-                                Modifier
+                                {t('queries.edit')}
                             </Link>
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
@@ -198,7 +204,7 @@ function QueryActionsMenu({
                             }}
                         >
                             <Trash2 className="size-4 text-destructive" />
-                            Supprimer
+                            {t('queries.delete')}
                         </DropdownMenuItem>
                     </>
                 )}
@@ -218,6 +224,7 @@ export default function QueriesIndex({
     summary: QuerySummary;
     search?: string;
 }) {
+    const { t } = useI18n();
     const [visibilityOverrides, setVisibilityOverrides] = useState<
         Record<number, 'private' | 'shared'>
     >({});
@@ -258,32 +265,30 @@ export default function QueriesIndex({
     const heading =
         scope === 'shared'
             ? {
-                  title: 'Requêtes partagées',
-                  description:
-                      'Les requêtes mises à disposition de la plateforme. Clonez-les pour créer votre propre version modifiable.',
+                  title: t('queries.shared'),
+                  description: t('queries.sharedDescription'),
               }
             : {
-                  title: 'Bibliothèque de requêtes',
-                  description:
-                      'Vos requêtes enregistrées et celles partagées avec vous.',
+                  title: t('queries.title'),
+                  description: t('queries.description'),
               };
 
     const scopeLinks = [
         {
             value: 'all' as const,
-            label: 'Toutes',
+            label: t('queries.all'),
             count: summary.all,
             href: queries.index(),
         },
         {
             value: 'mine' as const,
-            label: 'Mes requêtes',
+            label: t('queries.mine'),
             count: summary.mine,
             href: queries.index({ query: { scope: 'mine' } }),
         },
         {
             value: 'shared' as const,
-            label: 'Partagées',
+            label: t('queries.sharedBadge'),
             count: summary.shared,
             href: queries.shared(),
         },
@@ -305,7 +310,7 @@ export default function QueriesIndex({
 
     function deleteQuery(id: number) {
         if (
-            !confirm('Supprimer cette requête ? Cette action est irréversible.')
+            !confirm(t('queries.deleteConfirm'))
         ) {
             return;
         }
@@ -316,7 +321,7 @@ export default function QueriesIndex({
     const columns: DataTableColumn<QueryRow>[] = [
         {
             key: 'name',
-            header: 'Nom',
+            header: t('queries.name'),
             icon: FileText,
             cell: (query) => (
                 <div className="flex items-center gap-3">
@@ -357,7 +362,7 @@ export default function QueriesIndex({
             : [
                   {
                       key: 'visibility',
-                      header: 'Visibilité',
+                      header: t('queries.visibility'),
                       icon: Eye,
                       cell: (query: QueryRow) => (
                           <StopClick>
@@ -371,14 +376,14 @@ export default function QueriesIndex({
               ]),
         {
             key: 'owner',
-            header: 'Propriétaire',
+            header: t('queries.owner'),
             icon: User,
             cellClassName: 'text-muted-foreground',
             cell: (query) => query.owner,
         },
         {
             key: 'actions',
-            header: 'Actions',
+            header: t('queries.actions'),
             align: 'right',
             width: 'w-24',
             cell: (query) => (
@@ -395,7 +400,7 @@ export default function QueriesIndex({
 
     return (
         <>
-            <Head title="Requêtes" />
+            <Head title={t('nav.queries')} />
 
             <div className="px-6 py-6">
                 <Heading
@@ -409,7 +414,7 @@ export default function QueriesIndex({
                         <div className="relative w-full max-w-xs">
                             <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
-                                placeholder="Rechercher…"
+                                placeholder={t('queries.search')}
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 className="h-9 pl-9"
@@ -418,7 +423,7 @@ export default function QueriesIndex({
                         <Button asChild size="sm">
                             <Link href={queries.create()}>
                                 <Plus className="size-4" />
-                                Nouvelle requête
+                                {t('queries.create')}
                             </Link>
                         </Button>
                     </div>
@@ -453,15 +458,15 @@ export default function QueriesIndex({
                         empty={
                             queryPage.total === 0 && initialSearch === '' ? (
                                 <div className="space-y-3">
-                                    <p>Aucune requête pour l'instant.</p>
+                                    <p>{t('queries.emptyInitial')}</p>
                                     <Button asChild size="sm" variant="outline">
                                         <Link href={queries.create()}>
-                                            Créer ma première requête
+                                            {t('queries.first')}
                                         </Link>
                                     </Button>
                                 </div>
                             ) : (
-                                'Aucune requête ne correspond à votre recherche.'
+                                t('queries.emptySearch')
                             )
                         }
                     />
@@ -470,10 +475,11 @@ export default function QueriesIndex({
                     <div className="flex items-center justify-between gap-3 border-t px-5 py-3 text-xs text-muted-foreground">
                         <span>
                             {queryPage.total === 0 ? (
-                                '0 résultat'
+                                `0 ${t('queries.result')}`
                             ) : (
                                 <>
-                                    {queryPage.from}–{queryPage.to} sur{' '}
+                                    {queryPage.from}–{queryPage.to}{' '}
+                                    {t('queries.of')}{' '}
                                     {queryPage.total}
                                 </>
                             )}
@@ -493,10 +499,11 @@ export default function QueriesIndex({
                                     }
                                 }}
                             >
-                                Précédent
+                                {t('queries.previous')}
                             </Button>
                             <span>
-                                Page {queryPage.current_page} sur{' '}
+                                {t('queries.page')} {queryPage.current_page}{' '}
+                                {t('queries.of')}{' '}
                                 {queryPage.last_page}
                             </span>
                             <Button
@@ -513,7 +520,7 @@ export default function QueriesIndex({
                                     }
                                 }}
                             >
-                                Suivant
+                                {t('queries.next')}
                             </Button>
                         </div>
                     </div>

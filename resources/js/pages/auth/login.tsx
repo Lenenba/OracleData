@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { useI18n } from '@/i18n/i18n-context';
 import { register } from '@/routes';
 import { store } from '@/routes/login';
 import { request } from '@/routes/password';
@@ -18,9 +19,11 @@ type Props = {
 };
 
 export default function Login({ status, canResetPassword }: Props) {
+    const { t } = useI18n();
+
     return (
         <>
-            <Head title="Connexion" />
+            <Head title={t('auth.login.action')} />
 
             <PasskeyVerify />
 
@@ -33,7 +36,7 @@ export default function Login({ status, canResetPassword }: Props) {
                     <>
                         <div className="grid gap-6">
                             <div className="grid gap-2">
-                                <Label htmlFor="email">Adresse e-mail</Label>
+                                <Label htmlFor="email">{t('auth.email')}</Label>
                                 <Input
                                     id="email"
                                     type="email"
@@ -49,14 +52,16 @@ export default function Login({ status, canResetPassword }: Props) {
 
                             <div className="grid gap-2">
                                 <div className="flex items-center">
-                                    <Label htmlFor="password">Mot de passe</Label>
+                                    <Label htmlFor="password">
+                                        {t('auth.password')}
+                                    </Label>
                                     {canResetPassword && (
                                         <TextLink
                                             href={request()}
                                             className="ml-auto text-sm"
                                             tabIndex={5}
                                         >
-                                            Mot de passe oublié ?
+                                            {t('auth.forgotPassword')}
                                         </TextLink>
                                     )}
                                 </div>
@@ -77,7 +82,9 @@ export default function Login({ status, canResetPassword }: Props) {
                                     name="remember"
                                     tabIndex={3}
                                 />
-                                <Label htmlFor="remember">Se souvenir de moi</Label>
+                                <Label htmlFor="remember">
+                                    {t('auth.remember')}
+                                </Label>
                             </div>
 
                             <Button
@@ -88,14 +95,14 @@ export default function Login({ status, canResetPassword }: Props) {
                                 data-test="login-button"
                             >
                                 {processing && <Spinner />}
-                                Se connecter
+                                {t('auth.login.action')}
                             </Button>
                         </div>
 
                         <div className="text-center text-sm text-muted-foreground">
-                            Pas encore de compte ?{' '}
+                            {t('auth.noAccount')}{' '}
                             <TextLink href={register()} tabIndex={5}>
-                                S'inscrire
+                                {t('auth.register')}
                             </TextLink>
                         </div>
                     </>

@@ -1,6 +1,7 @@
 import { Head } from '@inertiajs/react';
 import Heading from '@/components/heading';
 import { QueryBuilder } from '@/components/queries/query-builder';
+import { useI18n } from '@/i18n/i18n-context';
 import type { ResourceSuggestion } from '@/lib/query-spec';
 import queries from '@/routes/queries';
 
@@ -15,14 +16,16 @@ export default function CreateQuery({
     tenants,
     defaultTenant,
 }: CreateQueryProps) {
+    const { t } = useI18n();
+
     return (
         <>
-            <Head title="Nouvelle requête" />
+            <Head title={t('queries.create')} />
 
             <div className="px-6 py-6">
                 <Heading
-                    title="Nouvelle requête"
-                    description="Configurez votre requête Oracle : l'aperçu se met à jour en direct à chaque modification."
+                    title={t('queries.create')}
+                    description={t('queries.createDescription')}
                 />
 
                 <QueryBuilder

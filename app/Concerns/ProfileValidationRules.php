@@ -18,6 +18,8 @@ trait ProfileValidationRules
         return [
             'name' => $this->nameRules(),
             'email' => $this->emailRules($userId),
+            'locale' => ['required', Rule::in(array_keys(config('app.supported_locales')))],
+            'timezone' => ['required', 'timezone'],
         ];
     }
 

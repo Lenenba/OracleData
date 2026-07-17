@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="fr" trgLang="en">
+  <file id="oracledata-ui">
+    <unit id="nav.dashboard"><segment state="reviewed"><source>Tableau de bord</source><target>Dashboard</target></segment></unit>
+    <unit id="nav.queries"><segment state="reviewed"><source>Requêtes</source><target>Queries</target></segment></unit>
+    <unit id="nav.sharedQueries"><segment state="reviewed"><source>Requêtes partagées</source><target>Shared queries</target></segment></unit>
+    <unit id="queries.run"><segment state="reviewed"><source>Exécuter</source><target>Run</target></segment></unit>
+  </file>
+</xliff>

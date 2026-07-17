@@ -1,0 +1,21 @@
+{
+    "Pouvez-vous préciser votre demande ?": "¿Puede precisar su solicitud?",
+    "Oracle Fusion ne répond pas dans le délai attendu. Réessayez plus tard.": "Oracle Fusion no respondió a tiempo. Inténtelo de nuevo más tarde.",
+    "L'authentification Oracle de cet environnement a été refusée.": "La autenticación de Oracle fue rechazada para este entorno.",
+    "Oracle Fusion reçoit trop de demandes. Réessayez dans quelques instants.": "Oracle Fusion recibe demasiadas solicitudes. Inténtelo de nuevo en unos instantes.",
+    "Oracle Fusion est temporairement indisponible. Réessayez plus tard.": "Oracle Fusion no está disponible temporalmente. Inténtelo de nuevo más tarde.",
+    "Les données fournies sont invalides.": "Los datos proporcionados no son válidos.",
+    "Requête enregistrée.": "Consulta guardada.",
+    "Requête mise à jour.": "Consulta actualizada.",
+    "Requête supprimée.": "Consulta eliminada.",
+    "Visibilité mise à jour.": "Visibilidad actualizada.",
+    "Copie de :name": "Copia de :name",
+    "Copie créée. Vous pouvez maintenant la modifier.": "Copia creada. Ahora puede modificarla.",
+    "Profile updated.": "Perfil actualizado.",
+    "Password updated.": "Contraseña actualizada.",
+    "Tenant Oracle enregistré.": "Tenant de Oracle guardado.",
+    "Connexion Oracle réussie.": "Conexión con Oracle realizada correctamente.",
+    "Impossible de joindre cet environnement Oracle. Vérifiez l'URL et les identifiants.": "No se puede acceder a este entorno de Oracle. Compruebe la URL y las credenciales.",
+    "Tenant Oracle mis à jour.": "Tenant de Oracle actualizado.",
+    "Tenant Oracle supprimé.": "Tenant de Oracle eliminado."
+}
