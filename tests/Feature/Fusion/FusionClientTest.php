@@ -90,3 +90,51 @@ test('testConnection() returns false on failure', function () {
 
     expect(makeFusionClient()->testConnection())->toBeFalse();
 });
+
+test('testConnection() probes an authenticated REST resource with basic auth', function () {
+    Http::fake(['*' => Http::response([], 200)]);
+
+    makeFusionClient()->testConnection();
+
+    Http::assertSent(function ($request) {
+        return str_contains($request->url(), '/hcmRestApi/resources/11.13.18.05/workers')
+            && str_contains($request->url(), 'limit=1')
+            && $request->hasHeader('Authorization', 'Basic '.base64_encode('svc_user:secret'));
+    });
+});
+
+test('testConnection() returns false when credentials are rejected', function () {
+    Http::fake(['*' => Http::response([], 401)]);
+
+    expect(makeFusionClient()->testConnection())->toBeFalse();
+});
+
+test('testConnection() returns true when authenticated but missing the probe privilege', function () {
+    Http::fake(['*' => Http::response([], 403)]);
+
+    expect(makeFusionClient()->testConnection())->toBeTrue();
+});
+
+test('testConnection() falls back to the ERP probe when the HCM module is absent', function () {
+    Http::fake([
+        'https://client-x.fa.oraclecloud.com/hcmRestApi/*' => Http::response([], 404),
+        'https://client-x.fa.oraclecloud.com/fscmRestApi/*' => Http::response([], 200),
+        '*' => Http::response([], 500),
+    ]);
+
+    expect(makeFusionClient()->testConnection())->toBeTrue();
+});
+
+test('testConnection() returns false when no probe resource exists', function () {
+    Http::fake(['*' => Http::response([], 404)]);
+
+    expect(makeFusionClient()->testConnection())->toBeFalse();
+});
+
+test('testConnection() returns false when the environment only redirects to its login page', function () {
+    Http::fake(['*' => Http::response('', 302, [
+        'Location' => 'https://client-x.fa.oraclecloud.com/homePage/faces/AtkHomePageWelcome',
+    ])]);
+
+    expect(makeFusionClient()->testConnection())->toBeFalse();
+});

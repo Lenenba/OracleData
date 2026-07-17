@@ -22,14 +22,16 @@ import InputError from '@/components/input-error';
 import { OracleConnectionTestButton } from '@/components/oracle-connection-test-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -107,6 +109,7 @@ export default function OracleTenantsIndex({
     defaultTenant,
 }: OracleTenantsIndexProps) {
     const { t, formatDate } = useI18n();
+    const [addDialogOpen, setAddDialogOpen] = useState(false);
     const [isDefault, setIsDefault] = useState(false);
     const [testRevision, setTestRevision] = useState(0);
     const activeConnectionCount = tenants.filter(
@@ -261,11 +264,9 @@ export default function OracleTenantsIndex({
                     title={t('connections.title')}
                     description={t('connections.description')}
                     actions={
-                        <Button asChild>
-                            <a href="#add-connection">
-                                <Plus />
-                                {t('connections.add')}
-                            </a>
+                        <Button onClick={() => setAddDialogOpen(true)}>
+                            <Plus />
+                            {t('connections.add')}
                         </Button>
                     }
                 />
@@ -285,45 +286,47 @@ export default function OracleTenantsIndex({
                                         {t('connections.emptyDescription')}
                                     </p>
                                 </div>
-                                <Button asChild size="sm">
-                                    <a href="#add-connection">
-                                        <Plus />
-                                        {t('connections.add')}
-                                    </a>
+                                <Button
+                                    size="sm"
+                                    onClick={() => setAddDialogOpen(true)}
+                                >
+                                    <Plus />
+                                    {t('connections.add')}
                                 </Button>
                             </div>
                         }
                     />
                 </div>
 
-                <Card id="add-connection" className="max-w-3xl scroll-mt-6">
-                    <CardHeader>
-                        <div className="flex items-center gap-2">
-                            <DatabaseZap className="size-5" />
-                            <CardTitle>{t('connections.add')}</CardTitle>
-                        </div>
-                        <CardDescription>
-                            {t('connections.addDescription')}
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
+                <Dialog
+                    open={addDialogOpen}
+                    onOpenChange={(open) => {
+                        setAddDialogOpen(open);
+
+                        if (!open) {
+                            setIsDefault(false);
+                        }
+                    }}
+                >
+                    <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                                <DatabaseZap className="size-5" />
+                                {t('connections.add')}
+                            </DialogTitle>
+                            <DialogDescription>
+                                {t('connections.addDescription')}
+                            </DialogDescription>
+                        </DialogHeader>
                         <Form
                             {...oracleTenants.store.form()}
-                            resetOnSuccess={[
-                                'key',
-                                'label',
-                                'base_url',
-                                'username',
-                                'password',
-                                'is_default',
-                            ]}
                             className="space-y-5"
                             onChange={() =>
                                 setTestRevision((revision) => revision + 1)
                             }
                             onSuccess={() => {
+                                setAddDialogOpen(false);
                                 setIsDefault(false);
-                                setTestRevision((revision) => revision + 1);
                             }}
                         >
                             {({ processing, errors }) => (
@@ -456,7 +459,18 @@ export default function OracleTenantsIndex({
                                         {t('connections.serverRetestHint')}
                                     </p>
 
-                                    <div className="flex flex-wrap items-start gap-4">
+                                    <DialogFooter className="gap-2 sm:items-start">
+                                        <DialogClose asChild>
+                                            <Button
+                                                type="button"
+                                                variant="secondary"
+                                            >
+                                                {t('common.cancel')}
+                                            </Button>
+                                        </DialogClose>
+                                        <OracleConnectionTestButton
+                                            key={testRevision}
+                                        />
                                         <Button disabled={processing}>
                                             {processing ? (
                                                 <Spinner data-icon="inline-start" />
@@ -467,15 +481,12 @@ export default function OracleTenantsIndex({
                                                 ? t('common.saving')
                                                 : t('common.save')}
                                         </Button>
-                                        <OracleConnectionTestButton
-                                            key={testRevision}
-                                        />
-                                    </div>
+                                    </DialogFooter>
                                 </>
                             )}
                         </Form>
-                    </CardContent>
-                </Card>
+                    </DialogContent>
+                </Dialog>
             </div>
         </>
     );

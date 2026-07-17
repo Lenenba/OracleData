@@ -1,5 +1,12 @@
-import { usePage } from '@inertiajs/react';
-import { createContext, useContext, useEffect, useMemo } from 'react';
+import type { Page, SharedPageProps } from '@inertiajs/core';
+import { router } from '@inertiajs/react';
+import {
+    createContext,
+    useContext,
+    useEffect,
+    useMemo,
+    useState,
+} from 'react';
 import en from '@/locales/en.json';
 import es from '@/locales/es.json';
 import fr from '@/locales/fr.json';
@@ -24,8 +31,23 @@ type I18nValue = {
 
 const I18nContext = createContext<I18nValue | null>(null);
 
-export function I18nProvider({ children }: { children: React.ReactNode }) {
-    const { locale, auth } = usePage().props;
+export function I18nProvider({
+    initialPage,
+    children,
+}: {
+    initialPage: Page<SharedPageProps>;
+    children: React.ReactNode;
+}) {
+    const [{ locale, auth }, setPageProps] = useState(initialPage.props);
+
+    useEffect(
+        () =>
+            router.on('navigate', (event) =>
+                setPageProps(event.detail.page.props),
+            ),
+        [],
+    );
+
     const activeLocale = (locale in catalogs ? locale : 'fr') as Locale;
     const timezone = auth.user?.timezone ?? 'America/Toronto';
 

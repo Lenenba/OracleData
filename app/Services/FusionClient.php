@@ -17,6 +17,19 @@ use Throwable;
  */
 class FusionClient
 {
+    /**
+     * Chemins sondés par testConnection(). Les racines publiques de Fusion
+     * (`/`, catalogue REST) répondent 200/302 sans identifiants : seules les
+     * ressources métier exigent le Basic Auth. Le second chemin sert de repli
+     * si le premier module est absent de l'instance (404).
+     *
+     * @var list<string>
+     */
+    private const array CONNECTION_PROBE_PATHS = [
+        '/hcmRestApi/resources/11.13.18.05/workers',
+        '/fscmRestApi/resources/11.13.18.05/invoices',
+    ];
+
     public function __construct(
         protected string $baseUrl,
         protected string $username,
@@ -85,22 +98,33 @@ class FusionClient
     }
 
     /**
-     * Ping léger de connectivité : true si l'environnement répond avec succès.
+     * Ping de connectivité authentifié : true si l'environnement répond et
+     * accepte les identifiants. Un 403 vaut succès (identifiants valides mais
+     * privilège manquant sur la ressource sondée), un 401 vaut échec.
      */
     public function testConnection(): bool
     {
-        try {
-            return Http::withBasicAuth($this->username, $this->password)
-                ->baseUrl($this->baseUrl)
-                ->acceptJson()
-                ->withoutRedirecting()
-                ->connectTimeout((float) config('fusion.http.connect_timeout', 5))
-                ->timeout((float) config('fusion.http.timeout', 30))
-                ->get('/')
-                ->successful();
-        } catch (Throwable) {
-            return false;
+        foreach (self::CONNECTION_PROBE_PATHS as $path) {
+            try {
+                $response = Http::withBasicAuth($this->username, $this->password)
+                    ->baseUrl($this->baseUrl)
+                    ->acceptJson()
+                    ->withoutRedirecting()
+                    ->connectTimeout((float) config('fusion.http.connect_timeout', 5))
+                    ->timeout((float) config('fusion.http.timeout', 30))
+                    ->get($path, ['limit' => 1, 'onlyData' => 'true']);
+            } catch (Throwable) {
+                return false;
+            }
+
+            if ($response->status() === 404) {
+                continue;
+            }
+
+            return $response->successful() || $response->status() === 403;
         }
+
+        return false;
     }
 
     private function isRetryable(Throwable $exception): bool

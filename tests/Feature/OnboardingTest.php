@@ -85,7 +85,7 @@ test('successful onboarding tests credentials and persists the first owned activ
         ->and($connection->verified_at)->not->toBeNull()
         ->and($connection->last_test_succeeded_at)->not->toBeNull();
 
-    Http::assertSent(fn ($request) => $request->url() === 'https://production-ca.fa.oraclecloud.com/'
+    Http::assertSent(fn ($request) => str_starts_with($request->url(), 'https://production-ca.fa.oraclecloud.com/hcmRestApi/resources/11.13.18.05/workers')
         && $request->hasHeader('Authorization', 'Basic '.base64_encode('svc_onboarding:first-secret')));
 });
 
