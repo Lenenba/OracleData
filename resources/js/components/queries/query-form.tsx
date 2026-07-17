@@ -21,6 +21,12 @@ import queries from '@/routes/queries';
 
 const DEFAULT_LIMIT = 25;
 
+export type JoinKeyDef = {
+    local_key: string;
+    remote_key: string;
+    label: string;
+};
+
 export type ResourceSuggestion = {
     key: string;
     label: string;
@@ -32,6 +38,8 @@ export type ResourceSuggestion = {
     preview_fields: string[];
     fields?: string[];
     child_resources?: string[];
+    child_fields?: Record<string, string[]>;
+    join_keys?: Record<string, JoinKeyDef>;
 };
 
 export type QueryFormDefaults = {

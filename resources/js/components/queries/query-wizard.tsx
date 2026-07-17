@@ -20,7 +20,7 @@ import {
     X,
 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
-import type { ResourceSuggestion } from '@/components/queries/query-form';
+import type { JoinKeyDef, ResourceSuggestion } from '@/components/queries/query-form';
 import { QueryResultView } from '@/components/queries/query-result';
 import type { QueryResult } from '@/components/queries/query-result';
 import { Badge } from '@/components/ui/badge';
@@ -43,8 +43,11 @@ import queries from '@/routes/queries';
 
 type Step = 1 | 2 | 3;
 
-// Étend ResourceSuggestion pour inclure join_keys
-type Resource = ResourceSuggestion & { join_keys?: Record<string, string> };
+// Étend ResourceSuggestion avec les champs enrichis du catalogue
+type Resource = ResourceSuggestion & {
+    child_fields?: Record<string, string[]>;
+    join_keys?: Record<string, JoinKeyDef>;
+};
 
 // Une ligne du constructeur de filtres
 type FilterRow = {
@@ -116,6 +119,14 @@ const DOMAIN_META: Record<string, { color: string; icon: string }> = {
     Inventory: {
         color: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/60 dark:text-orange-300 dark:border-orange-800',
         icon: '📦',
+    },
+    Projets: {
+        color: 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800',
+        icon: '📐',
+    },
+    Actifs: {
+        color: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800',
+        icon: '🏗️',
     },
 };
 
@@ -807,31 +818,32 @@ function Step2({
 }) {
     const allFields = resource.fields ?? [];
     const childResources = useMemo(() => resource.child_resources ?? [], [resource.child_resources]);
-    const joinKeys = resource.join_keys ?? {};
-    const joinTargets = Object.keys(joinKeys);
+    const joinKeysDefs = resource.join_keys ?? {};
+    const joinTargets = Object.keys(joinKeysDefs);
 
-    // Ressources joignables — on affiche leur label
+    // Ressources joignables — on affiche leur label enrichi
     const joinableResources = allResources.filter((r) => joinTargets.includes(r.key));
 
-    // Catalogue des champs enfants (une ressource enfant = ses champs du catalogue)
+    // Catalogue des champs enfants :
+    // • enfants imbriqués (expand) → child_fields du catalogue
+    // • ressources joignables       → leurs champs top-level
     const childFieldsCatalog = useMemo<ChildFieldsCatalog>(() => {
         const map: ChildFieldsCatalog = {};
 
-        // Champs des ressources joignables (present dans le catalogue)
+        // 1. Champs des enfants imbriqués issus du catalogue PHP (child_fields)
+        const catalogChildFields = resource.child_fields ?? {};
+
+        for (const c of childResources) {
+            map[c] = catalogChildFields[c] ?? [];
+        }
+
+        // 2. Champs des ressources joignables (leurs propres fields top-level)
         for (const jr of joinableResources) {
             map[jr.key] = jr.fields ?? [];
         }
 
-        // Pour les enfants imbriqués (expand) qui ne sont pas dans les ressources
-        // du catalogue, on ne peut pas connaître les champs a priori.
-        for (const c of childResources) {
-            if (!map[c]) {
-                map[c] = [];
-            }
-        }
-
         return map;
-    }, [joinableResources, childResources]);
+    }, [resource.child_fields, childResources, joinableResources]);
 
     function toggle(list: string[], item: string, set: (v: string[]) => void) {
         set(list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
@@ -983,37 +995,47 @@ function Step2({
                                 Jointures avec d'autres ressources
                             </p>
                             <p className="mb-2 text-xs text-muted-foreground">
-                                Ex : fournisseurs{' '}
-                                <strong>qui ont des bons de commande</strong>. Les données de la
-                                ressource liée seront incluses.
+                                Enrichissez les résultats avec des données d'une ressource liée.
                             </p>
                             <div className="flex flex-wrap gap-2 mb-3">
-                                {joinableResources.map((r) => (
-                                    <FieldPill
-                                        key={r.key}
-                                        label={r.label}
-                                        checked={expand.includes(r.key)}
-                                        onClick={() => toggleExpand(r.key)}
-                                        variant="join"
-                                    />
-                                ))}
+                                {joinableResources.map((r) => {
+                                    const joinDef = joinKeysDefs[r.key];
+
+                                    return (
+                                        <FieldPill
+                                            key={r.key}
+                                            label={joinDef?.label ?? r.label}
+                                            checked={expand.includes(r.key)}
+                                            onClick={() => toggleExpand(r.key)}
+                                            variant="join"
+                                        />
+                                    );
+                                })}
                             </div>
 
                             {/* Sélection des champs de chaque jointure activée */}
                             {joinableResources
                                 .filter((r) => expand.includes(r.key))
                                 .map((r) => {
-                                    const knownFields = r.fields ?? [];
+                                    const joinDef = joinKeysDefs[r.key];
+                                    const knownFields = childFieldsCatalog[r.key] ?? [];
 
                                     return (
                                         <div
                                             key={r.key}
                                             className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50/40 p-3 dark:border-emerald-800 dark:bg-emerald-950/20"
                                         >
-                                            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-                                                <Link2 className="size-3.5" />
-                                                Colonnes de «{r.label}» à inclure
-                                            </p>
+                                            <div className="mb-2 flex items-start justify-between gap-2">
+                                                <p className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                                                    <Link2 className="size-3.5 shrink-0" />
+                                                    {joinDef?.label ?? r.label}
+                                                </p>
+                                                {joinDef && (
+                                                    <span className="shrink-0 rounded border border-emerald-200 bg-emerald-100/60 px-1.5 py-0.5 font-mono text-[10px] text-emerald-700 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                                        via {joinDef.local_key}
+                                                    </span>
+                                                )}
+                                            </div>
                                             {knownFields.length > 0 ? (
                                                 <>
                                                     <div className="flex flex-wrap gap-1.5">
