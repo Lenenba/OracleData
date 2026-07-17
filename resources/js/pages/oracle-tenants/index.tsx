@@ -4,6 +4,7 @@ import {
     Database,
     DatabaseZap,
     Link2,
+    MoreHorizontal,
     Pencil,
     Save,
     Server,
@@ -25,6 +26,13 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
@@ -32,7 +40,7 @@ import { readCsrfToken } from '@/lib/csrf';
 import oracleTenants from '@/routes/oracle-tenants';
 
 type OracleTenant = {
-    id: number;
+    id: number | null;
     key: string;
     label: string;
     base_url: string;
@@ -49,6 +57,49 @@ type OracleTenantsIndexProps = {
 
 function sourceLabel(source: OracleTenant['source']): string {
     return source === 'database' ? 'Base' : 'Config';
+}
+
+function TenantActionsMenu({
+    tenant,
+    onDelete,
+}: {
+    tenant: OracleTenant & { id: number };
+    onDelete: (id: number, label: string) => void;
+}) {
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="size-8"
+                    aria-label={`Actions pour ${tenant.label}`}
+                >
+                    <MoreHorizontal className="size-4" />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem asChild className="cursor-pointer">
+                    <Link href={oracleTenants.edit(tenant.id)}>
+                        <Pencil className="size-4" />
+                        Modifier
+                    </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                    className="cursor-pointer text-destructive focus:text-destructive"
+                    onSelect={(event) => {
+                        event.preventDefault();
+                        onDelete(tenant.id, tenant.label);
+                    }}
+                >
+                    <Trash2 className="size-4 text-destructive" />
+                    Supprimer
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
 }
 
 function TestConnectionButton() {
@@ -217,31 +268,25 @@ export default function OracleTenantsIndex({
             key: 'actions',
             header: 'Actions',
             align: 'right',
-            cell: (tenant) =>
-                tenant.source === 'database' ? (
+            width: 'w-24',
+            cell: (tenant) => {
+                if (tenant.source !== 'database' || tenant.id === null) {
+                    return (
+                        <span className="text-xs text-muted-foreground">
+                            Lecture seule
+                        </span>
+                    );
+                }
+
+                return (
                     <StopClick>
-                        <Button asChild size="sm" variant="outline">
-                            <Link href={oracleTenants.edit(tenant.id)}>
-                                <Pencil className="size-3.5" />
-                                Modifier
-                            </Link>
-                        </Button>
-                        <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() =>
-                                deleteTenant(tenant.id, tenant.label)
-                            }
-                        >
-                            <Trash2 className="size-3.5" />
-                        </Button>
+                        <TenantActionsMenu
+                            tenant={{ ...tenant, id: tenant.id }}
+                            onDelete={deleteTenant}
+                        />
                     </StopClick>
-                ) : (
-                    <span className="text-xs text-muted-foreground">
-                        Lecture seule
-                    </span>
-                ),
+                );
+            },
         },
     ];
 

@@ -5,7 +5,9 @@ import {
     Download,
     Search,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { DataTable } from '@/components/data-table';
+import type { DataTableColumn } from '@/components/data-table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -99,6 +101,18 @@ function exportCsv(columns: string[], items: Row[], filename = 'export.csv') {
 
 type SortDir = 'asc' | 'desc' | null;
 
+function SortIndicator({ direction }: { direction: SortDir }) {
+    if (direction === null) {
+        return <ArrowUpDown className="ml-1 inline-block size-3 opacity-40" />;
+    }
+
+    return direction === 'asc' ? (
+        <ArrowUp className="ml-1 inline-block size-3" />
+    ) : (
+        <ArrowDown className="ml-1 inline-block size-3" />
+    );
+}
+
 type ResultsTableProps = {
     items: Row[];
     /** Ordre de colonnes imposé (mode agent) ; sinon déduit des clés. */
@@ -158,31 +172,40 @@ export function ResultsTable({
         });
     }, [filteredItems, sortCol, sortDir]);
 
-    function toggleSort(col: string) {
-        if (sortCol !== col) {
-            setSortCol(col);
-            setSortDir('asc');
-        } else if (sortDir === 'asc') {
-            setSortDir('desc');
-        } else {
-            setSortCol(null);
-            setSortDir(null);
-        }
-    }
+    const toggleSort = useCallback(
+        (col: string) => {
+            if (sortCol !== col) {
+                setSortCol(col);
+                setSortDir('asc');
+            } else if (sortDir === 'asc') {
+                setSortDir('desc');
+            } else {
+                setSortCol(null);
+                setSortDir(null);
+            }
+        },
+        [sortCol, sortDir],
+    );
 
-    function SortIcon({ col }: { col: string }) {
-        if (sortCol !== col) {
-            return (
-                <ArrowUpDown className="ml-1 inline-block size-3 opacity-40" />
-            );
-        }
-
-        return sortDir === 'asc' ? (
-            <ArrowUp className="ml-1 inline-block size-3" />
-        ) : (
-            <ArrowDown className="ml-1 inline-block size-3" />
-        );
-    }
+    const tableColumns = useMemo<DataTableColumn<Row>[]>(
+        () =>
+            resolvedColumns.map((column) => ({
+                key: column,
+                header: (
+                    <>
+                        {column}
+                        <SortIndicator
+                            direction={sortCol === column ? sortDir : null}
+                        />
+                    </>
+                ),
+                headerClassName: 'cursor-pointer',
+                verticalAlign: 'top',
+                onHeaderClick: () => toggleSort(column),
+                cell: (item) => <Cell value={item[column]} />,
+            })),
+        [resolvedColumns, sortCol, sortDir, toggleSort],
+    );
 
     return (
         <div className="flex flex-col gap-3">
@@ -209,51 +232,13 @@ export function ResultsTable({
                 </div>
             )}
 
-            <div className="overflow-x-auto rounded-xl border bg-card">
-                <table className="w-full border-collapse text-left text-sm">
-                    <thead>
-                        <tr>
-                            {resolvedColumns.map((column) => (
-                                <th
-                                    key={column}
-                                    className="cursor-pointer border-b border-border bg-muted/30 px-4 py-3 font-medium whitespace-nowrap text-muted-foreground not-first:border-l hover:bg-muted/60"
-                                    onClick={() => toggleSort(column)}
-                                >
-                                    {column}
-                                    <SortIcon col={column} />
-                                </th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody className="[&>tr:last-child>td]:border-b-0">
-                        {sortedItems.length === 0 ? (
-                            <tr>
-                                <td
-                                    colSpan={resolvedColumns.length}
-                                    className="px-4 py-10 text-center text-sm text-muted-foreground"
-                                >
-                                    Aucun résultat pour ce filtre.
-                                </td>
-                            </tr>
-                        ) : (
-                            sortedItems.map((item, rowIndex) => (
-                                <tr
-                                    key={rowIndex}
-                                    className="transition-colors hover:bg-muted/30"
-                                >
-                                    {resolvedColumns.map((column) => (
-                                        <td
-                                            key={column}
-                                            className="border-b border-border px-4 py-3 align-top whitespace-nowrap not-first:border-l"
-                                        >
-                                            <Cell value={item[column]} />
-                                        </td>
-                                    ))}
-                                </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
+            <div className="overflow-hidden rounded-xl border bg-card">
+                <DataTable
+                    columns={tableColumns}
+                    rows={sortedItems}
+                    rowKey={(_, rowIndex) => rowIndex}
+                    empty="Aucun résultat pour ce filtre."
+                />
             </div>
         </div>
     );

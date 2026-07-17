@@ -15,6 +15,7 @@ export type QueryResource = {
 
 export type OracleCall = {
     resource: string;
+    path?: string;
     params: Record<string, unknown> | unknown;
     count: number;
 };
@@ -47,7 +48,9 @@ function OracleCalls({ calls }: { calls: OracleCall[] }) {
             <ul className="mt-2 space-y-1">
                 {calls.map((call, index) => (
                     <li key={index} className="font-mono">
-                        {call.resource} → {call.count} ligne(s)
+                        {call.resource}
+                        {call.path ? ` (${call.path})` : ''} → {call.count}{' '}
+                        ligne(s)
                     </li>
                 ))}
             </ul>

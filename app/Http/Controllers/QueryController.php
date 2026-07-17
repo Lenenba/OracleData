@@ -17,6 +17,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -39,11 +40,18 @@ class QueryController extends Controller
     public function index(Request $request, FusionManager $fusion): Response
     {
         $userId = $request->user()->id;
+        $scope = $request->string('scope')->toString();
+        $scope = in_array($scope, ['all', 'mine', 'shared'], true) ? $scope : 'all';
 
         $queries = Query::query()
-            ->where(fn (Builder $query) => $query
-                ->where('user_id', $userId)
-                ->orWhere('visibility', 'shared'))
+            ->when($scope === 'all', fn (Builder $query) => $query
+                ->where(fn (Builder $query) => $query
+                    ->where('user_id', $userId)
+                    ->orWhere('visibility', 'shared')))
+            ->when($scope === 'mine', fn (Builder $query) => $query
+                ->where('user_id', $userId))
+            ->when($scope === 'shared', fn (Builder $query) => $query
+                ->where('visibility', 'shared'))
             ->with('user:id,name')
             ->latest()
             ->get()
@@ -59,10 +67,35 @@ class QueryController extends Controller
                 ],
                 'visibility' => $query->visibility,
                 'owner' => $query->user->name,
-                'can' => ['update' => $query->user_id === $userId],
+                'can' => [
+                    'update' => $query->user_id === $userId,
+                    'clone' => true,
+                ],
             ]);
 
-        return Inertia::render('queries/index', ['queries' => $queries]);
+        return Inertia::render('queries/index', [
+            'queries' => $queries,
+            'scope' => $scope,
+            'summary' => [
+                'all' => Query::query()
+                    ->where(fn (Builder $query) => $query
+                        ->where('user_id', $userId)
+                        ->orWhere('visibility', 'shared'))
+                    ->count(),
+                'mine' => Query::query()->where('user_id', $userId)->count(),
+                'shared' => Query::query()->where('visibility', 'shared')->count(),
+            ],
+        ]);
+    }
+
+    /**
+     * Shortcut page for the shared query library.
+     */
+    public function shared(Request $request, FusionManager $fusion): Response
+    {
+        $request->merge(['scope' => 'shared']);
+
+        return $this->index($request, $fusion);
     }
 
     /**
@@ -201,6 +234,28 @@ class QueryController extends Controller
     }
 
     /**
+     * Copy a visible query into the current user's private library.
+     */
+    public function duplicate(Request $request, Query $query): RedirectResponse
+    {
+        Gate::authorize('view', $query);
+
+        $copy = $request->user()->queries()->create([
+            'name' => Str::limit(__('Copie de :name', ['name' => $query->name]), 255, ''),
+            'description' => $query->description,
+            'resource_path' => $query->resource_path,
+            'tenant_key' => $query->tenant_key,
+            'mode' => $query->mode,
+            'parameters' => $query->parameters,
+            'visibility' => 'private',
+        ]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Copie créée. Vous pouvez maintenant la modifier.')]);
+
+        return to_route('queries.edit', $copy);
+    }
+
+    /**
      * Execute a direct Oracle query from the wizard (resource already chosen — no LLM needed).
      * Accepts: resource_key, tenant, fields[], expand[], joins[], child_fields{}, limit.
      */
@@ -293,7 +348,10 @@ class QueryController extends Controller
                 'mode' => $query->mode,
                 'parameters' => (object) ($query->parameters ?? []),
                 'visibility' => $query->visibility,
-                'can' => ['update' => $query->user_id === $request->user()->id],
+                'can' => [
+                    'update' => $query->user_id === $request->user()->id,
+                    'clone' => true,
+                ],
             ],
             'tenants' => $fusion->available(),
             'defaultTenant' => $query->tenant_key ?: $fusion->defaultKey(),

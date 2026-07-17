@@ -31,7 +31,7 @@ class OracleQueryTool
      * distantes sont imbriquées sous la clé de la jointure dans chaque parent.
      *
      * @param  array<string, mixed>  $query
-     * @return array{resource: array<string, mixed>, path: string, params: array<string, mixed>, items: array<int, mixed>, count: int, hasMore: bool, calls: list<array{resource: string, params: array<string, mixed>, count: int}>, query: array<string, mixed>}
+     * @return array{resource: array<string, mixed>, path: string, params: array<string, mixed>, items: array<int, mixed>, count: int, hasMore: bool, calls: list<array{resource: string, path?: string, params: array<string, mixed>, count: int}>, query: array<string, mixed>}
      *
      * @throws InvalidArgumentException si la ressource, un champ ou une jointure est hors catalogue
      */
@@ -52,16 +52,12 @@ class OracleQueryTool
 
         $params = $this->buildParameters($resource, $query, $joins);
 
-        $payload = $this->fusion->tenant($tenantKey)->get($resource['path'], $params);
+        $fetched = $this->fetchResource($tenantKey, $resource, $params);
+        $payload = $fetched['payload'];
 
         /** @var array<int, mixed> $items */
         $items = self::withoutLinks($payload['items'] ?? []);
-
-        $calls = [[
-            'resource' => $resource['key'],
-            'params' => $params,
-            'count' => $payload['count'] ?? count($items),
-        ]];
+        $calls = $fetched['calls'];
 
         foreach ($joins as $target) {
             $items = $this->attachJoin($tenantKey, $resource, $target, $childFields[$target] ?? [], $items, $calls);
@@ -84,14 +80,153 @@ class OracleQueryTool
 
         return [
             'resource' => $this->catalog->toSuggestion($resource),
-            'path' => $resource['path'],
-            'params' => $params,
+            'path' => $fetched['path'],
+            'params' => $fetched['params'],
             'items' => $items,
-            'count' => $payload['count'] ?? count($items),
+            'count' => $this->payloadCount($payload),
             'hasMore' => $payload['hasMore'] ?? false,
             'calls' => $calls,
             'query' => $this->canonicalQuery($resource['key'], $requestedFields, $expand, $joins, $childFields, $query),
         ];
+    }
+
+    /**
+     * Tente la ressource principale, puis les fallbacks déclarés dans le
+     * catalogue quand Oracle renvoie une collection vide ou refuse l'appel.
+     *
+     * Certains endpoints Oracle Fusion (notamment les bons de commande)
+     * filtrent fortement selon le rôle utilisateur et exposent des finders /
+     * vues LOV alternatives. Les fallbacks gardent le wizard utile sans
+     * modifier la spécification canonique enregistrée.
+     *
+     * @param  array{key: string, path: string, fallbacks?: list<array{path: string, params?: array<string, mixed>, strip_params?: list<string>}>, ...}  $resource
+     * @param  array<string, mixed>  $params
+     * @return array{payload: array<string, mixed>, path: string, params: array<string, mixed>, calls: list<array{resource: string, path: string, params: array<string, mixed>, count: int}>}
+     */
+    protected function fetchResource(string $tenantKey, array $resource, array $params): array
+    {
+        $attempts = [[
+            'path' => $resource['path'],
+            'params' => $params,
+        ]];
+
+        foreach (($resource['fallbacks'] ?? []) as $fallback) {
+            $attempts[] = [
+                'path' => $fallback['path'],
+                'params' => $this->fallbackParams($params, $fallback),
+            ];
+        }
+
+        $calls = [];
+        $lastEmpty = null;
+        $lastException = null;
+
+        foreach ($attempts as $attempt) {
+            $path = (string) $attempt['path'];
+            /** @var array<string, mixed> $attemptParams */
+            $attemptParams = $attempt['params'];
+
+            try {
+                $payload = $this->fusion->tenant($tenantKey)->get($path, $attemptParams);
+            } catch (RuntimeException $e) {
+                $lastException = $e;
+
+                if (array_key_exists('fields', $attemptParams)) {
+                    $fieldlessParams = $attemptParams;
+                    unset($fieldlessParams['fields']);
+
+                    try {
+                        $payload = $this->fusion->tenant($tenantKey)->get($path, $fieldlessParams);
+                    } catch (RuntimeException $fieldlessException) {
+                        $lastException = $fieldlessException;
+
+                        continue;
+                    }
+
+                    $count = $this->payloadCount($payload);
+                    $calls[] = [
+                        'resource' => $resource['key'],
+                        'path' => $path,
+                        'params' => $fieldlessParams,
+                        'count' => $count,
+                    ];
+
+                    if ($count > 0) {
+                        return [
+                            'payload' => $payload,
+                            'path' => $path,
+                            'params' => $fieldlessParams,
+                            'calls' => $calls,
+                        ];
+                    }
+
+                    $lastEmpty = [
+                        'payload' => $payload,
+                        'path' => $path,
+                        'params' => $fieldlessParams,
+                        'calls' => $calls,
+                    ];
+                }
+
+                continue;
+            }
+
+            $count = $this->payloadCount($payload);
+            $calls[] = [
+                'resource' => $resource['key'],
+                'path' => $path,
+                'params' => $attemptParams,
+                'count' => $count,
+            ];
+
+            if ($count > 0) {
+                return [
+                    'payload' => $payload,
+                    'path' => $path,
+                    'params' => $attemptParams,
+                    'calls' => $calls,
+                ];
+            }
+
+            $lastEmpty = [
+                'payload' => $payload,
+                'path' => $path,
+                'params' => $attemptParams,
+                'calls' => $calls,
+            ];
+        }
+
+        if ($lastEmpty !== null) {
+            return $lastEmpty;
+        }
+
+        throw $lastException ?? new RuntimeException("Aucune tentative Oracle n'a pu être exécutée.");
+    }
+
+    /**
+     * @param  array<string, mixed>  $base
+     * @param  array{params?: array<string, mixed>, strip_params?: list<string>, ...}  $fallback
+     * @return array<string, mixed>
+     */
+    protected function fallbackParams(array $base, array $fallback): array
+    {
+        foreach (($fallback['strip_params'] ?? []) as $key) {
+            unset($base[$key]);
+        }
+
+        return array_replace($base, $fallback['params'] ?? []);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    protected function payloadCount(array $payload): int
+    {
+        if (isset($payload['count']) && is_numeric($payload['count'])) {
+            return (int) $payload['count'];
+        }
+
+        return count($payload['items'] ?? []);
     }
 
     /**
@@ -155,7 +290,7 @@ class OracleQueryTool
      * @param  array{key: string, join_keys: array<string, array{local_key: string, remote_key: string, label: string}>, ...}  $resource
      * @param  list<string>  $joinFields
      * @param  array<int, mixed>  $items
-     * @param  list<array{resource: string, params: array<string, mixed>, count: int}>  $calls
+     * @param  list<array{resource: string, path?: string, params: array<string, mixed>, count: int}>  $calls
      * @return array<int, mixed>
      */
     protected function attachJoin(string $tenantKey, array $resource, string $target, array $joinFields, array $items, array &$calls): array
@@ -212,20 +347,25 @@ class OracleQueryTool
         $usedParams = array_merge($params, ['q' => implode(' OR ', $conditions)]);
 
         try {
-            $payload = $this->fusion->tenant($tenantKey)->get($targetResource['path'], $usedParams);
+            $fetched = $this->fetchResource($tenantKey, $targetResource, $usedParams);
+            $payload = $fetched['payload'];
+            $usedParams = $fetched['params'];
+
+            array_push($calls, ...$fetched['calls']);
         } catch (RuntimeException) {
             $usedParams = $params;
             $payload = $this->fusion->tenant($tenantKey)->get($targetResource['path'], $usedParams);
+
+            $calls[] = [
+                'resource' => $target,
+                'path' => $targetResource['path'],
+                'params' => $usedParams,
+                'count' => $this->payloadCount($payload),
+            ];
         }
 
         /** @var array<int, mixed> $rows */
         $rows = self::withoutLinks($payload['items'] ?? []);
-
-        $calls[] = [
-            'resource' => $target,
-            'params' => $usedParams,
-            'count' => $payload['count'] ?? count($rows),
-        ];
 
         $allowed = array_flip($joinFields);
         $grouped = [];
