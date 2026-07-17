@@ -13,7 +13,12 @@
       "PowerShell(php artisan test --compact tests/Feature/Oracle/OracleQueryToolTest.php 2>&1)",
       "PowerShell(php artisan test --compact tests/Feature/Llm/QueryResolverTest.php 2>&1)",
       "PowerShell(php artisan test --compact tests/Feature/Llm/QueryAgentTest.php 2>&1)",
-      "PowerShell(php artisan test --compact tests/Feature/Queries tests/Feature/Llm tests/Feature/Oracle 2>&1)"
+      "PowerShell(php artisan test --compact tests/Feature/Queries tests/Feature/Llm tests/Feature/Oracle 2>&1)",
+      "PowerShell(vendor/bin/pint --dirty --format agent 2>&1)",
+      "PowerShell(php artisan test --compact tests/Feature/Fusion tests/Feature/OracleTenants 2>&1)",
+      "PowerShell(php artisan test --compact tests/Feature/OnboardingTest.php 2>&1)",
+      "PowerShell(php artisan test --compact tests/Feature/OnboardingTest.php tests/Feature/Fusion tests/Feature/OracleTenants 2>&1)",
+      "PowerShell(npx eslint resources/js/pages/oracle-tenants/index.tsx 2>&1)"
     ]
   }
 }

@@ -25,9 +25,9 @@ createInertiaApp({
         }
     },
     strictMode: true,
-    withApp(app) {
+    withApp(app, { page }) {
         return (
-            <I18nProvider>
+            <I18nProvider initialPage={page}>
                 <TooltipProvider delayDuration={0}>
                     {app}
                     <Toaster />
