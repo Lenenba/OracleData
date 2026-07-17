@@ -1,21 +1,25 @@
 <?php
 
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\OracleTenantController;
 use App\Http\Controllers\QueryController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
+Route::patch('locale', LocaleController::class)->name('locale.update');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
 
-    Route::get('oracle-tenants', [OracleTenantController::class, 'index'])->name('oracle-tenants.index');
-    Route::post('oracle-tenants', [OracleTenantController::class, 'store'])->name('oracle-tenants.store');
-    Route::post('oracle-tenants/test', [OracleTenantController::class, 'testConnection'])->name('oracle-tenants.test');
-    Route::get('oracle-tenants/{tenant}/edit', [OracleTenantController::class, 'edit'])->name('oracle-tenants.edit');
-    Route::put('oracle-tenants/{tenant}', [OracleTenantController::class, 'update'])->name('oracle-tenants.update');
-    Route::delete('oracle-tenants/{tenant}', [OracleTenantController::class, 'destroy'])->name('oracle-tenants.destroy');
+    Route::middleware('can:manage-oracle-tenants')->group(function () {
+        Route::get('oracle-tenants', [OracleTenantController::class, 'index'])->name('oracle-tenants.index');
+        Route::post('oracle-tenants', [OracleTenantController::class, 'store'])->name('oracle-tenants.store');
+        Route::post('oracle-tenants/test', [OracleTenantController::class, 'testConnection'])->name('oracle-tenants.test');
+        Route::get('oracle-tenants/{tenant}/edit', [OracleTenantController::class, 'edit'])->name('oracle-tenants.edit');
+        Route::put('oracle-tenants/{tenant}', [OracleTenantController::class, 'update'])->name('oracle-tenants.update');
+        Route::delete('oracle-tenants/{tenant}', [OracleTenantController::class, 'destroy'])->name('oracle-tenants.destroy');
+    });
 
     Route::get('queries', [QueryController::class, 'index'])->name('queries.index');
     Route::get('queries/shared', [QueryController::class, 'shared'])->name('queries.shared');

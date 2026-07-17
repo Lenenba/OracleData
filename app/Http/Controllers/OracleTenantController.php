@@ -29,7 +29,7 @@ class OracleTenantController extends Controller
     /**
      * Persist a new Oracle tenant with encrypted credentials.
      */
-    public function store(StoreOracleTenantRequest $request): RedirectResponse
+    public function store(StoreOracleTenantRequest $request, FusionManager $fusion): RedirectResponse
     {
         $data = $request->validated();
         $makeDefault = (bool) ($data['is_default'] ?? false);
@@ -45,6 +45,8 @@ class OracleTenantController extends Controller
                 'is_active' => true,
             ]);
         });
+
+        $fusion->forgetResolvedTenants();
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Tenant Oracle enregistré.')]);
 
@@ -99,7 +101,7 @@ class OracleTenantController extends Controller
     /**
      * Update an existing Oracle tenant.
      */
-    public function update(Request $request, OracleTenant $tenant): RedirectResponse
+    public function update(Request $request, OracleTenant $tenant, FusionManager $fusion): RedirectResponse
     {
         $validated = $request->validate([
             'label' => ['required', 'string', 'max:255'],
@@ -133,6 +135,8 @@ class OracleTenantController extends Controller
             $tenant->update($updateData);
         });
 
+        $fusion->forgetResolvedTenants();
+
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Tenant Oracle mis à jour.')]);
 
         return to_route('oracle-tenants.index');
@@ -141,9 +145,10 @@ class OracleTenantController extends Controller
     /**
      * Delete an Oracle tenant from the database.
      */
-    public function destroy(OracleTenant $tenant): RedirectResponse
+    public function destroy(OracleTenant $tenant, FusionManager $fusion): RedirectResponse
     {
         $tenant->delete();
+        $fusion->forgetResolvedTenants();
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Tenant Oracle supprimé.')]);
 

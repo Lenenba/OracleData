@@ -34,6 +34,7 @@ class OracleQueryTool
      * @return array{resource: array<string, mixed>, path: string, params: array<string, mixed>, items: array<int, mixed>, count: int, hasMore: bool, calls: list<array{resource: string, path?: string, params: array<string, mixed>, count: int}>, query: array<string, mixed>}
      *
      * @throws InvalidArgumentException si la ressource, un champ ou une jointure est hors catalogue
+     * @throws RuntimeException si Oracle Fusion ne peut pas exécuter la lecture
      */
     public function run(string $tenantKey, array $query): array
     {

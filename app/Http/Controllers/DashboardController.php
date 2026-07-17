@@ -61,6 +61,7 @@ class DashboardController extends Controller
      * Nombre de requêtes créées par semaine sur les 8 dernières semaines
      * (la plus ancienne d'abord, la semaine courante en dernier).
      *
+     * @param  Builder<Query>  $accessible
      * @return list<int>
      */
     protected function queriesPerWeek(Builder $accessible): array
@@ -87,7 +88,8 @@ class DashboardController extends Controller
      * Répartition des requêtes accessibles par domaine Oracle, déduite du
      * `resource_key` persisté et du catalogue ; « Autre » sinon.
      *
-     * @return list<array{domain: string, count: int}>
+     * @param  Builder<Query>  $accessible
+     * @return array<int, array{domain: string, count: int}>
      */
     protected function domainBreakdown(Builder $accessible, OracleResourceCatalog $catalog): array
     {

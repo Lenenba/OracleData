@@ -25,6 +25,20 @@ class FusionManager
     protected array $clients = [];
 
     /**
+     * Combined tenant configuration resolved once for the current application request.
+     *
+     * @var array<string, array<string, mixed>>|null
+     */
+    protected ?array $resolvedTenants = null;
+
+    /**
+     * Active database tenants resolved once for the current application request.
+     *
+     * @var array<string, array<string, mixed>>|null
+     */
+    protected ?array $resolvedDatabaseTenants = null;
+
+    /**
      * Résout le client d'un tenant configuré.
      *
      * @throws InvalidArgumentException si la clé de tenant est inconnue
@@ -154,7 +168,17 @@ class FusionManager
      */
     protected function tenants(): array
     {
-        return array_replace($this->configuredTenants(), $this->databaseTenants());
+        return $this->resolvedTenants ??= array_replace($this->configuredTenants(), $this->databaseTenants());
+    }
+
+    /**
+     * Forget memoized tenant configuration after an administrative mutation.
+     */
+    public function forgetResolvedTenants(): void
+    {
+        $this->resolvedTenants = null;
+        $this->resolvedDatabaseTenants = null;
+        $this->clients = [];
     }
 
     /**
@@ -183,12 +207,16 @@ class FusionManager
      */
     protected function databaseTenants(): array
     {
+        if ($this->resolvedDatabaseTenants !== null) {
+            return $this->resolvedDatabaseTenants;
+        }
+
         try {
             if (! Schema::hasTable('oracle_tenants')) {
-                return [];
+                return $this->resolvedDatabaseTenants = [];
             }
 
-            return OracleTenant::query()
+            return $this->resolvedDatabaseTenants = OracleTenant::query()
                 ->where('is_active', true)
                 ->orderByDesc('is_default')
                 ->orderBy('label')
@@ -207,7 +235,7 @@ class FusionManager
                 ])
                 ->all();
         } catch (Throwable) {
-            return [];
+            return $this->resolvedDatabaseTenants = [];
         }
     }
 }

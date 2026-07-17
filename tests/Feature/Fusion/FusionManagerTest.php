@@ -3,6 +3,7 @@
 use App\Models\OracleTenant;
 use App\Services\FusionClient;
 use App\Services\FusionManager;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
@@ -105,4 +106,29 @@ test('has() reflects configured tenants', function () {
 
 test('the manager is registered as a singleton', function () {
     expect(app(FusionManager::class))->toBe(app(FusionManager::class));
+});
+
+test('database tenants are resolved only once until explicitly forgotten', function () {
+    OracleTenant::factory()->create(['key' => 'memoized']);
+    $manager = app(FusionManager::class);
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+
+    $manager->available();
+    $queryCountAfterFirstResolution = count(DB::getQueryLog());
+
+    $manager->keys();
+    $manager->label('memoized');
+    $manager->details();
+
+    expect(count(DB::getQueryLog()))->toBe($queryCountAfterFirstResolution);
+
+    OracleTenant::factory()->create(['key' => 'added_later']);
+
+    expect($manager->available())->not->toHaveKey('added_later');
+
+    $manager->forgetResolvedTenants();
+
+    expect($manager->available())->toHaveKey('added_later');
 });

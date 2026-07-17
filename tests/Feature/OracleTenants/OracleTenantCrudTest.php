@@ -18,7 +18,7 @@ test('guests cannot test a connection', function () {
 test('testConnection returns ok:true when Oracle is reachable', function () {
     Http::fake(['*' => Http::response([], 200)]);
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(User::factory()->superAdmin()->create())
         ->postJson(route('oracle-tenants.test'), [
             'base_url' => 'https://x.fa.oraclecloud.com',
             'username' => 'svc',
@@ -31,7 +31,7 @@ test('testConnection returns ok:true when Oracle is reachable', function () {
 test('testConnection returns ok:false when Oracle is not reachable', function () {
     Http::fake(['*' => Http::response([], 500)]);
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(User::factory()->superAdmin()->create())
         ->postJson(route('oracle-tenants.test'), [
             'base_url' => 'https://x.fa.oraclecloud.com',
             'username' => 'svc',
@@ -42,7 +42,7 @@ test('testConnection returns ok:false when Oracle is not reachable', function ()
 });
 
 test('testConnection validates base_url is a URL', function () {
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(User::factory()->superAdmin()->create())
         ->postJson(route('oracle-tenants.test'), [
             'base_url' => 'not-a-url',
             'username' => 'svc',
@@ -60,7 +60,7 @@ test('testConnection requires all three fields', function (string $field) {
     ];
     unset($payload[$field]);
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(User::factory()->superAdmin()->create())
         ->postJson(route('oracle-tenants.test'), $payload)
         ->assertUnprocessable()
         ->assertJsonValidationErrors($field);
@@ -78,7 +78,7 @@ test('guests cannot access the tenant edit page', function () {
 test('the edit page renders with the tenant data', function () {
     $tenant = OracleTenant::factory()->create(['label' => 'Acme Corp']);
 
-    $this->withoutVite()->actingAs(User::factory()->create())
+    $this->withoutVite()->actingAs(User::factory()->superAdmin()->create())
         ->get(route('oracle-tenants.edit', $tenant))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
@@ -104,7 +104,7 @@ test('an authenticated user can update a tenant label and base_url', function ()
         'base_url' => 'https://old.fa.oraclecloud.com',
     ]);
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(User::factory()->superAdmin()->create())
         ->put(route('oracle-tenants.update', $tenant), [
             'label' => 'New Label',
             'base_url' => 'https://new.fa.oraclecloud.com/',
@@ -122,7 +122,7 @@ test('password is not overwritten when left blank on update', function () {
     $tenant = OracleTenant::factory()->create(['password' => 'original']);
     $originalEncrypted = $tenant->getRawOriginal('password');
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(User::factory()->superAdmin()->create())
         ->put(route('oracle-tenants.update', $tenant), [
             'label' => $tenant->label,
             'base_url' => $tenant->base_url,
@@ -140,7 +140,7 @@ test('password is overwritten when a new value is provided on update', function 
     $tenant = OracleTenant::factory()->create(['password' => 'original']);
     $originalEncrypted = $tenant->getRawOriginal('password');
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(User::factory()->superAdmin()->create())
         ->put(route('oracle-tenants.update', $tenant), [
             'label' => $tenant->label,
             'base_url' => $tenant->base_url,
@@ -159,7 +159,7 @@ test('setting a tenant as default clears the previous default on update', functi
     $old = OracleTenant::factory()->default()->create(['key' => 'old']);
     $new = OracleTenant::factory()->create(['key' => 'new_one']);
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(User::factory()->superAdmin()->create())
         ->put(route('oracle-tenants.update', $new), [
             'label' => $new->label,
             'base_url' => $new->base_url,
@@ -176,7 +176,7 @@ test('setting a tenant as default clears the previous default on update', functi
 test('update rejects an invalid base_url', function () {
     $tenant = OracleTenant::factory()->create();
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(User::factory()->superAdmin()->create())
         ->put(route('oracle-tenants.update', $tenant), [
             'label' => $tenant->label,
             'base_url' => 'not-a-url',
@@ -199,7 +199,7 @@ test('guests cannot delete a tenant', function () {
 test('an authenticated user can delete a database tenant', function () {
     $tenant = OracleTenant::factory()->create();
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(User::factory()->superAdmin()->create())
         ->delete(route('oracle-tenants.destroy', $tenant))
         ->assertRedirect(route('oracle-tenants.index'));
 

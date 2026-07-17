@@ -1,4 +1,4 @@
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import { Database, LayoutGrid, Server, Share2 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
@@ -16,31 +16,27 @@ import { dashboard } from '@/routes';
 import oracleTenants from '@/routes/oracle-tenants';
 import queries from '@/routes/queries';
 import type { NavItem } from '@/types';
-
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Tableau de bord',
-        href: dashboard(),
-        icon: LayoutGrid,
-    },
-    {
-        title: 'Requêtes',
-        href: queries.index(),
-        icon: Database,
-    },
-    {
-        title: 'Requêtes partagées',
-        href: queries.shared(),
-        icon: Share2,
-    },
-    {
-        title: 'Tenants Oracle',
-        href: oracleTenants.index(),
-        icon: Server,
-    },
-];
+import { useI18n } from '@/i18n/i18n-context';
 
 export function AppSidebar() {
+    const { auth } = usePage().props;
+    const { t } = useI18n();
+    const baseNavItems: NavItem[] = [
+        { title: t('nav.dashboard'), href: dashboard(), icon: LayoutGrid },
+        { title: t('nav.queries'), href: queries.index(), icon: Database },
+        { title: t('nav.sharedQueries'), href: queries.shared(), icon: Share2 },
+    ];
+    const mainNavItems = auth.user.is_super_admin
+        ? [
+              ...baseNavItems,
+              {
+                  title: t('nav.oracleTenants'),
+                  href: oracleTenants.index(),
+                  icon: Server,
+              },
+          ]
+        : baseNavItems;
+
     return (
         <Sidebar collapsible="icon" variant="sidebar">
             <SidebarHeader>

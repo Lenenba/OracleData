@@ -22,8 +22,8 @@ test('a user sees their own queries and shared ones, but not others private', fu
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('queries/index')
-            ->has('queries', 2)
-            ->where('queries', fn (Collection $queries) => $queries
+            ->has('queries.data', 2)
+            ->where('queries.data', fn (Collection $queries) => $queries
                 ->pluck('name')
                 ->doesntContain('Hidden')));
 });
@@ -38,7 +38,7 @@ test('can.update is only true for queries the user owns', function () {
     $this->actingAs($me)
         ->get(route('queries.index'))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('queries', fn (Collection $queries) => $queries
+            ->where('queries.data', fn (Collection $queries) => $queries
                 ->every(fn (array $query) => $query['can']['update'] === ($query['owner'] === $me->name))));
 });
 
@@ -57,8 +57,8 @@ test('shared scope only lists shared queries', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->where('scope', 'shared')
             ->where('summary.shared', 2)
-            ->has('queries', 2)
-            ->where('queries', fn (Collection $queries) => $queries
+            ->has('queries.data', 2)
+            ->where('queries.data', fn (Collection $queries) => $queries
                 ->pluck('name')
                 ->contains('Mine shared')
                 && $queries->pluck('name')->contains('Other shared')
@@ -78,6 +78,27 @@ test('shared menu route opens the shared query scope', function () {
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('scope', 'shared')
-            ->has('queries', 1)
-            ->where('queries.0.name', 'Shared library item'));
+            ->has('queries.data', 1)
+            ->where('queries.data.0.name', 'Shared library item'));
+});
+
+test('the library is paginated and searchable on the server', function () {
+    $me = User::factory()->create();
+
+    Query::factory()->count(30)->for($me)->create();
+    Query::factory()->for($me)->create(['name' => 'Rapport fournisseurs unique']);
+
+    $this->actingAs($me)
+        ->get(route('queries.index'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('queries.per_page', 25)
+            ->where('queries.total', 31)
+            ->has('queries.data', 25));
+
+    $this->actingAs($me)
+        ->get(route('queries.index', ['search' => 'fournisseurs unique']))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('search', 'fournisseurs unique')
+            ->where('queries.total', 1)
+            ->where('queries.data.0.name', 'Rapport fournisseurs unique'));
 });

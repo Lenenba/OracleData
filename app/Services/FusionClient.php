@@ -2,7 +2,10 @@
 
 namespace App\Services;
 
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
 
@@ -32,16 +35,38 @@ class FusionClient
             throw new RuntimeException("L'URL Oracle Fusion de cet environnement n'est pas configurée.");
         }
 
+        $startedAt = hrtime(true);
+
         try {
-            return Http::withBasicAuth($this->username, $this->password)
+            $response = Http::withBasicAuth($this->username, $this->password)
                 ->baseUrl($this->baseUrl)
                 ->acceptJson()
+                ->connectTimeout((float) config('fusion.http.connect_timeout', 5))
+                ->timeout((float) config('fusion.http.timeout', 30))
+                ->retry(
+                    (array) config('fusion.http.retry_delays', [200, 500]),
+                    when: fn (Throwable $exception): bool => $this->isRetryable($exception),
+                )
                 ->get($path, $query)
-                ->throw()
-                ->json() ?? [];
+                ->throw();
+
+            Log::info('oracle.request.completed', [
+                'path' => $path,
+                'status' => $response->status(),
+                'duration_ms' => $this->elapsedMilliseconds($startedAt),
+            ]);
+
+            return $response->json() ?? [];
         } catch (Throwable $e) {
+            Log::warning('oracle.request.failed', [
+                'path' => $path,
+                'status' => $e instanceof RequestException ? $e->response->status() : null,
+                'duration_ms' => $this->elapsedMilliseconds($startedAt),
+                'exception' => $e::class,
+            ]);
+
             throw new RuntimeException(
-                "Échec de la requête Oracle Fusion : {$e->getMessage()}",
+                $this->safeFailureMessage($e),
                 previous: $e,
             );
         }
@@ -67,10 +92,44 @@ class FusionClient
             return Http::withBasicAuth($this->username, $this->password)
                 ->baseUrl($this->baseUrl)
                 ->acceptJson()
+                ->connectTimeout((float) config('fusion.http.connect_timeout', 5))
+                ->timeout((float) config('fusion.http.timeout', 30))
                 ->get('/')
                 ->successful();
         } catch (Throwable) {
             return false;
         }
+    }
+
+    private function isRetryable(Throwable $exception): bool
+    {
+        if ($exception instanceof ConnectionException) {
+            return true;
+        }
+
+        if (! $exception instanceof RequestException) {
+            return false;
+        }
+
+        return $exception->response->status() === 429
+            || $exception->response->serverError();
+    }
+
+    private function safeFailureMessage(Throwable $exception): string
+    {
+        if (! $exception instanceof RequestException) {
+            return __('Oracle Fusion ne répond pas dans le délai attendu. Réessayez plus tard.');
+        }
+
+        return match ($exception->response->status()) {
+            401, 403 => __("L'authentification Oracle de cet environnement a été refusée."),
+            429 => __('Oracle Fusion reçoit trop de demandes. Réessayez dans quelques instants.'),
+            default => __('Oracle Fusion est temporairement indisponible. Réessayez plus tard.'),
+        };
+    }
+
+    private function elapsedMilliseconds(int $startedAt): float
+    {
+        return round((hrtime(true) - $startedAt) / 1_000_000, 2);
     }
 }
