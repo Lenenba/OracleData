@@ -67,6 +67,26 @@ class User extends Authenticatable implements HasLocalePreference, PasskeyUser
     }
 
     /**
+     * Personal favorite and pin states for accessible queries.
+     *
+     * @return HasMany<QueryUserPreference, $this>
+     */
+    public function queryPreferences(): HasMany
+    {
+        return $this->hasMany(QueryUserPreference::class);
+    }
+
+    /**
+     * Named library filter combinations owned by the user.
+     *
+     * @return HasMany<SavedQueryView, $this>
+     */
+    public function savedQueryViews(): HasMany
+    {
+        return $this->hasMany(SavedQueryView::class);
+    }
+
+    /**
      * Oracle environments owned and managed by the user.
      *
      * @return HasMany<OracleTenant, $this>

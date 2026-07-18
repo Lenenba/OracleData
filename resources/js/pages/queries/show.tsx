@@ -29,6 +29,8 @@ type QueryDetail = {
     mode: 'single' | 'agent';
     parameters: Record<string, unknown>;
     visibility: 'private' | 'shared';
+    category: { slug: string; name: string; color: string | null } | null;
+    tags: Array<{ slug: string; name: string }>;
     can: { update: boolean; clone: boolean };
 };
 
@@ -155,6 +157,26 @@ export default function ShowQuery({
                                 ? t('queries.analysis')
                                 : t('queries.queryMode')}
                         </Badge>
+                        {query.category && (
+                            <Badge
+                                variant="outline"
+                                style={
+                                    query.category.color
+                                        ? {
+                                              borderColor: query.category.color,
+                                              color: query.category.color,
+                                          }
+                                        : undefined
+                                }
+                            >
+                                {query.category.name}
+                            </Badge>
+                        )}
+                        {query.tags.map((tag) => (
+                            <Badge key={tag.slug} variant="secondary">
+                                {tag.name}
+                            </Badge>
+                        ))}
                         <Badge variant="outline">
                             {tenants[query.tenant_key ?? ''] ??
                                 query.tenant_key ??

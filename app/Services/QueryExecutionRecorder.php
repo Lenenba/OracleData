@@ -31,34 +31,44 @@ class QueryExecutionRecorder
     ): QueryExecution {
         $succeeded = ($payload['error'] ?? null) === null;
         $finishedAt = now();
-        $tenant = $this->resolveTenant($user, $tenantKey);
 
-        $execution = QueryExecution::query()->create([
-            'query_id' => $query->id,
-            'user_id' => $user->id,
-            'oracle_tenant_id' => $tenant?->id,
-            'auth_connection_id' => $tenant === null ? null : $this->primaryConnectionId($tenant),
-            'status' => $succeeded ? QueryExecution::STATUS_SUCCEEDED : QueryExecution::STATUS_FAILED,
-            'duration_ms' => max(0, $durationMs),
-            'rows_count' => count((array) ($payload['items'] ?? [])),
-            'error_code' => $succeeded ? null : 'oracle_error',
-            'started_at' => $startedAt,
-            'finished_at' => $finishedAt,
-        ]);
+        return DB::transaction(function () use ($user, $query, $tenantKey, $succeeded, $durationMs, $payload, $startedAt, $finishedAt): QueryExecution {
+            $recordedQueryId = Query::query()
+                ->whereKey($query->id)
+                ->lockForUpdate()
+                ->value('id');
+            $queryId = $recordedQueryId === null ? null : (int) $recordedQueryId;
+            $tenant = $this->resolveTenant($user, $tenantKey);
 
-        $aggregates = [
-            'execution_count' => DB::raw('execution_count + 1'),
-            'last_executed_at' => $finishedAt,
-        ];
+            $execution = QueryExecution::query()->create([
+                'query_id' => $queryId,
+                'user_id' => $user->id,
+                'oracle_tenant_id' => $tenant?->id,
+                'auth_connection_id' => $tenant === null ? null : $this->primaryConnectionId($tenant),
+                'status' => $succeeded ? QueryExecution::STATUS_SUCCEEDED : QueryExecution::STATUS_FAILED,
+                'duration_ms' => max(0, $durationMs),
+                'rows_count' => count((array) ($payload['items'] ?? [])),
+                'error_code' => $succeeded ? null : 'oracle_error',
+                'started_at' => $startedAt,
+                'finished_at' => $finishedAt,
+            ]);
 
-        if ($succeeded) {
-            $aggregates['successful_execution_count'] = DB::raw('successful_execution_count + 1');
-            $aggregates['last_successful_execution_at'] = $finishedAt;
-        }
+            if ($queryId !== null) {
+                $aggregates = [
+                    'execution_count' => DB::raw('execution_count + 1'),
+                    'last_executed_at' => $finishedAt,
+                ];
 
-        Query::query()->whereKey($query->id)->update($aggregates);
+                if ($succeeded) {
+                    $aggregates['successful_execution_count'] = DB::raw('successful_execution_count + 1');
+                    $aggregates['last_successful_execution_at'] = $finishedAt;
+                }
 
-        return $execution;
+                Query::query()->whereKey($queryId)->update($aggregates);
+            }
+
+            return $execution;
+        });
     }
 
     private function resolveTenant(User $user, string $tenantKey): ?OracleTenant

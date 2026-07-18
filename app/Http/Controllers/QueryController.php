@@ -6,6 +6,7 @@ use App\Http\Requests\RunQueryRequest;
 use App\Http\Requests\StoreQueryRequest;
 use App\Models\Category;
 use App\Models\Query;
+use App\Models\SavedQueryView;
 use App\Models\Tag;
 use App\Services\AuditRecorder;
 use App\Services\FusionManager;
@@ -46,17 +47,47 @@ class QueryController extends Controller
         $userId = $request->user()->id;
         $locale = app()->getLocale();
         $fusion = $fusion->forUser($request->user());
+
+        $skipDefaultView = $request->string('view')->toString() === 'none';
+
+        if (! $skipDefaultView && ! $request->hasAny(['scope', 'search', 'category', 'tag', 'sort', 'favorite', 'pinned'])) {
+            $defaultView = $request->user()
+                ->savedQueryViews()
+                ->where('is_default', true)
+                ->first();
+
+            if ($defaultView !== null) {
+                $request->merge($defaultView->filters);
+            }
+        }
+
         $scope = $request->string('scope')->toString();
         $scope = in_array($scope, ['all', 'mine', 'shared'], true) ? $scope : 'all';
         $search = trim($request->string('search')->toString());
         $category = trim($request->string('category')->toString());
         $tag = trim($request->string('tag')->toString());
+        $sort = $request->string('sort')->toString();
+        $sort = in_array($sort, [
+            'updated_desc',
+            'updated_asc',
+            'name_asc',
+            'name_desc',
+            'executions_desc',
+            'last_executed_desc',
+        ], true) ? $sort : 'updated_desc';
+        $favorite = $request->boolean('favorite');
+        $pinned = $request->boolean('pinned');
 
         if (mb_strlen($search) > 100) {
             $search = mb_substr($search, 0, 100);
         }
 
-        $queries = Query::query()
+        $accessible = fn (): Builder => Query::query()
+            ->where(fn (Builder $query) => $query
+                ->where('user_id', $userId)
+                ->orWhere('visibility', 'shared'));
+
+        $queryBuilder = Query::query()
             ->select([
                 'id',
                 'user_id',
@@ -67,6 +98,9 @@ class QueryController extends Controller
                 'mode',
                 'visibility',
                 'category_id',
+                'execution_count',
+                'successful_execution_count',
+                'last_executed_at',
                 'updated_at',
             ])
             ->when($scope === 'all', fn (Builder $query) => $query
@@ -81,16 +115,49 @@ class QueryController extends Controller
                 ->where(fn (Builder $query) => $query
                     ->where('name', 'like', "%{$search}%")
                     ->orWhere('description', 'like', "%{$search}%")
+                    ->orWhereHas('user', fn (Builder $query) => $query
+                        ->where('name', 'like', "%{$search}%"))
                     ->orWhereHas('tags', fn (Builder $query) => $query
-                        ->where('name', 'like', "%{$search}%"))))
+                        ->where('name', 'like', "%{$search}%")
+                        ->orWhereHas('translations', fn (Builder $query) => $query
+                            ->where('name', 'like', "%{$search}%")))))
             ->when($category !== '', fn (Builder $query) => $query
                 ->whereHas('category', fn (Builder $query) => $query
                     ->where('slug', $category)))
             ->when($tag !== '', fn (Builder $query) => $query
                 ->whereHas('tags', fn (Builder $query) => $query
                     ->where('slug', $tag)))
-            ->with(['user:id,name', 'category.translations', 'tags:tags.id,name,slug'])
-            ->orderByDesc('updated_at')
+            ->when($favorite, fn (Builder $query) => $query
+                ->whereHas('preferences', fn (Builder $query) => $query
+                    ->where('user_id', $userId)
+                    ->where('is_favorite', true)))
+            ->when($pinned, fn (Builder $query) => $query
+                ->whereHas('preferences', fn (Builder $query) => $query
+                    ->where('user_id', $userId)
+                    ->where('is_pinned', true)))
+            ->withExists([
+                'preferences as is_favorite' => fn (Builder $query) => $query
+                    ->where('user_id', $userId)
+                    ->where('is_favorite', true),
+                'preferences as is_pinned' => fn (Builder $query) => $query
+                    ->where('user_id', $userId)
+                    ->where('is_pinned', true),
+            ])
+            ->with(['user:id,name', 'category.translations', 'tags.translations'])
+            ->orderByDesc('is_pinned');
+
+        match ($sort) {
+            'updated_asc' => $queryBuilder->orderBy('updated_at'),
+            'name_asc' => $queryBuilder->orderBy('name'),
+            'name_desc' => $queryBuilder->orderByDesc('name'),
+            'executions_desc' => $queryBuilder->orderByDesc('execution_count'),
+            'last_executed_desc' => $queryBuilder
+                ->orderByRaw('CASE WHEN last_executed_at IS NULL THEN 1 ELSE 0 END')
+                ->orderByDesc('last_executed_at'),
+            default => $queryBuilder->orderByDesc('updated_at'),
+        };
+
+        $queries = $queryBuilder
             ->orderByDesc('id')
             ->paginate(25)
             ->withQueryString()
@@ -114,13 +181,32 @@ class QueryController extends Controller
                     'color' => $query->category->color,
                 ],
                 'tags' => $query->tags
-                    ->map(fn (Tag $tag): array => ['name' => $tag->name, 'slug' => $tag->slug])
+                    ->map(fn (Tag $tag): array => ['name' => $tag->nameFor($locale), 'slug' => $tag->slug])
                     ->values(),
+                'preference' => [
+                    'is_favorite' => (bool) $query->getAttribute('is_favorite'),
+                    'is_pinned' => (bool) $query->getAttribute('is_pinned'),
+                ],
+                'statistics' => [
+                    'execution_count' => (int) $query->execution_count,
+                    'success_rate' => $query->execution_count > 0
+                        ? (int) round(($query->successful_execution_count / $query->execution_count) * 100)
+                        : null,
+                    'last_executed_at' => $query->last_executed_at?->toISOString(),
+                ],
                 'can' => [
                     'update' => $query->user_id === $userId,
                     'clone' => true,
                 ],
             ]);
+
+        $usage = $accessible()
+            ->selectRaw('COALESCE(SUM(execution_count), 0) as total_executions')
+            ->selectRaw('COALESCE(SUM(successful_execution_count), 0) as successful_executions')
+            ->selectRaw('MAX(last_executed_at) as last_executed_at')
+            ->first();
+        $totalExecutions = (int) ($usage?->getAttribute('total_executions') ?? 0);
+        $successfulExecutions = (int) ($usage?->getAttribute('successful_executions') ?? 0);
 
         return Inertia::render('queries/index', [
             'queries' => $queries,
@@ -128,7 +214,11 @@ class QueryController extends Controller
             'search' => $search,
             'category' => $category,
             'tag' => $tag,
+            'sort' => $sort,
+            'favorite' => $favorite,
+            'pinned' => $pinned,
             'categories' => $this->categoryOptions($locale),
+            'tags' => $this->tagOptions($locale, $userId),
             'summary' => [
                 'all' => Query::query()
                     ->where(fn (Builder $query) => $query
@@ -137,7 +227,35 @@ class QueryController extends Controller
                     ->count(),
                 'mine' => Query::query()->where('user_id', $userId)->count(),
                 'shared' => Query::query()->where('visibility', 'shared')->count(),
+                'favorites' => $accessible()
+                    ->whereHas('preferences', fn (Builder $query) => $query
+                        ->where('user_id', $userId)
+                        ->where('is_favorite', true))
+                    ->count(),
+                'pinned' => $accessible()
+                    ->whereHas('preferences', fn (Builder $query) => $query
+                        ->where('user_id', $userId)
+                        ->where('is_pinned', true))
+                    ->count(),
             ],
+            'usage' => [
+                'total_executions' => $totalExecutions,
+                'success_rate' => $totalExecutions > 0
+                    ? round(($successfulExecutions / $totalExecutions) * 100, 1)
+                    : null,
+                'last_executed_at' => $usage?->getAttribute('last_executed_at'),
+            ],
+            'savedViews' => $request->user()
+                ->savedQueryViews()
+                ->orderByDesc('is_default')
+                ->orderBy('name')
+                ->get(['id', 'name', 'filters', 'is_default'])
+                ->map(fn (SavedQueryView $view): array => [
+                    'id' => $view->id,
+                    'name' => $view->name,
+                    'filters' => $view->filters,
+                    'is_default' => $view->is_default,
+                ]),
         ]);
     }
 
@@ -163,6 +281,7 @@ class QueryController extends Controller
             'tenants' => $fusion->available(),
             'defaultTenant' => $fusion->defaultKey(),
             'categories' => $this->categoryOptions(app()->getLocale()),
+            'tags' => $this->tagOptions(app()->getLocale(), (int) $request->user()->id),
         ]);
     }
 
@@ -173,7 +292,7 @@ class QueryController extends Controller
      */
     private function categoryOptions(string $locale): array
     {
-        return Category::query()
+        return array_values(Category::query()
             ->with('translations')
             ->get()
             ->map(fn (Category $category): array => [
@@ -184,7 +303,37 @@ class QueryController extends Controller
             ])
             ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
             ->values()
-            ->all();
+            ->all());
+    }
+
+    /**
+     * Existing tags offered as suggestions while still allowing free input.
+     *
+     * @return list<array{id: int, slug: string, name: string, label: string}>
+     */
+    private function tagOptions(string $locale, int $userId): array
+    {
+        return array_values(Tag::query()
+            ->where(fn (Builder $query) => $query
+                ->whereHas('translations')
+                ->orWhereHas('queries', fn (Builder $query) => $query
+                    ->where(fn (Builder $query) => $query
+                        ->where('user_id', $userId)
+                        ->orWhere('visibility', 'shared'))))
+            ->with('translations')
+            ->orderBy('name')
+            ->orderBy('id')
+            ->limit(100)
+            ->get()
+            ->map(fn (Tag $tag): array => [
+                'id' => $tag->id,
+                'slug' => $tag->slug,
+                'name' => $tag->name,
+                'label' => $tag->nameFor($locale),
+            ])
+            ->sortBy('label', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->all());
     }
 
     /**
@@ -217,7 +366,7 @@ class QueryController extends Controller
         $query = $request->user()->queries()->create($data);
 
         if (is_array($tags)) {
-            $this->syncTags($query, $tags);
+            $this->syncTags($query, $this->normaliseTags($tags));
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Requête enregistrée.')]);
@@ -239,6 +388,15 @@ class QueryController extends Controller
                 ->unique()
                 ->all(),
         );
+    }
+
+    /**
+     * @param  array<mixed>  $tags
+     * @return list<string>
+     */
+    private function normaliseTags(array $tags): array
+    {
+        return array_values(array_filter($tags, is_string(...)));
     }
 
     /**
@@ -270,6 +428,7 @@ class QueryController extends Controller
                 ? $query->tenant_key
                 : $fusion->defaultKey(),
             'categories' => $this->categoryOptions(app()->getLocale()),
+            'tags' => $this->tagOptions(app()->getLocale(), (int) $request->user()->id),
         ]);
     }
 
@@ -304,7 +463,7 @@ class QueryController extends Controller
         $query->update($data);
 
         if (is_array($tags)) {
-            $this->syncTags($query, $tags);
+            $this->syncTags($query, $this->normaliseTags($tags));
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Requête mise à jour.')]);
@@ -366,7 +525,10 @@ class QueryController extends Controller
             'mode' => $query->mode,
             'parameters' => $query->parameters,
             'visibility' => 'private',
+            'category_id' => $query->category_id,
         ]);
+
+        $copy->tags()->sync($query->tags()->pluck('tags.id'));
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Copie créée. Vous pouvez maintenant la modifier.')]);
 
@@ -459,7 +621,9 @@ class QueryController extends Controller
     public function show(Request $request, Query $query, FusionManager $fusion): Response
     {
         Gate::authorize('view', $query);
+        $query->loadMissing(['category.translations', 'tags.translations']);
         $fusion = $fusion->forUser($request->user());
+        $locale = app()->getLocale();
         $ownerPreferredTenant = $query->user_id === $request->user()->id
             && $fusion->has($query->tenant_key)
                 ? $query->tenant_key
@@ -477,6 +641,17 @@ class QueryController extends Controller
                 'mode' => $query->mode,
                 'parameters' => (object) ($query->parameters ?? []),
                 'visibility' => $query->visibility,
+                'category' => $query->category === null ? null : [
+                    'slug' => $query->category->slug,
+                    'name' => $query->category->nameFor($locale),
+                    'color' => $query->category->color,
+                ],
+                'tags' => $query->tags
+                    ->map(fn (Tag $tag): array => [
+                        'slug' => $tag->slug,
+                        'name' => $tag->nameFor($locale),
+                    ])
+                    ->values(),
                 'can' => [
                     'update' => $query->user_id === $request->user()->id,
                     'clone' => true,

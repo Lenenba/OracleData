@@ -35,6 +35,7 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, QueryExecution> $executions
  * @property-read Category|null $category
  * @property-read Collection<int, Tag> $tags
+ * @property-read Collection<int, QueryUserPreference> $preferences
  */
 #[Fillable(['name', 'description', 'resource_path', 'tenant_key', 'oracle_tenant_id', 'mode', 'parameters', 'visibility', 'category_id'])]
 class Query extends Model
@@ -51,6 +52,8 @@ class Query extends Model
     {
         return [
             'parameters' => 'array',
+            'execution_count' => 'integer',
+            'successful_execution_count' => 'integer',
             'last_executed_at' => 'datetime',
             'last_successful_execution_at' => 'datetime',
         ];
@@ -102,5 +105,15 @@ class Query extends Model
     public function tags(): BelongsToMany
     {
         return $this->belongsToMany(Tag::class);
+    }
+
+    /**
+     * Per-user favorites and pins for this accessible query.
+     *
+     * @return HasMany<QueryUserPreference, $this>
+     */
+    public function preferences(): HasMany
+    {
+        return $this->hasMany(QueryUserPreference::class);
     }
 }

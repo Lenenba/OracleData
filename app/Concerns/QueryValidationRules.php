@@ -4,6 +4,8 @@ namespace App\Concerns;
 
 use App\Rules\AllowedResourcePath;
 use App\Services\FusionManager;
+use Closure;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 /**
@@ -39,7 +41,15 @@ trait QueryValidationRules
             'visibility' => ['required', 'in:private,shared'],
             'category_id' => ['nullable', 'integer', Rule::exists('categories', 'id')],
             'tags' => ['nullable', 'array', 'max:10'],
-            'tags.*' => ['string', 'max:50'],
+            'tags.*' => [
+                'string',
+                'max:50',
+                function (string $attribute, mixed $value, Closure $fail): void {
+                    if (is_string($value) && Str::slug(trim($value)) === '') {
+                        $fail(__('Un tag doit contenir au moins un caractère pouvant former un identifiant.'));
+                    }
+                },
+            ],
         ];
     }
 }

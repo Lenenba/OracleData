@@ -1,8 +1,10 @@
 <?php
 
 use App\Models\Query;
+use App\Models\QueryExecution;
 use App\Models\User;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('guests are redirected to the login page', function () {
@@ -56,6 +58,65 @@ test('stats.activeTenants includes only the authenticated users active connectio
         ->get(route('dashboard'))
         ->assertInertia(fn (Assert $page) => $page
             ->where('stats.activeTenants', 2)
+        );
+});
+
+test('usage stats aggregate only executions launched by the authenticated user this month', function () {
+    $me = createConnectedUser();
+    $other = User::factory()->create();
+    $sharedQuery = Query::factory()->for($other)->shared()->create();
+    $myQuery = Query::factory()->for($me)->create();
+    $finishedAt = now()->startOfMonth()->addDay();
+
+    foreach ([
+        [QueryExecution::STATUS_SUCCEEDED, 100],
+        [QueryExecution::STATUS_FAILED, 200],
+        [QueryExecution::STATUS_SUCCEEDED, 300],
+    ] as [$status, $duration]) {
+        QueryExecution::factory()->create([
+            'query_id' => $sharedQuery->id,
+            'user_id' => $me->id,
+            'status' => $status,
+            'duration_ms' => $duration,
+            'started_at' => $finishedAt->copy()->subMilliseconds($duration),
+            'finished_at' => $finishedAt,
+        ]);
+    }
+
+    QueryExecution::factory()->create([
+        'query_id' => $sharedQuery->id,
+        'user_id' => $me->id,
+        'duration_ms' => 900,
+        'started_at' => now()->startOfMonth()->subMinute(),
+        'finished_at' => now()->startOfMonth()->subSecond(),
+    ]);
+
+    QueryExecution::factory()->create([
+        'query_id' => $myQuery->id,
+        'user_id' => $other->id,
+        'duration_ms' => 1200,
+        'started_at' => $finishedAt->copy()->subMilliseconds(1200),
+        'finished_at' => $finishedAt,
+    ]);
+
+    $this->actingAs($me)
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('stats.executionsThisMonth', 3)
+            ->where('stats.successRate', 66.7)
+            ->where('stats.averageDurationMs', 200)
+        );
+});
+
+test('usage stats return zeros when the authenticated user has no executions this month', function () {
+    $me = createConnectedUser();
+
+    $this->actingAs($me)
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('stats.executionsThisMonth', 0)
+            ->where('stats.successRate', 0)
+            ->where('stats.averageDurationMs', 0)
         );
 });
 
@@ -178,4 +239,23 @@ test('tenants prop lists configured environments', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->where('tenants', fn (Collection $t) => $t->pluck('key')->contains('client_x'))
         );
+});
+
+test('dashboard query count stays bounded with many accessible rows', function () {
+    $me = createConnectedUser();
+    $other = User::factory()->create();
+    Query::factory()->count(30)->for($me)->create();
+    Query::factory()->count(20)->for($other)->shared()->create();
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+
+    $this->actingAs($me)
+        ->get(route('dashboard'))
+        ->assertOk();
+
+    $queryCount = count(DB::getQueryLog());
+    DB::disableQueryLog();
+
+    expect($queryCount)->toBeLessThanOrEqual(10);
 });

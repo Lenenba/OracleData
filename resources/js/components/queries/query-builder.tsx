@@ -2,11 +2,14 @@ import { Link, router } from '@inertiajs/react';
 import {
     Braces,
     Code2,
+    FolderOpen,
     Globe,
     Lock,
     RotateCw,
     Save,
     Server,
+    Tag,
+    X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import AlertError from '@/components/alert-error';
@@ -17,6 +20,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import { useLivePreview } from '@/hooks/use-live-preview';
@@ -55,12 +65,30 @@ type BuilderInitialState = {
     filterQ?: string;
     orderBy?: string;
     limit?: number;
+    categoryId?: number | null;
+    tags?: string[];
+};
+
+export type QueryCategoryOption = {
+    id: number;
+    slug: string;
+    name: string;
+    color: string | null;
+};
+
+export type QueryTagOption = {
+    id: number;
+    slug: string;
+    name: string;
+    label: string;
 };
 
 type QueryBuilderProps = {
     resourceSuggestions: ResourceSuggestion[];
     tenants: Record<string, string>;
     defaultTenant: string;
+    categories?: QueryCategoryOption[];
+    tagSuggestions?: QueryTagOption[];
     mode?: BuilderMode;
     initialState?: BuilderInitialState;
 };
@@ -75,6 +103,8 @@ export function QueryBuilder({
     resourceSuggestions,
     tenants,
     defaultTenant,
+    categories = [],
+    tagSuggestions = [],
     mode = 'create',
     initialState,
 }: QueryBuilderProps) {
@@ -126,6 +156,11 @@ export function QueryBuilder({
     const [visibility, setVisibility] = useState<'private' | 'shared'>(
         initialState?.visibility ?? 'private',
     );
+    const [categoryId, setCategoryId] = useState(
+        initialState?.categoryId ? String(initialState.categoryId) : '',
+    );
+    const [tags, setTags] = useState<string[]>(initialState?.tags ?? []);
+    const [tagInput, setTagInput] = useState('');
     const [saving, setSaving] = useState(false);
     const [activeTab, setActiveTab] = useState<'preview' | 'sql'>('preview');
 
@@ -265,6 +300,8 @@ export function QueryBuilder({
             resource_path: live.result.resource?.path ?? '',
             tenant_key: tenant,
             visibility,
+            category_id: categoryId === '' ? null : Number(categoryId),
+            tags,
             parameters,
         };
 
@@ -277,6 +314,47 @@ export function QueryBuilder({
                 onError: () => setSaving(false),
             });
         }
+    }
+
+    function addTag(rawValue = tagInput) {
+        const value = rawValue.trim().replace(/,$/, '');
+
+        if (value === '' || tags.length >= 10) {
+            setTagInput('');
+
+            return;
+        }
+
+        const suggestion = tagSuggestions.find(
+            (tag) =>
+                tag.name.localeCompare(value, undefined, {
+                    sensitivity: 'accent',
+                }) === 0 ||
+                tag.label.localeCompare(value, undefined, {
+                    sensitivity: 'accent',
+                }) === 0,
+        );
+        const name = suggestion?.name ?? value;
+
+        setTags((current) =>
+            current.some(
+                (tag) => tag.toLocaleLowerCase() === name.toLocaleLowerCase(),
+            )
+                ? current
+                : [...current, name],
+        );
+        setTagInput('');
+    }
+
+    function removeTag(name: string) {
+        setTags((current) => current.filter((tag) => tag !== name));
+    }
+
+    function tagLabel(name: string) {
+        return (
+            tagSuggestions.find((suggestion) => suggestion.name === name)
+                ?.label ?? name
+        );
     }
 
     if (tenantKeys.length === 0) {
@@ -502,6 +580,138 @@ export function QueryBuilder({
                                     </button>
                                 ))}
                             </div>
+                        </div>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                        <div className="flex flex-col gap-1.5">
+                            <Label
+                                htmlFor="qb-category"
+                                className="text-xs font-medium"
+                            >
+                                {t('queries.category')}
+                            </Label>
+                            <Select
+                                value={categoryId || 'none'}
+                                onValueChange={(value) =>
+                                    setCategoryId(value === 'none' ? '' : value)
+                                }
+                            >
+                                <SelectTrigger
+                                    id="qb-category"
+                                    aria-label={t('queries.category')}
+                                >
+                                    <SelectValue
+                                        placeholder={t('queries.noCategory')}
+                                    />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">
+                                        {t('queries.noCategory')}
+                                    </SelectItem>
+                                    {categories.map((category) => (
+                                        <SelectItem
+                                            key={category.id}
+                                            value={String(category.id)}
+                                        >
+                                            <span className="flex items-center gap-2">
+                                                <span
+                                                    className="size-2 rounded-full bg-muted-foreground"
+                                                    style={
+                                                        category.color
+                                                            ? {
+                                                                  backgroundColor:
+                                                                      category.color,
+                                                              }
+                                                            : undefined
+                                                    }
+                                                />
+                                                {category.name}
+                                            </span>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                            <Label
+                                htmlFor="qb-tags"
+                                className="text-xs font-medium"
+                            >
+                                {t('queries.tags')}
+                            </Label>
+                            <div className="flex gap-2">
+                                <Input
+                                    id="qb-tags"
+                                    list="qb-tag-suggestions"
+                                    value={tagInput}
+                                    onChange={(event) =>
+                                        setTagInput(event.target.value)
+                                    }
+                                    onKeyDown={(event) => {
+                                        if (
+                                            event.key === 'Enter' ||
+                                            event.key === ','
+                                        ) {
+                                            event.preventDefault();
+                                            addTag();
+                                        }
+                                    }}
+                                    onBlur={() => addTag()}
+                                    placeholder={t('queries.tagsPlaceholder')}
+                                    disabled={tags.length >= 10}
+                                />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={() => addTag()}
+                                    disabled={
+                                        tagInput.trim() === '' ||
+                                        tags.length >= 10
+                                    }
+                                    aria-label={t('queries.addTag')}
+                                >
+                                    <Tag className="size-4" />
+                                </Button>
+                            </div>
+                            <datalist id="qb-tag-suggestions">
+                                {tagSuggestions.map((tag) => (
+                                    <option key={tag.id} value={tag.label}>
+                                        {tag.name}
+                                    </option>
+                                ))}
+                            </datalist>
+                            {tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 pt-1">
+                                    {tags.map((tag) => (
+                                        <Badge
+                                            key={tag}
+                                            variant="secondary"
+                                            className="gap-1"
+                                        >
+                                            {tagLabel(tag)}
+                                            <button
+                                                type="button"
+                                                onClick={() => removeTag(tag)}
+                                                aria-label={t(
+                                                    'queries.removeTag',
+                                                    {
+                                                        name: tag,
+                                                    },
+                                                )}
+                                            >
+                                                <X className="size-3" />
+                                            </button>
+                                        </Badge>
+                                    ))}
+                                </div>
+                            )}
+                            <p className="text-[11px] text-muted-foreground">
+                                <FolderOpen className="mr-1 inline size-3" />
+                                {t('queries.tagsHint')}
+                            </p>
                         </div>
                     </div>
 

@@ -1,6 +1,10 @@
 import { Head } from '@inertiajs/react';
 import Heading from '@/components/heading';
 import { QueryBuilder } from '@/components/queries/query-builder';
+import type {
+    QueryCategoryOption,
+    QueryTagOption,
+} from '@/components/queries/query-builder';
 import { useI18n } from '@/i18n/i18n-context';
 import type { ResourceSuggestion } from '@/lib/query-spec';
 import queries from '@/routes/queries';
@@ -9,12 +13,16 @@ type CreateQueryProps = {
     resourceSuggestions: ResourceSuggestion[];
     tenants: Record<string, string>;
     defaultTenant: string;
+    categories: QueryCategoryOption[];
+    tags: QueryTagOption[];
 };
 
 export default function CreateQuery({
     resourceSuggestions,
     tenants,
     defaultTenant,
+    categories,
+    tags,
 }: CreateQueryProps) {
     const { t } = useI18n();
 
@@ -32,6 +40,8 @@ export default function CreateQuery({
                     resourceSuggestions={resourceSuggestions}
                     tenants={tenants}
                     defaultTenant={defaultTenant}
+                    categories={categories}
+                    tagSuggestions={tags}
                 />
             </div>
         </>

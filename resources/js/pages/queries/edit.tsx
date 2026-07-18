@@ -1,6 +1,10 @@
 import { Head } from '@inertiajs/react';
 import Heading from '@/components/heading';
 import { QueryBuilder } from '@/components/queries/query-builder';
+import type {
+    QueryCategoryOption,
+    QueryTagOption,
+} from '@/components/queries/query-builder';
 import { useI18n } from '@/i18n/i18n-context';
 import { parseChildFields, parseCsv } from '@/lib/query-spec';
 import type { ResourceSuggestion } from '@/lib/query-spec';
@@ -16,10 +20,14 @@ type EditQueryProps = {
         mode: 'single' | 'agent';
         parameters: Record<string, unknown>;
         visibility: 'private' | 'shared';
+        category_id: number | null;
+        tags: string[];
     };
     resourceSuggestions: ResourceSuggestion[];
     tenants: Record<string, string>;
     defaultTenant: string;
+    categories: QueryCategoryOption[];
+    tags: QueryTagOption[];
 };
 
 export default function EditQuery({
@@ -27,6 +35,8 @@ export default function EditQuery({
     resourceSuggestions,
     tenants,
     defaultTenant,
+    categories,
+    tags,
 }: EditQueryProps) {
     const { t } = useI18n();
     const params = query.parameters ?? {};
@@ -48,6 +58,8 @@ export default function EditQuery({
         orderBy:
             typeof params.orderBy === 'string' ? params.orderBy : undefined,
         limit: typeof params.limit === 'number' ? params.limit : undefined,
+        categoryId: query.category_id,
+        tags: query.tags,
     };
 
     return (
@@ -66,6 +78,8 @@ export default function EditQuery({
                     defaultTenant={defaultTenant}
                     mode="edit"
                     initialState={initialState}
+                    categories={categories}
+                    tagSuggestions={tags}
                 />
             </div>
         </>

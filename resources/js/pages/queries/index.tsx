@@ -1,5 +1,7 @@
 import { Head, Link, router } from '@inertiajs/react';
 import {
+    BarChart3,
+    BookmarkPlus,
     Copy,
     Database,
     Eye,
@@ -7,10 +9,12 @@ import {
     FolderOpen,
     MoreHorizontal,
     Pencil,
+    Pin,
     Plus,
     PlayCircle,
     Search,
     Server,
+    Star,
     Tags,
     Trash2,
     User,
@@ -24,6 +28,15 @@ import { EntityChip } from '@/components/entity-chip';
 import Heading from '@/components/heading';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -43,6 +56,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { useI18n } from '@/i18n/i18n-context';
 import { readCsrfToken } from '@/lib/csrf';
 import queries from '@/routes/queries';
+import savedQueryViews from '@/routes/saved-query-views';
 
 type QueryCategory = {
     slug: string;
@@ -69,6 +83,12 @@ type QueryRow = {
     owner: string;
     category: QueryCategory | null;
     tags: QueryTag[];
+    preference: { is_favorite: boolean; is_pinned: boolean };
+    statistics: {
+        execution_count: number;
+        success_rate: number | null;
+        last_executed_at: string | null;
+    };
     can: { update: boolean; clone: boolean };
 };
 
@@ -79,12 +99,52 @@ type CategoryOption = {
     color: string | null;
 };
 
+type TagOption = {
+    id: number;
+    slug: string;
+    name: string;
+    label: string;
+};
+
 type QueryScope = 'all' | 'mine' | 'shared';
 
 type QuerySummary = {
     all: number;
     mine: number;
     shared: number;
+    favorites: number;
+    pinned: number;
+};
+
+type QuerySort =
+    | 'updated_desc'
+    | 'updated_asc'
+    | 'name_asc'
+    | 'name_desc'
+    | 'executions_desc'
+    | 'last_executed_desc';
+
+type LibraryFilters = {
+    scope: QueryScope;
+    search: string;
+    category: string;
+    tag: string;
+    sort: QuerySort;
+    favorite: boolean;
+    pinned: boolean;
+};
+
+type SavedView = {
+    id: number;
+    name: string;
+    filters: Partial<LibraryFilters>;
+    is_default: boolean;
+};
+
+type UsageSummary = {
+    total_executions: number;
+    success_rate: number | null;
+    last_executed_at: string | null;
 };
 
 type PaginatedQueries = {
@@ -243,6 +303,114 @@ function QueryActionsMenu({
     );
 }
 
+function SaveViewDialog({
+    open,
+    onOpenChange,
+    filters,
+}: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    filters: LibraryFilters;
+}) {
+    const { t } = useI18n();
+    const [name, setName] = useState('');
+    const [isDefault, setIsDefault] = useState(false);
+    const [saving, setSaving] = useState(false);
+
+    function save() {
+        if (name.trim() === '' || saving) {
+            return;
+        }
+
+        setSaving(true);
+        router.post(
+            savedQueryViews.store.url(),
+            {
+                name: name.trim(),
+                filters: {
+                    scope: filters.scope,
+                    search: filters.search || null,
+                    category: filters.category || null,
+                    tag: filters.tag || null,
+                    sort: filters.sort,
+                    favorite: filters.favorite || null,
+                    pinned: filters.pinned || null,
+                },
+                is_default: isDefault,
+            },
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setName('');
+                    setIsDefault(false);
+                    onOpenChange(false);
+                },
+                onError: () => setSaving(false),
+                onFinish: () => setSaving(false),
+            },
+        );
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>{t('queries.saveView')}</DialogTitle>
+                    <DialogDescription>
+                        {t('queries.saveViewDescription')}
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-2">
+                    <label
+                        htmlFor="saved-view-name"
+                        className="text-sm font-medium"
+                    >
+                        {t('queries.viewName')}
+                    </label>
+                    <Input
+                        id="saved-view-name"
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                        onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                                event.preventDefault();
+                                save();
+                            }
+                        }}
+                        maxLength={100}
+                        autoFocus
+                    />
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                        checked={isDefault}
+                        onCheckedChange={(checked) =>
+                            setIsDefault(checked === true)
+                        }
+                    />
+                    {t('queries.defaultView')}
+                </label>
+                <DialogFooter>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => onOpenChange(false)}
+                    >
+                        {t('common.cancel')}
+                    </Button>
+                    <Button
+                        type="button"
+                        onClick={save}
+                        disabled={name.trim() === '' || saving}
+                    >
+                        {saving ? t('common.saving') : t('queries.saveView')}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 export default function QueriesIndex({
     queries: queryPage,
     scope = 'all',
@@ -250,7 +418,13 @@ export default function QueriesIndex({
     search: initialSearch = '',
     category: activeCategory = '',
     tag: activeTag = '',
+    sort = 'updated_desc',
+    favorite = false,
+    pinned = false,
     categories = [],
+    tags = [],
+    usage,
+    savedViews = [],
 }: {
     queries: PaginatedQueries;
     scope?: QueryScope;
@@ -258,33 +432,73 @@ export default function QueriesIndex({
     search?: string;
     category?: string;
     tag?: string;
+    sort?: QuerySort;
+    favorite?: boolean;
+    pinned?: boolean;
     categories?: CategoryOption[];
+    tags?: TagOption[];
+    usage: UsageSummary;
+    savedViews?: SavedView[];
 }) {
-    const { t } = useI18n();
+    const { t, formatDate, formatNumber } = useI18n();
     const [visibilityOverrides, setVisibilityOverrides] = useState<
         Record<number, 'private' | 'shared'>
     >({});
+    const [preferenceOverrides, setPreferenceOverrides] = useState<
+        Record<number, QueryRow['preference']>
+    >({});
+    const [preferencePending, setPreferencePending] = useState<Set<number>>(
+        () => new Set(),
+    );
+    const [saveViewOpen, setSaveViewOpen] = useState(false);
     const [search, setSearch] = useState(initialSearch);
+    const currentFilters: LibraryFilters = {
+        scope,
+        search,
+        category: activeCategory,
+        tag: activeTag,
+        sort,
+        favorite,
+        pinned,
+    };
     const rows = queryPage.data
         .map((query) => ({
             ...query,
             visibility: visibilityOverrides[query.id] ?? query.visibility,
+            preference: preferenceOverrides[query.id] ?? query.preference,
         }))
         .filter((query) => scope !== 'shared' || query.visibility === 'shared');
+    const hasActiveLibraryFilters =
+        scope !== 'all' ||
+        initialSearch.trim() !== '' ||
+        activeCategory !== '' ||
+        activeTag !== '' ||
+        favorite ||
+        pinned;
 
-    function applyFilters(next: { category?: string; tag?: string }) {
+    function filterUrl(next: Partial<LibraryFilters> = {}) {
+        const filters = { ...currentFilters, ...next };
+
+        return queries.index({
+            query: {
+                scope: filters.scope === 'all' ? undefined : filters.scope,
+                search: filters.search.trim() || undefined,
+                category: filters.category || undefined,
+                tag: filters.tag || undefined,
+                sort:
+                    filters.sort === 'updated_desc' ? undefined : filters.sort,
+                favorite: filters.favorite || undefined,
+                pinned: filters.pinned || undefined,
+                view: 'none',
+            },
+        });
+    }
+
+    function applyFilters(next: Partial<LibraryFilters>) {
         router.get(
-            queries.index({
-                query: {
-                    scope: scope === 'all' ? undefined : scope,
-                    search: search.trim() || undefined,
-                    category: (next.category ?? activeCategory) || undefined,
-                    tag: (next.tag ?? activeTag) || undefined,
-                },
-            }),
+            filterUrl(next),
             {},
             {
-                only: ['queries', 'category', 'tag'],
                 preserveState: true,
                 preserveScroll: true,
                 replace: true,
@@ -305,6 +519,10 @@ export default function QueriesIndex({
                         search: search.trim() || undefined,
                         category: activeCategory || undefined,
                         tag: activeTag || undefined,
+                        sort: sort === 'updated_desc' ? undefined : sort,
+                        favorite: favorite || undefined,
+                        pinned: pinned || undefined,
+                        view: 'none',
                     },
                 }),
                 {},
@@ -318,7 +536,16 @@ export default function QueriesIndex({
         }, 350);
 
         return () => window.clearTimeout(timer);
-    }, [initialSearch, scope, search, activeCategory, activeTag]);
+    }, [
+        initialSearch,
+        scope,
+        search,
+        activeCategory,
+        activeTag,
+        sort,
+        favorite,
+        pinned,
+    ]);
 
     const heading =
         scope === 'shared'
@@ -336,19 +563,19 @@ export default function QueriesIndex({
             value: 'all' as const,
             label: t('queries.all'),
             count: summary.all,
-            href: queries.index(),
+            href: filterUrl({ scope: 'all' }),
         },
         {
             value: 'mine' as const,
             label: t('queries.mine'),
             count: summary.mine,
-            href: queries.index({ query: { scope: 'mine' } }),
+            href: filterUrl({ scope: 'mine' }),
         },
         {
             value: 'shared' as const,
             label: t('queries.sharedBadge'),
             count: summary.shared,
-            href: queries.shared(),
+            href: filterUrl({ scope: 'shared' }),
         },
     ];
 
@@ -374,6 +601,106 @@ export default function QueriesIndex({
         router.delete(queries.destroy(id));
     }
 
+    async function togglePreference(
+        query: QueryRow,
+        key: 'is_favorite' | 'is_pinned',
+    ) {
+        if (preferencePending.has(query.id)) {
+            return;
+        }
+
+        const previous = preferenceOverrides[query.id] ?? query.preference;
+        const next = { ...previous, [key]: !previous[key] };
+
+        setPreferencePending((current) => {
+            const pending = new Set(current);
+            pending.add(query.id);
+
+            return pending;
+        });
+        setPreferenceOverrides((current) => ({
+            ...current,
+            [query.id]: next,
+        }));
+
+        try {
+            const response = await fetch(queries.preference.url(query.id), {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-XSRF-TOKEN': readCsrfToken(),
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({ [key]: next[key] }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Preference update failed.');
+            }
+
+            router.reload({
+                only: ['queries', 'summary'],
+                onSuccess: () => {
+                    setPreferenceOverrides((current) => {
+                        const overrides = { ...current };
+                        delete overrides[query.id];
+
+                        return overrides;
+                    });
+                },
+                onFinish: () => {
+                    setPreferencePending((current) => {
+                        const pending = new Set(current);
+                        pending.delete(query.id);
+
+                        return pending;
+                    });
+                },
+            });
+        } catch {
+            setPreferenceOverrides((current) => ({
+                ...current,
+                [query.id]: previous,
+            }));
+            setPreferencePending((current) => {
+                const pending = new Set(current);
+                pending.delete(query.id);
+
+                return pending;
+            });
+            toast.error(t('queries.preferenceError'));
+        }
+    }
+
+    function applySavedView(view: SavedView) {
+        router.get(
+            queries.index({
+                query: {
+                    ...view.filters,
+                    scope:
+                        view.filters.scope === 'all'
+                            ? undefined
+                            : view.filters.scope,
+                    view: 'none',
+                },
+            }),
+            {},
+            { preserveState: false, preserveScroll: true },
+        );
+    }
+
+    function deleteSavedView(view: SavedView) {
+        if (!confirm(t('queries.deleteViewConfirm', { name: view.name }))) {
+            return;
+        }
+
+        router.delete(savedQueryViews.destroy.url(view.id), {
+            preserveScroll: true,
+        });
+    }
+
     const columns: DataTableColumn<QueryRow>[] = [
         {
             key: 'name',
@@ -381,6 +708,66 @@ export default function QueriesIndex({
             icon: FileText,
             cell: (query) => (
                 <div className="flex items-center gap-3">
+                    <StopClick>
+                        <div className="flex shrink-0 items-center gap-0.5">
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    void togglePreference(query, 'is_pinned')
+                                }
+                                className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                                disabled={preferencePending.has(query.id)}
+                                aria-label={
+                                    query.preference.is_pinned
+                                        ? t('queries.unpin')
+                                        : t('queries.pin')
+                                }
+                                aria-pressed={query.preference.is_pinned}
+                                title={
+                                    query.preference.is_pinned
+                                        ? t('queries.unpin')
+                                        : t('queries.pin')
+                                }
+                            >
+                                <Pin
+                                    className="size-3.5"
+                                    fill={
+                                        query.preference.is_pinned
+                                            ? 'currentColor'
+                                            : 'none'
+                                    }
+                                />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    void togglePreference(query, 'is_favorite')
+                                }
+                                className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-amber-500"
+                                disabled={preferencePending.has(query.id)}
+                                aria-label={
+                                    query.preference.is_favorite
+                                        ? t('queries.removeFavorite')
+                                        : t('queries.addFavorite')
+                                }
+                                aria-pressed={query.preference.is_favorite}
+                                title={
+                                    query.preference.is_favorite
+                                        ? t('queries.removeFavorite')
+                                        : t('queries.addFavorite')
+                                }
+                            >
+                                <Star
+                                    className="size-3.5"
+                                    fill={
+                                        query.preference.is_favorite
+                                            ? 'currentColor'
+                                            : 'none'
+                                    }
+                                />
+                            </button>
+                        </div>
+                    </StopClick>
                     <TableAvatar label={query.name} />
                     <div className="min-w-0">
                         <Link
@@ -458,6 +845,37 @@ export default function QueriesIndex({
                                 </StopClick>
                             ))}
                         </div>
+                    )}
+                </div>
+            ),
+        },
+        {
+            key: 'usage',
+            header: t('queries.usage'),
+            icon: BarChart3,
+            cellClassName: 'text-muted-foreground',
+            cell: (query) => (
+                <div className="space-y-0.5 text-xs">
+                    <p className="font-medium text-foreground">
+                        {t('queries.executionCount', {
+                            count: formatNumber(
+                                query.statistics.execution_count,
+                            ),
+                        })}
+                    </p>
+                    <p>
+                        {query.statistics.success_rate === null
+                            ? t('queries.neverExecuted')
+                            : t('queries.successRate', {
+                                  rate: query.statistics.success_rate,
+                              })}
+                    </p>
+                    {query.statistics.last_executed_at && (
+                        <p>
+                            {formatDate(query.statistics.last_executed_at, {
+                                dateStyle: 'medium',
+                            })}
+                        </p>
                     )}
                 </div>
             ),
@@ -563,7 +981,101 @@ export default function QueriesIndex({
                                     </SelectContent>
                                 </Select>
                             )}
-                            {activeTag !== '' && (
+                            {tags.length > 0 && (
+                                <Select
+                                    value={activeTag || 'all'}
+                                    onValueChange={(value) =>
+                                        applyFilters({
+                                            tag: value === 'all' ? '' : value,
+                                        })
+                                    }
+                                >
+                                    <SelectTrigger
+                                        size="sm"
+                                        className="w-44"
+                                        aria-label={t('queries.tags')}
+                                    >
+                                        <Tags className="size-4 text-muted-foreground" />
+                                        <SelectValue
+                                            placeholder={t('queries.allTags')}
+                                        />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">
+                                            {t('queries.allTags')}
+                                        </SelectItem>
+                                        {tags.map((option) => (
+                                            <SelectItem
+                                                key={option.id}
+                                                value={option.slug}
+                                            >
+                                                {option.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                            <Select
+                                value={sort}
+                                onValueChange={(value) =>
+                                    applyFilters({ sort: value as QuerySort })
+                                }
+                            >
+                                <SelectTrigger
+                                    size="sm"
+                                    className="w-44"
+                                    aria-label={t('queries.sortLabel')}
+                                >
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="updated_desc">
+                                        {t('queries.sortUpdatedDesc')}
+                                    </SelectItem>
+                                    <SelectItem value="updated_asc">
+                                        {t('queries.sortUpdatedAsc')}
+                                    </SelectItem>
+                                    <SelectItem value="name_asc">
+                                        {t('queries.sortNameAsc')}
+                                    </SelectItem>
+                                    <SelectItem value="name_desc">
+                                        {t('queries.sortNameDesc')}
+                                    </SelectItem>
+                                    <SelectItem value="executions_desc">
+                                        {t('queries.sortExecutions')}
+                                    </SelectItem>
+                                    <SelectItem value="last_executed_desc">
+                                        {t('queries.sortLastExecuted')}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <Button
+                                size="sm"
+                                variant={favorite ? 'default' : 'outline'}
+                                onClick={() =>
+                                    applyFilters({ favorite: !favorite })
+                                }
+                            >
+                                <Star className="size-3.5" />
+                                {t('queries.favorites')}
+                                <span className="text-[11px]">
+                                    {summary.favorites}
+                                </span>
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant={pinned ? 'default' : 'outline'}
+                                onClick={() =>
+                                    applyFilters({ pinned: !pinned })
+                                }
+                            >
+                                <Pin className="size-3.5" />
+                                {t('queries.pinned')}
+                                <span className="text-[11px]">
+                                    {summary.pinned}
+                                </span>
+                            </Button>
+                            {activeTag !== '' && tags.length === 0 && (
                                 <Button
                                     size="sm"
                                     variant="secondary"
@@ -576,13 +1088,92 @@ export default function QueriesIndex({
                                 </Button>
                             )}
                         </div>
-                        <Button asChild size="sm">
-                            <Link href={queries.create()}>
-                                <Plus className="size-4" />
-                                {t('queries.create')}
-                            </Link>
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setSaveViewOpen(true)}
+                            >
+                                <BookmarkPlus className="size-4" />
+                                {t('queries.saveView')}
+                            </Button>
+                            <Button asChild size="sm">
+                                <Link href={queries.create()}>
+                                    <Plus className="size-4" />
+                                    {t('queries.create')}
+                                </Link>
+                            </Button>
+                        </div>
                     </div>
+
+                    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b bg-muted/20 px-5 py-2.5 text-xs text-muted-foreground">
+                        <span>
+                            {t('queries.totalExecutions')}:{' '}
+                            <strong className="text-foreground">
+                                {formatNumber(usage.total_executions)}
+                            </strong>
+                        </span>
+                        <span>
+                            {t('queries.globalSuccessRate')}:{' '}
+                            <strong className="text-foreground">
+                                {usage.success_rate === null
+                                    ? '—'
+                                    : `${formatNumber(usage.success_rate)} %`}
+                            </strong>
+                        </span>
+                        <span>
+                            {t('queries.lastExecution')}:{' '}
+                            <strong className="text-foreground">
+                                {usage.last_executed_at
+                                    ? formatDate(usage.last_executed_at, {
+                                          dateStyle: 'medium',
+                                          timeStyle: 'short',
+                                      })
+                                    : t('queries.neverExecuted')}
+                            </strong>
+                        </span>
+                    </div>
+
+                    {savedViews.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-2 border-b px-5 py-3">
+                            <span className="mr-1 text-xs font-medium text-muted-foreground">
+                                {t('queries.savedViews')}
+                            </span>
+                            {savedViews.map((view) => (
+                                <div
+                                    key={view.id}
+                                    className="inline-flex overflow-hidden rounded-md border"
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={() => applySavedView(view)}
+                                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs hover:bg-accent"
+                                    >
+                                        {view.name}
+                                        {view.is_default && (
+                                            <Badge
+                                                variant="secondary"
+                                                className="px-1 py-0 text-[9px]"
+                                            >
+                                                {t('common.default')}
+                                            </Badge>
+                                        )}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => deleteSavedView(view)}
+                                        className="border-l px-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                        aria-label={t('queries.deleteView', {
+                                            name: view.name,
+                                        })}
+                                    >
+                                        <X className="size-3" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
 
                     <div className="flex flex-wrap gap-2 border-b px-5 py-3">
                         {scopeLinks.map((item) => (
@@ -612,7 +1203,8 @@ export default function QueriesIndex({
                             router.visit(queries.show(query.id))
                         }
                         empty={
-                            queryPage.total === 0 && initialSearch === '' ? (
+                            queryPage.total === 0 &&
+                            !hasActiveLibraryFilters ? (
                                 <div className="space-y-3">
                                     <p>{t('queries.emptyInitial')}</p>
                                     <Button asChild size="sm" variant="outline">
@@ -646,7 +1238,12 @@ export default function QueriesIndex({
                                 disabled={queryPage.prev_page_url === null}
                                 onClick={() => {
                                     if (queryPage.prev_page_url !== null) {
-                                        router.visit(queryPage.prev_page_url, {
+                                        const url = new URL(
+                                            queryPage.prev_page_url,
+                                            window.location.origin,
+                                        );
+                                        url.searchParams.set('view', 'none');
+                                        router.visit(url.toString(), {
                                             only: ['queries'],
                                             preserveState: true,
                                             preserveScroll: true,
@@ -666,7 +1263,12 @@ export default function QueriesIndex({
                                 disabled={queryPage.next_page_url === null}
                                 onClick={() => {
                                     if (queryPage.next_page_url !== null) {
-                                        router.visit(queryPage.next_page_url, {
+                                        const url = new URL(
+                                            queryPage.next_page_url,
+                                            window.location.origin,
+                                        );
+                                        url.searchParams.set('view', 'none');
+                                        router.visit(url.toString(), {
                                             only: ['queries'],
                                             preserveState: true,
                                             preserveScroll: true,
@@ -680,6 +1282,12 @@ export default function QueriesIndex({
                     </div>
                 </div>
             </div>
+
+            <SaveViewDialog
+                open={saveViewOpen}
+                onOpenChange={setSaveViewOpen}
+                filters={currentFilters}
+            />
         </>
     );
 }

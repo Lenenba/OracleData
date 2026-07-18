@@ -26,6 +26,9 @@ type Stats = {
     myQueries: number;
     sharedQueries: number;
     activeTenants: number;
+    executionsThisMonth: number;
+    successRate: number;
+    averageDurationMs: number;
 };
 
 type DomainSlice = {
@@ -292,7 +295,7 @@ export default function Dashboard({
     recentQueries,
     tenants,
 }: DashboardProps) {
-    const { t } = useI18n();
+    const { t, formatNumber } = useI18n();
     const thisWeek = queriesPerWeek.at(-1) ?? 0;
     const previousWeek = queriesPerWeek.at(-2) ?? 0;
     const weeklyTrend =
@@ -348,6 +351,24 @@ export default function Dashboard({
                             label={t('connections.title')}
                             value={stats.activeTenants}
                             caption={t('connections.activeCaption')}
+                        />
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-3">
+                        <StatCard
+                            label={t('dashboard.executionsThisMonth')}
+                            value={formatNumber(stats.executionsThisMonth)}
+                            caption={t('dashboard.executionsCaption')}
+                        />
+                        <StatCard
+                            label={t('dashboard.successRate')}
+                            value={`${formatNumber(stats.successRate)} %`}
+                            caption={t('dashboard.successCaption')}
+                        />
+                        <StatCard
+                            label={t('dashboard.averageDuration')}
+                            value={`${formatNumber(stats.averageDurationMs)} ms`}
+                            caption={t('dashboard.averageDurationCaption')}
                         />
                     </div>
 

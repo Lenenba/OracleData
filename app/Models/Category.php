@@ -46,9 +46,14 @@ class Category extends Model
     public function nameFor(string $locale): string
     {
         $translations = $this->translations->keyBy('locale');
+        $localized = $translations->get($locale);
 
-        return $translations->get($locale)?->name
-            ?? $translations->get('fr')?->name
-            ?? $this->slug;
+        if ($localized !== null) {
+            return $localized->name;
+        }
+
+        $french = $translations->get('fr');
+
+        return $french !== null ? $french->name : $this->slug;
     }
 }

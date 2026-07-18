@@ -149,7 +149,7 @@ Dernière mise à jour : 17 juillet 2026.
 | 1 | Stabilisation et sécurité immédiate | **Fait — 17 juillet 2026** |
 | 2 | Fondation multilingue FR/EN/ES | **En cours — 17 juillet 2026** |
 | 3 | Tenants personnels, onboarding et contrôle d'accès | **En cours — fondation livrée le 17 juillet 2026** |
-| 4 | Bibliothèque organisée | **En cours — 17 juillet 2026** |
+| 4 | Bibliothèque organisée | **Fait — 17 juillet 2026** |
 | 5 | Partage ciblé et collaboration | À faire |
 | 6 | Gouvernance et templates officiels | À faire |
 | 7 | Couche sémantique Oracle | À faire |
@@ -184,7 +184,7 @@ Résultat de l'étape 1 :
 - journalisation structurée des appels Oracle et requêtes HTTP lentes ;
 - migrations de stabilisation locales appliquées et `test@example.com` promu super-administrateur ;
 - migration multi-tenant prête, avec arrêt sécurisé si les tenants historiques n'ont pas de propriétaire non ambigu ;
-- 227 tests et 1028 assertions validés ;
+- validation cumulative actuelle : 318 tests et 1 510 assertions réussis à l'issue de l'étape 4 ;
 - PHPStan, ESLint, TypeScript et build de production validés.
 
 Chantier parallèle restant : **Étape 2 — finaliser la fondation multilingue FR/EN/ES**.
@@ -213,11 +213,21 @@ Progression de l'étape 3 :
 Progression de l'étape 4 :
 
 - [x] créer `query_executions` et les agrégats atomiques sur `queries` — livré le 17 juillet 2026 : statuts `succeeded/failed` (asynchrone réservé à l'étape 9), tenant et connexion de l'exécutant réel, historique conservé après suppression de la requête, previews exclus ;
-- [ ] créer catégories et tags traduisibles ;
-- [ ] créer favoris et épinglage ;
-- [ ] ajouter filtres, tris et statistiques à la bibliothèque ;
-- [ ] créer les vues enregistrées ;
-- [ ] optimiser le dashboard.
+- [x] créer catégories et tags traduisibles — catégories et tags officiels FR/EN/ES avec repli français, tags libres réutilisables, sélecteurs create/edit, badges, filtres et console super-admin ;
+- [x] créer favoris et épinglage — préférences strictement personnelles, priorité des épingles, mutations optimistes et rollback frontend en cas d'échec ; ce comportement React est implémenté mais reste à couvrir par un test composant ou E2E dédié ;
+- [x] ajouter filtres, tris et statistiques à la bibliothèque — recherche nom/description/propriétaire/tags, filtres catégorie/tag/favoris/épingles, six tris serveur et agrégats d'exécution ;
+- [x] créer les vues enregistrées — filtres nommés par utilisateur, vue par défaut, validation par liste blanche, application et suppression depuis la bibliothèque ;
+- [x] optimiser le dashboard — compteurs, huit semaines et domaines agrégés en SQL, colonnes récentes limitées et métriques mensuelles par utilisateur exécutant.
+
+Résultat de l'étape 4 :
+
+- nouvelles tables `tag_translations`, `query_user_preferences` et `saved_query_views`, appliquées localement en batch 5 avec clés étrangères, contraintes d'unicité, index et migrations réversibles ;
+- administration unifiée des catégories et tags réservée au `super_admin`, sans suppression des requêtes lors du retrait d'une taxonomie ;
+- catégorie et tags conservés lors du clonage, localisés dans la bibliothèque et la page de détail, et modifiables dans le query builder ;
+- favoris et épingles isolés par utilisateur, y compris pour une requête partagée, sans élargir les droits sur sa définition ;
+- filtres conservés dans l'URL et vues enregistrées cloisonnées par propriétaire avec refus IDOR en `404` ;
+- statistiques de bibliothèque fondées sur les agrégats atomiques et statistiques du dashboard fondées sur l'utilisateur qui a réellement exécuté la requête ; le test anti-N+1 maintient le chargement du dashboard à dix requêtes SQL au plus avec cinquante requêtes accessibles ;
+- 318 tests et 1 510 assertions réussis ; Pint, PHPStan, ESLint, Prettier, TypeScript et build Vite de production validés.
 
 Fonctionnalités couvertes :
 
@@ -257,9 +267,9 @@ Au moment de l'audit :
 
 ## 3. Principaux risques de performance
 
-### 3.1 Bibliothèque non paginée
+### 3.1 Bibliothèque non paginée — corrigé le 17 juillet 2026
 
-La bibliothèque charge actuellement toutes les requêtes accessibles avec `get()`. Avec plusieurs centaines ou milliers de requêtes, cela augmentera le temps SQL, la mémoire Laravel, le payload Inertia et le nombre de lignes rendues par React.
+La bibliothèque charge désormais 25 requêtes par page, sélectionne seulement les colonnes utiles et applique recherche, filtres, tris, favoris et épinglage côté serveur. Les paramètres sont conservés dans l'URL et la recherche React est différée de 350 ms.
 
 Recommandations :
 
@@ -303,9 +313,9 @@ Recommandations :
 - chargement des sous-tableaux Oracle uniquement à leur ouverture ;
 - limite maximale de lignes renvoyées au navigateur.
 
-### 3.5 Dashboard
+### 3.5 Dashboard — corrigé le 17 juillet 2026
 
-Certaines statistiques sont calculées en chargeant des collections complètes en PHP.
+Les compteurs de bibliothèque et les huit semaines sont regroupés dans une agrégation SQL portable. La répartition par domaine utilise l'extraction JSON adaptée à SQLite, MySQL/MariaDB ou PostgreSQL, puis un `GROUP BY` SQL. Les statistiques mensuelles d'exécution sont filtrées par l'utilisateur exécutant et les requêtes récentes ne sélectionnent que leurs colonnes d'affichage.
 
 Recommandations :
 
@@ -339,11 +349,14 @@ Une analyse agent peut réaliser plusieurs cycles LLM et plusieurs appels Oracle
 
 ### 3.8 Bundle frontend
 
-Mesures observées lors du build :
+Mesures observées lors du build de validation de l'étape 4 :
 
-- bundle principal : environ 160 Ko, soit 45,6 Ko gzip ;
-- chunk Wayfinder : environ 319 Ko, soit 100,5 Ko gzip ;
-- CSS : environ 103 Ko, soit 16,8 Ko gzip.
+- bundle principal : 226,7 Ko, soit 64,2 Ko gzip ;
+- bibliothèque de requêtes : 22,4 Ko, soit 7,1 Ko gzip ;
+- query builder chargé séparément : 52,3 Ko, soit 18,1 Ko gzip ;
+- console catégories/tags : 11,8 Ko, soit 3,7 Ko gzip ;
+- chunk Wayfinder : 318,8 Ko, soit 100,5 Ko gzip ;
+- CSS : 105,5 Ko, soit 17,2 Ko gzip.
 
 Le chunk Wayfinder doit être analysé : vérifier le tree-shaking, limiter les routes générées si possible et confirmer les dépendances réellement chargées au premier affichage. Les composants lourds du query builder peuvent aussi être chargés à la demande.
 
@@ -354,16 +367,26 @@ Le chunk Wayfinder doit être analysé : vérifier le tree-shaking, limiter les 
 ```text
 categories
 - id
-- name
 - slug unique
 - color
 - timestamps
 
+category_translations
+- category_id
+- locale: fr | en | es
+- name
+- description nullable
+
 tags
 - id
-- name
+- name, libellé source et repli des tags libres
 - slug unique
 - timestamps
+
+tag_translations
+- tag_id
+- locale: fr | en | es
+- name
 
 query_tag
 - query_id
@@ -381,7 +404,16 @@ Une requête possède une catégorie principale et plusieurs tags. Les tags ne d
 - filtres par catégorie et tag ;
 - recherche sur nom, description, propriétaire et tags ;
 - filtres partageables grâce à l'URL ;
-- administration des catégories selon les permissions.
+- administration des catégories et tags officiels selon les permissions.
+
+### État livré le 17 juillet 2026
+
+- la catégorie principale et les tags sont sélectionnables à la création et à la modification d'une requête ;
+- les catégories et tags officiels utilisent les tables de traduction avec repli `locale active -> fr -> slug ou nom source` ;
+- les tags libres restent possibles et sont normalisés par slug pour éviter les doublons ;
+- la recherche couvre aussi le propriétaire et les traductions de tags ;
+- le clonage conserve catégorie et tags, tandis que leur suppression administrative conserve toujours la requête ;
+- la console « Catégories et tags » est visible uniquement par le `super_admin` et les routes restent protégées par le Gate backend.
 
 ## 5. Favoris et épinglage
 
@@ -406,6 +438,27 @@ Comportement attendu :
 - action optimiste dans React ;
 - rollback et notification en cas d'échec ;
 - suppression automatique des préférences si la requête disparaît.
+
+### État livré le 17 juillet 2026
+
+`query_user_preferences` respecte la contrainte unique `(user_id, query_id)` et les suppressions en cascade. Le lecteur d'une requête partagée possède ses propres favoris et épingles, sans modifier la requête ni les préférences de l'auteur. Les actions React sont optimistes et restaurent l'état précédent avec une notification si le serveur refuse la mutation. La suite actuelle valide le contrat backend et le build frontend, mais pas encore ce rollback visuel par un test composant ou E2E.
+
+### Vues enregistrées
+
+```text
+saved_query_views
+- id
+- user_id
+- name
+- filters JSON
+- is_default
+- timestamps
+
+Contrainte unique : (user_id, name)
+Index : (user_id, is_default)
+```
+
+Seuls `scope`, `search`, `category`, `tag`, `sort`, `favorite` et `pinned` sont persistables. Les valeurs sont revalidées côté serveur, chaque mutation est filtrée par propriétaire et une vue étrangère retourne `404`. Une vue par défaut est appliquée à l'ouverture de la bibliothèque lorsque l'URL ne fournit aucun filtre explicite.
 
 ## 6. Historique des versions
 
@@ -500,6 +553,10 @@ Les compteurs doivent être mis à jour atomiquement. Pour une requête partagé
 - ressources et tenants les plus sollicités.
 
 Ne pas conserver les résultats Oracle complets par défaut. Stocker un code d'erreur normalisé plutôt qu'un message susceptible de contenir des données sensibles. Définir une durée de rétention.
+
+### État livré le 17 juillet 2026
+
+La livraison synchrone utilise les statuts `succeeded` et `failed`; les états de queue restent réservés à l'étape 9. Chaque exécution enregistre l'utilisateur, son tenant, sa connexion, la durée, le nombre de lignes et un code d'erreur normalisé. Les agrégats atomiques sont affichés dans la bibliothèque avec tri par utilisation ou dernière exécution. Le dashboard expose, pour le mois courant et pour le seul utilisateur exécutant, le nombre d'exécutions, le taux de succès et la durée moyenne.
 
 ## 8. Demandes de modification
 
@@ -1477,6 +1534,8 @@ Cette feuille de route remplace l'ordre indicatif des sections précédentes. Ch
 - Policies de propriété, audit sans secrets et super-administrateur sécurisé.
 
 ### Étape 4 — Bibliothèque organisée
+
+**Livrée et validée le 17 juillet 2026.**
 
 - catégories et tags traduisibles ;
 - favoris et épinglage ;
