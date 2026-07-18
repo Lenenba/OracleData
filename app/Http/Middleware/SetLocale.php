@@ -16,10 +16,10 @@ class SetLocale
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $supported = array_values(array_map(
+        $supported = array_map(
             fn (int|string $locale): string => (string) $locale,
             array_keys((array) config('app.supported_locales')),
-        ));
+        );
         $locale = $request->user()?->locale;
 
         if (! in_array($locale, $supported, true)) {

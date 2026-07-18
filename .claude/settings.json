@@ -18,7 +18,15 @@
       "PowerShell(php artisan test --compact tests/Feature/Fusion tests/Feature/OracleTenants 2>&1)",
       "PowerShell(php artisan test --compact tests/Feature/OnboardingTest.php 2>&1)",
       "PowerShell(php artisan test --compact tests/Feature/OnboardingTest.php tests/Feature/Fusion tests/Feature/OracleTenants 2>&1)",
-      "PowerShell(npx eslint resources/js/pages/oracle-tenants/index.tsx 2>&1)"
+      "PowerShell(npx eslint resources/js/pages/oracle-tenants/index.tsx 2>&1)",
+      "PowerShell(php artisan make:model AuditEvent -mf --no-interaction)",
+      "PowerShell(php artisan make:test --pest AuditTest --no-interaction)",
+      "PowerShell(php artisan test --compact tests/Feature/AuditTest.php 2>&1)",
+      "PowerShell(php artisan migrate --no-interaction 2>&1)",
+      "PowerShell(vendor/bin/phpstan analyse --no-progress --memory-limit=1G 2>&1)",
+      "PowerShell(php artisan test --compact tests/Feature/LocalizationTest.php 2>&1)",
+      "PowerShell(npm run build 2>&1)",
+      "PowerShell(php artisan make:test --pest Queries/QueryExecutionStatsTest --no-interaction)"
     ]
   }
 }

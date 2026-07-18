@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\CategoryController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
 use Illuminate\Auth\Middleware\RequirePassword;
@@ -24,6 +25,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('user-password.update');
 
     Route::inertia('settings/appearance', 'settings/appearance')->name('appearance.edit');
+
+    // Administration des catégories de la bibliothèque (super-admin uniquement).
+    Route::get('settings/categories', [CategoryController::class, 'index'])->name('categories.index');
+    Route::post('settings/categories', [CategoryController::class, 'store'])->name('categories.store');
+    Route::put('settings/categories/{category}', [CategoryController::class, 'update'])->name('categories.update');
+    Route::delete('settings/categories/{category}', [CategoryController::class, 'destroy'])->name('categories.destroy');
 });
 
 Route::get('.well-known/passkey-endpoints', function () {

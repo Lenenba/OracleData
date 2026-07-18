@@ -149,7 +149,7 @@ Dernière mise à jour : 17 juillet 2026.
 | 1 | Stabilisation et sécurité immédiate | **Fait — 17 juillet 2026** |
 | 2 | Fondation multilingue FR/EN/ES | **En cours — 17 juillet 2026** |
 | 3 | Tenants personnels, onboarding et contrôle d'accès | **En cours — fondation livrée le 17 juillet 2026** |
-| 4 | Bibliothèque organisée | À faire |
+| 4 | Bibliothèque organisée | **En cours — 17 juillet 2026** |
 | 5 | Partage ciblé et collaboration | À faire |
 | 6 | Gouvernance et templates officiels | À faire |
 | 7 | Couche sémantique Oracle | À faire |
@@ -191,13 +191,13 @@ Chantier parallèle restant : **Étape 2 — finaliser la fondation multilingue 
 
 Progression de l'étape 2 :
 
-- [ ] ajouter la locale et le fuseau horaire au profil utilisateur ;
-- [ ] résoudre la locale côté Laravel avec fallback sécurisé ;
-- [ ] créer les catalogues backend et frontend FR/EN/ES ;
-- [ ] ajouter le fournisseur React et le sélecteur de langue ;
-- [ ] traduire navigation, authentification, bibliothèque et erreurs prioritaires ;
-- [ ] ajouter glossaire, workflow XLIFF et tests de complétude ;
-- [ ] valider les tests, l'analyse statique et le build de production.
+- [x] ajouter la locale et le fuseau horaire au profil utilisateur ;
+- [x] résoudre la locale côté Laravel avec fallback sécurisé (préférence, cookie, navigateur, puis français) ;
+- [x] créer les catalogues backend et frontend FR/EN/ES ;
+- [x] ajouter le fournisseur React et le sélecteur de langue ;
+- [x] traduire navigation, authentification, bibliothèque et erreurs prioritaires ;
+- [ ] ajouter glossaire et workflow XLIFF (reportés tant qu'aucune équipe de traduction externe n'intervient) ; le test de parité des clés FR/EN/ES est en place ;
+- [x] valider les tests, l'analyse statique et le build de production.
 
 Progression de l'étape 3 :
 
@@ -208,7 +208,16 @@ Progression de l'étape 3 :
 - [x] supprimer le fallback d'exécution vers les credentials globaux ;
 - [x] couvrir onboarding, IDOR, connexions actives et requêtes partagées par des tests ;
 - [ ] appliquer la migration sur chaque environnement après sauvegarde et vérification du propriétaire legacy ;
-- [ ] ajouter le journal d'audit des mutations et exécutions sans secrets.
+- [x] ajouter le journal d'audit des mutations et exécutions sans secrets — livré le 17 juillet 2026 : table immuable `audit_events`, service `AuditRecorder` refusant les clés sensibles, événements `tenant.created/updated/deleted`, `onboarding.completed`, `query.executed` et `admin.super_admin_granted`.
+
+Progression de l'étape 4 :
+
+- [x] créer `query_executions` et les agrégats atomiques sur `queries` — livré le 17 juillet 2026 : statuts `succeeded/failed` (asynchrone réservé à l'étape 9), tenant et connexion de l'exécutant réel, historique conservé après suppression de la requête, previews exclus ;
+- [ ] créer catégories et tags traduisibles ;
+- [ ] créer favoris et épinglage ;
+- [ ] ajouter filtres, tris et statistiques à la bibliothèque ;
+- [ ] créer les vues enregistrées ;
+- [ ] optimiser le dashboard.
 
 Fonctionnalités couvertes :
 

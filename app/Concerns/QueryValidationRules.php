@@ -37,6 +37,9 @@ trait QueryValidationRules
             'parameters.offset' => ['nullable', 'integer', 'min:0'],
             'parameters.resource_key' => ['nullable', 'string'],
             'visibility' => ['required', 'in:private,shared'],
+            'category_id' => ['nullable', 'integer', Rule::exists('categories', 'id')],
+            'tags' => ['nullable', 'array', 'max:10'],
+            'tags.*' => ['string', 'max:50'],
         ];
     }
 }

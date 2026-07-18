@@ -4,14 +4,17 @@ import {
     Database,
     Eye,
     FileText,
+    FolderOpen,
     MoreHorizontal,
     Pencil,
     Plus,
     PlayCircle,
     Search,
     Server,
+    Tags,
     Trash2,
     User,
+    X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -29,10 +32,28 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { useI18n } from '@/i18n/i18n-context';
 import { readCsrfToken } from '@/lib/csrf';
 import queries from '@/routes/queries';
+
+type QueryCategory = {
+    slug: string;
+    name: string;
+    color: string | null;
+};
+
+type QueryTag = {
+    name: string;
+    slug: string;
+};
 
 type QueryRow = {
     id: number;
@@ -46,7 +67,16 @@ type QueryRow = {
     };
     visibility: 'private' | 'shared';
     owner: string;
+    category: QueryCategory | null;
+    tags: QueryTag[];
     can: { update: boolean; clone: boolean };
+};
+
+type CategoryOption = {
+    id: number;
+    slug: string;
+    name: string;
+    color: string | null;
 };
 
 type QueryScope = 'all' | 'mine' | 'shared';
@@ -218,11 +248,17 @@ export default function QueriesIndex({
     scope = 'all',
     summary,
     search: initialSearch = '',
+    category: activeCategory = '',
+    tag: activeTag = '',
+    categories = [],
 }: {
     queries: PaginatedQueries;
     scope?: QueryScope;
     summary: QuerySummary;
     search?: string;
+    category?: string;
+    tag?: string;
+    categories?: CategoryOption[];
 }) {
     const { t } = useI18n();
     const [visibilityOverrides, setVisibilityOverrides] = useState<
@@ -236,6 +272,26 @@ export default function QueriesIndex({
         }))
         .filter((query) => scope !== 'shared' || query.visibility === 'shared');
 
+    function applyFilters(next: { category?: string; tag?: string }) {
+        router.get(
+            queries.index({
+                query: {
+                    scope: scope === 'all' ? undefined : scope,
+                    search: search.trim() || undefined,
+                    category: (next.category ?? activeCategory) || undefined,
+                    tag: (next.tag ?? activeTag) || undefined,
+                },
+            }),
+            {},
+            {
+                only: ['queries', 'category', 'tag'],
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+            },
+        );
+    }
+
     useEffect(() => {
         if (search === initialSearch) {
             return;
@@ -247,6 +303,8 @@ export default function QueriesIndex({
                     query: {
                         scope: scope === 'all' ? undefined : scope,
                         search: search.trim() || undefined,
+                        category: activeCategory || undefined,
+                        tag: activeTag || undefined,
                     },
                 }),
                 {},
@@ -260,7 +318,7 @@ export default function QueriesIndex({
         }, 350);
 
         return () => window.clearTimeout(timer);
-    }, [initialSearch, scope, search]);
+    }, [initialSearch, scope, search, activeCategory, activeTag]);
 
     const heading =
         scope === 'shared'
@@ -355,6 +413,55 @@ export default function QueriesIndex({
                     <span className="text-muted-foreground">—</span>
                 ),
         },
+        {
+            key: 'category',
+            header: t('queries.category'),
+            icon: FolderOpen,
+            cell: (query) => (
+                <div className="space-y-1">
+                    {query.category ? (
+                        <span className="inline-flex items-center gap-1.5 text-sm">
+                            <span
+                                aria-hidden="true"
+                                className="inline-block size-2 rounded-full bg-muted-foreground"
+                                style={
+                                    query.category.color
+                                        ? {
+                                              backgroundColor:
+                                                  query.category.color,
+                                          }
+                                        : undefined
+                                }
+                            />
+                            {query.category.name}
+                        </span>
+                    ) : (
+                        <span className="text-muted-foreground">—</span>
+                    )}
+                    {query.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                            {query.tags.map((tag) => (
+                                <StopClick key={tag.slug}>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            applyFilters({ tag: tag.slug })
+                                        }
+                                    >
+                                        <Badge
+                                            variant="outline"
+                                            className="cursor-pointer text-[11px] hover:bg-accent"
+                                        >
+                                            {tag.name}
+                                        </Badge>
+                                    </button>
+                                </StopClick>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            ),
+        },
         ...(scope === 'shared'
             ? []
             : [
@@ -409,14 +516,65 @@ export default function QueriesIndex({
                 <div className="overflow-hidden rounded-xl border bg-card">
                     {/* Toolbar */}
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3.5">
-                        <div className="relative w-full max-w-xs">
-                            <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                                placeholder={t('queries.search')}
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                className="h-9 pl-9"
-                            />
+                        <div className="flex flex-wrap items-center gap-2">
+                            <div className="relative w-full max-w-xs">
+                                <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                    placeholder={t('queries.search')}
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    className="h-9 pl-9"
+                                />
+                            </div>
+                            {categories.length > 0 && (
+                                <Select
+                                    value={activeCategory || 'all'}
+                                    onValueChange={(value) =>
+                                        applyFilters({
+                                            category:
+                                                value === 'all' ? '' : value,
+                                        })
+                                    }
+                                >
+                                    <SelectTrigger
+                                        size="sm"
+                                        className="w-48"
+                                        aria-label={t('queries.category')}
+                                    >
+                                        <FolderOpen className="size-4 text-muted-foreground" />
+                                        <SelectValue
+                                            placeholder={t(
+                                                'queries.allCategories',
+                                            )}
+                                        />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">
+                                            {t('queries.allCategories')}
+                                        </SelectItem>
+                                        {categories.map((option) => (
+                                            <SelectItem
+                                                key={option.id}
+                                                value={option.slug}
+                                            >
+                                                {option.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                            {activeTag !== '' && (
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => applyFilters({ tag: '' })}
+                                    title={t('queries.clearTagFilter')}
+                                >
+                                    <Tags className="size-3.5" />
+                                    {activeTag}
+                                    <X className="size-3.5" />
+                                </Button>
+                            )}
                         </div>
                         <Button asChild size="sm">
                             <Link href={queries.create()}>
