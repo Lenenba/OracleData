@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\OracleExecutionPolicy;
 use App\Http\Requests\RunQueryRequest;
 use App\Http\Requests\StoreQueryRequest;
 use App\Models\Category;
@@ -406,6 +407,7 @@ class QueryController extends Controller
     public function edit(Request $request, Query $query, OracleResourceCatalog $catalog, FusionManager $fusion): Response
     {
         Gate::authorize('update', $query);
+        $query->loadMissing('queryTemplate');
         $fusion = $fusion->forUser($request->user());
 
         return Inertia::render('queries/edit', [
@@ -422,6 +424,10 @@ class QueryController extends Controller
                 'visibility' => $query->visibility,
                 'category_id' => $query->category_id,
                 'tags' => $query->tags->pluck('name')->values(),
+                'source_template' => $query->queryTemplate === null ? null : [
+                    'slug' => $query->queryTemplate->slug,
+                    'name' => $query->queryTemplate->name,
+                ],
             ],
             'resourceSuggestions' => $catalog->suggestions(),
             'tenants' => $fusion->available(),
@@ -524,9 +530,11 @@ class QueryController extends Controller
             'tenant_key' => $tenantKey,
             'oracle_tenant_id' => $fusion->tenantId($tenantKey),
             'mode' => $query->mode,
+            'execution_policy' => $query->execution_policy ?? OracleExecutionPolicy::BEST_EFFORT,
             'parameters' => $query->parameters,
             'visibility' => 'private',
             'category_id' => $query->category_id,
+            'query_template_id' => $query->query_template_id,
         ]);
 
         $copy->tags()->sync($query->tags()->pluck('tags.id'));
@@ -737,7 +745,12 @@ class QueryController extends Controller
         // Requête issue du wizard (resource_key présent) : rejouée via l'outil
         // garde-fou, ce qui ré-applique validation, projection et jointures.
         if (! empty($parameters['resource_key'])) {
-            return $this->runSingle($tenant, $this->toolQueryFromParameters($parameters), $tool);
+            return $this->runSingle(
+                $tenant,
+                $this->toolQueryFromParameters($parameters),
+                $tool,
+                $query->execution_policy ?? OracleExecutionPolicy::BEST_EFFORT,
+            );
         }
 
         try {
@@ -789,10 +802,15 @@ class QueryController extends Controller
      * @param  array<string, mixed>  $query
      * @return array<string, mixed>
      */
-    private function runSingle(string $tenant, array $query, OracleQueryTool $tool): array
+    private function runSingle(
+        string $tenant,
+        array $query,
+        OracleQueryTool $tool,
+        OracleExecutionPolicy $policy = OracleExecutionPolicy::BEST_EFFORT,
+    ): array
     {
         try {
-            $result = $tool->run($tenant, $query);
+            $result = $tool->run($tenant, $query, $policy);
         } catch (InvalidArgumentException|RuntimeException $e) {
             return $this->basePayload($tenant, 'single', $e->getMessage());
         }

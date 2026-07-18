@@ -6,6 +6,7 @@ use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\OracleTenantController;
 use App\Http\Controllers\QueryController;
 use App\Http\Controllers\QueryPreferenceController;
+use App\Http\Controllers\QueryTemplateController;
 use App\Http\Controllers\SavedQueryViewController;
 use App\Http\Middleware\EnsureOnboardingCompleted;
 use Illuminate\Support\Facades\Route;
@@ -41,6 +42,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('queries/shared', [QueryController::class, 'shared'])->name('queries.shared');
         Route::get('queries/create', [QueryController::class, 'create'])->name('queries.create');
         Route::post('queries', [QueryController::class, 'store'])->name('queries.store');
+
+        Route::get('query-templates', [QueryTemplateController::class, 'index'])->name('query-templates.index');
+        Route::get('query-templates/{queryTemplate}', [QueryTemplateController::class, 'show'])->name('query-templates.show');
+        Route::post('query-templates/{queryTemplate}/clone', [QueryTemplateController::class, 'duplicate'])->name('query-templates.clone');
+        Route::post('query-templates/{queryTemplate}/preview', [QueryTemplateController::class, 'preview'])
+            ->middleware('throttle:60,1,query-template-preview')
+            ->name('query-templates.preview');
+        Route::post('query-templates/{queryTemplate}/run', [QueryTemplateController::class, 'run'])
+            ->middleware('throttle:15,1,query-template-run')
+            ->name('query-templates.run');
+
         Route::get('queries/{query}/edit', [QueryController::class, 'edit'])->name('queries.edit');
         Route::put('queries/{query}', [QueryController::class, 'update'])->name('queries.update');
         Route::patch('queries/{query}/visibility', [QueryController::class, 'updateVisibility'])->name('queries.visibility');

@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
             OracleTenantSeeder::class,
             CategorySeeder::class,
             TagSeeder::class,
+            QueryTemplateSeeder::class,
             QuerySeeder::class,
         ]);
     }

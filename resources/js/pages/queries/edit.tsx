@@ -1,14 +1,17 @@
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
+import { CopyCheck } from 'lucide-react';
 import Heading from '@/components/heading';
 import { QueryBuilder } from '@/components/queries/query-builder';
 import type {
     QueryCategoryOption,
     QueryTagOption,
 } from '@/components/queries/query-builder';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useI18n } from '@/i18n/i18n-context';
 import { parseChildFields, parseCsv } from '@/lib/query-spec';
 import type { ResourceSuggestion } from '@/lib/query-spec';
 import queries from '@/routes/queries';
+import queryTemplates from '@/routes/query-templates';
 
 type EditQueryProps = {
     query: {
@@ -22,6 +25,7 @@ type EditQueryProps = {
         visibility: 'private' | 'shared';
         category_id: number | null;
         tags: string[];
+        source_template: { slug: string; name: string } | null;
     };
     resourceSuggestions: ResourceSuggestion[];
     tenants: Record<string, string>;
@@ -44,6 +48,7 @@ export default function EditQuery({
     const initialState = {
         queryId: query.id,
         name: query.name,
+        description: query.description,
         visibility: query.visibility,
         resourceKey:
             typeof params.resource_key === 'string'
@@ -71,6 +76,28 @@ export default function EditQuery({
                     title={t('queries.editTitle', { name: query.name })}
                     description={t('queries.editDescription')}
                 />
+
+                {query.source_template && (
+                    <Alert className="mb-6">
+                        <CopyCheck />
+                        <AlertTitle>
+                            {t('templates.personalCopyTitle')}
+                        </AlertTitle>
+                        <AlertDescription>
+                            {t('templates.personalCopyNotice', {
+                                name: query.source_template.name,
+                            })}{' '}
+                            <Link
+                                href={queryTemplates.show(
+                                    query.source_template.slug,
+                                )}
+                                className="font-medium underline underline-offset-4"
+                            >
+                                {t('templates.viewOriginal')}
+                            </Link>
+                        </AlertDescription>
+                    </Alert>
+                )}
 
                 <QueryBuilder
                     resourceSuggestions={resourceSuggestions}

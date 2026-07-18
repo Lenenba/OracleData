@@ -5,9 +5,11 @@ namespace App\Services;
 use App\Models\OracleTenant;
 use App\Models\Query;
 use App\Models\QueryExecution;
+use App\Models\QueryTemplate;
 use App\Models\User;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 
 /**
  * Journalise chaque exécution de requête et maintient atomiquement les
@@ -21,7 +23,7 @@ class QueryExecutionRecorder
     /**
      * @param  array<string, mixed>  $payload  Réponse normalisée de run() : `error` null = succès.
      */
-    public function record(
+    public function recordQueryRun(
         User $user,
         Query $query,
         string $tenantKey,
@@ -42,9 +44,12 @@ class QueryExecutionRecorder
 
             $execution = QueryExecution::query()->create([
                 'query_id' => $queryId,
+                'query_template_id' => null,
                 'user_id' => $user->id,
                 'oracle_tenant_id' => $tenant?->id,
                 'auth_connection_id' => $tenant === null ? null : $this->primaryConnectionId($tenant),
+                'source_type' => QueryExecution::SOURCE_SAVED_QUERY,
+                'purpose' => QueryExecution::PURPOSE_RUN,
                 'status' => $succeeded ? QueryExecution::STATUS_SUCCEEDED : QueryExecution::STATUS_FAILED,
                 'duration_ms' => max(0, $durationMs),
                 'rows_count' => count((array) ($payload['items'] ?? [])),
@@ -69,6 +74,68 @@ class QueryExecutionRecorder
 
             return $execution;
         });
+    }
+
+    /**
+     * Record a direct preview or run of a predefined template.
+     *
+     * Template actions never mutate the aggregates of a personal Query. A run
+     * of a cloned template is recorded through recordQueryRun() instead.
+     *
+     * @param  array<string, mixed>  $payload  Normalized execution response.
+     */
+    public function recordTemplateAction(
+        User $user,
+        QueryTemplate $template,
+        string $tenantKey,
+        array $payload,
+        CarbonInterface $startedAt,
+        int $durationMs,
+        string $purpose,
+    ): QueryExecution {
+        if (! in_array($purpose, [QueryExecution::PURPOSE_RUN, QueryExecution::PURPOSE_PREVIEW], true)) {
+            throw new InvalidArgumentException("Unknown query-template execution purpose [{$purpose}].");
+        }
+
+        $succeeded = ($payload['error'] ?? null) === null;
+        $finishedAt = now();
+
+        return DB::transaction(function () use ($user, $template, $tenantKey, $payload, $startedAt, $durationMs, $purpose, $succeeded, $finishedAt): QueryExecution {
+            $tenant = $this->resolveTenant($user, $tenantKey);
+
+            return QueryExecution::query()->create([
+                'query_id' => null,
+                'query_template_id' => $template->id,
+                'user_id' => $user->id,
+                'oracle_tenant_id' => $tenant?->id,
+                'auth_connection_id' => $tenant === null ? null : $this->primaryConnectionId($tenant),
+                'source_type' => QueryExecution::SOURCE_QUERY_TEMPLATE,
+                'purpose' => $purpose,
+                'status' => $succeeded ? QueryExecution::STATUS_SUCCEEDED : QueryExecution::STATUS_FAILED,
+                'duration_ms' => max(0, $durationMs),
+                'rows_count' => count((array) ($payload['items'] ?? [])),
+                'error_code' => $succeeded ? null : 'oracle_error',
+                'started_at' => $startedAt,
+                'finished_at' => $finishedAt,
+            ]);
+        });
+    }
+
+    /**
+     * Backward-compatible alias while existing controllers migrate to the
+     * explicit recordQueryRun() entry point.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public function record(
+        User $user,
+        Query $query,
+        string $tenantKey,
+        array $payload,
+        CarbonInterface $startedAt,
+        int $durationMs,
+    ): QueryExecution {
+        return $this->recordQueryRun($user, $query, $tenantKey, $payload, $startedAt, $durationMs);
     }
 
     private function resolveTenant(User $user, string $tenantKey): ?OracleTenant

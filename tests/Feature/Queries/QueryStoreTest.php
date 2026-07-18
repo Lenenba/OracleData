@@ -34,6 +34,7 @@ test('an authenticated user can store a query', function () {
     $query = Query::sole();
     expect($query->user_id)->toBe($user->id)
         ->and($query->name)->toBe('Liste des employés')
+        ->and($query->description)->toBe('Tous les workers HCM')
         ->and($query->tenant_key)->toBe('client_x')
         ->and($query->oracle_tenant_id)->toBe($tenant->id)
         ->and($query->parameters)->toBe(['limit' => 25])

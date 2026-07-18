@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\OracleExecutionPolicy;
 use Database\Factories\QueryFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Collection;
@@ -21,9 +22,11 @@ use Illuminate\Support\Carbon;
  * @property string|null $tenant_key
  * @property int|null $oracle_tenant_id
  * @property string $mode
+ * @property OracleExecutionPolicy $execution_policy
  * @property array<string, mixed>|null $parameters
  * @property string $visibility
  * @property int|null $category_id
+ * @property int|null $query_template_id
  * @property int $execution_count
  * @property int $successful_execution_count
  * @property Carbon|null $last_executed_at
@@ -34,10 +37,11 @@ use Illuminate\Support\Carbon;
  * @property-read OracleTenant|null $oracleTenant
  * @property-read Collection<int, QueryExecution> $executions
  * @property-read Category|null $category
+ * @property-read QueryTemplate|null $queryTemplate
  * @property-read Collection<int, Tag> $tags
  * @property-read Collection<int, QueryUserPreference> $preferences
  */
-#[Fillable(['name', 'description', 'resource_path', 'tenant_key', 'oracle_tenant_id', 'mode', 'parameters', 'visibility', 'category_id'])]
+#[Fillable(['name', 'description', 'resource_path', 'tenant_key', 'oracle_tenant_id', 'mode', 'execution_policy', 'parameters', 'visibility', 'category_id', 'query_template_id'])]
 class Query extends Model
 {
     /** @use HasFactory<QueryFactory> */
@@ -52,6 +56,7 @@ class Query extends Model
     {
         return [
             'parameters' => 'array',
+            'execution_policy' => OracleExecutionPolicy::class,
             'execution_count' => 'integer',
             'successful_execution_count' => 'integer',
             'last_executed_at' => 'datetime',
@@ -97,6 +102,16 @@ class Query extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
+    }
+
+    /**
+     * The predefined template from which this independent query was created.
+     *
+     * @return BelongsTo<QueryTemplate, $this>
+     */
+    public function queryTemplate(): BelongsTo
+    {
+        return $this->belongsTo(QueryTemplate::class);
     }
 
     /**

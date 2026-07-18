@@ -70,7 +70,10 @@ test('shared menu route opens the shared query scope', function () {
     $me = User::factory()->create();
     $other = User::factory()->create();
 
-    Query::factory()->for($other)->shared()->create(['name' => 'Shared library item']);
+    Query::factory()->for($other)->shared()->create([
+        'name' => 'Shared library item',
+        'description' => 'À utiliser pour le contrôle mensuel des fournisseurs',
+    ]);
     Query::factory()->for($me)->private()->create(['name' => 'Mine private']);
 
     $this->actingAs($me)
@@ -79,7 +82,8 @@ test('shared menu route opens the shared query scope', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->where('scope', 'shared')
             ->has('queries.data', 1)
-            ->where('queries.data.0.name', 'Shared library item'));
+            ->where('queries.data.0.name', 'Shared library item')
+            ->where('queries.data.0.description', 'À utiliser pour le contrôle mensuel des fournisseurs'));
 });
 
 test('the library is paginated and searchable on the server', function () {

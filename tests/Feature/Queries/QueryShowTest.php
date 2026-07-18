@@ -39,12 +39,14 @@ test('a shared query is shown with the readers tenant options', function () {
     ]);
     $query = Query::factory()->for($owner)->shared()->create([
         'tenant_key' => 'owner_tenant',
+        'description' => 'Factures fournisseurs à contrôler chaque mois',
     ]);
 
     $this->actingAs($reader)
         ->get(route('queries.show', $query))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
+            ->where('query.description', 'Factures fournisseurs à contrôler chaque mois')
             ->where('defaultTenant', 'reader_tenant')
             ->where('tenants', ['reader_tenant' => 'Reader tenant'])
         );
