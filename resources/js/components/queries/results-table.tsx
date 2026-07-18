@@ -49,7 +49,14 @@ function formatScalar(value: unknown): string {
     return String(value);
 }
 
-function Cell({ value }: { value: unknown }) {
+function Cell({
+    value,
+    childColumns,
+}: {
+    value: unknown;
+    /** Projection des colonnes de ce sous-tableau enfant, le cas échéant. */
+    childColumns?: string[];
+}) {
     const nested = childRows(value);
 
     if (nested !== null) {
@@ -63,7 +70,14 @@ function Cell({ value }: { value: unknown }) {
                     {nested.length} élément(s)
                 </summary>
                 <div className="mt-2">
-                    <ResultsTable items={nested} />
+                    <ResultsTable
+                        items={nested}
+                        columns={
+                            childColumns && childColumns.length > 0
+                                ? childColumns
+                                : undefined
+                        }
+                    />
                 </div>
             </details>
         );
@@ -117,6 +131,8 @@ type ResultsTableProps = {
     items: Row[];
     /** Ordre de colonnes imposé (mode agent) ; sinon déduit des clés. */
     columns?: string[];
+    /** Colonnes visibles par sous-tableau enfant (projection client). */
+    childColumns?: Record<string, string[]>;
     /** Afficher les contrôles de recherche et d'export. */
     showControls?: boolean;
 };
@@ -128,6 +144,7 @@ type ResultsTableProps = {
 export function ResultsTable({
     items,
     columns,
+    childColumns,
     showControls = true,
 }: ResultsTableProps) {
     const resolvedColumns = useMemo(
@@ -202,9 +219,14 @@ export function ResultsTable({
                 headerClassName: 'cursor-pointer',
                 verticalAlign: 'top',
                 onHeaderClick: () => toggleSort(column),
-                cell: (item) => <Cell value={item[column]} />,
+                cell: (item) => (
+                    <Cell
+                        value={item[column]}
+                        childColumns={childColumns?.[column]}
+                    />
+                ),
             })),
-        [resolvedColumns, sortCol, sortDir, toggleSort],
+        [resolvedColumns, sortCol, sortDir, toggleSort, childColumns],
     );
 
     return (

@@ -8,6 +8,19 @@ use Illuminate\Database\Seeder;
 class OracleTenantSeeder extends Seeder
 {
     /**
+     * Comptes de démonstration locaux — les seuls à recevoir le tenant seedé.
+     * On ne touche jamais aux comptes réels (leur tenant par défaut vient de
+     * l'onboarding et ne doit pas être écrasé).
+     *
+     * @var list<string>
+     */
+    private const array DEMO_EMAILS = [
+        'test@example.com',
+        'analyste@oracledata.test',
+        'finance@oracledata.test',
+    ];
+
+    /**
      * Give each demo account its own connection, even when local credentials
      * happen to point at the same Oracle development environment.
      */
@@ -16,7 +29,7 @@ class OracleTenantSeeder extends Seeder
         $key = (string) config('fusion.default', 'client_x');
         $config = (array) config("fusion.tenants.{$key}", []);
 
-        User::query()->each(function (User $user) use ($key, $config): void {
+        User::query()->whereIn('email', self::DEMO_EMAILS)->each(function (User $user) use ($key, $config): void {
             $tenant = $user->oracleTenants()->updateOrCreate(
                 ['key' => $key],
                 [

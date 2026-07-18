@@ -2,9 +2,12 @@
 
 namespace Database\Seeders;
 
+use App\Models\Category;
 use App\Models\Query;
+use App\Models\Tag;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Arr;
 
 class QuerySeeder extends Seeder
 {
@@ -31,6 +34,8 @@ class QuerySeeder extends Seeder
                 'limit' => 25,
             ],
             'visibility' => 'shared',
+            'category_slug' => 'achats',
+            'tags' => ['mensuel', 'tableau-de-bord'],
         ]);
 
         $this->upsertQuery($owner, [
@@ -50,6 +55,8 @@ class QuerySeeder extends Seeder
                 'limit' => 50,
             ],
             'visibility' => 'private',
+            'category_slug' => 'fournisseurs',
+            'tags' => ['audit'],
         ]);
 
         $this->upsertQuery($analyst, [
@@ -81,6 +88,8 @@ class QuerySeeder extends Seeder
                 'limit' => 25,
             ],
             'visibility' => 'shared',
+            'category_slug' => 'finance',
+            'tags' => ['mensuel', 'reglementaire'],
         ]);
 
         $this->upsertQuery($finance, [
@@ -105,6 +114,8 @@ class QuerySeeder extends Seeder
                 'limit' => 25,
             ],
             'visibility' => 'private',
+            'category_slug' => 'ressources-humaines',
+            'tags' => ['annuel'],
         ]);
     }
 
@@ -113,17 +124,32 @@ class QuerySeeder extends Seeder
      */
     private function upsertQuery(User $user, array $attributes): void
     {
+        $categorySlug = Arr::pull($attributes, 'category_slug');
+        /** @var list<string> $tagSlugs */
+        $tagSlugs = (array) Arr::pull($attributes, 'tags', []);
+
         $tenantKey = (string) ($attributes['tenant_key'] ?? '');
         $attributes['oracle_tenant_id'] = $user->oracleTenants()
             ->where('key', $tenantKey)
             ->value('id');
 
-        Query::query()->updateOrCreate(
+        if ($categorySlug !== null) {
+            $attributes['category_id'] = Category::query()
+                ->where('slug', $categorySlug)
+                ->value('id');
+        }
+
+        $query = Query::query()->updateOrCreate(
             [
                 'user_id' => $user->id,
                 'name' => $attributes['name'],
             ],
             $attributes,
         );
+
+        if ($tagSlugs !== []) {
+            $tagIds = Tag::query()->whereIn('slug', $tagSlugs)->pluck('id');
+            $query->tags()->sync($tagIds);
+        }
     }
 }

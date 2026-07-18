@@ -43,6 +43,15 @@ class FusionManager
     }
 
     /**
+     * Identifier of the user this resolver is scoped to — explicit
+     * (`forUser`) or the authenticated user, null for guests.
+     */
+    public function userId(): ?int
+    {
+        return $this->currentUserId();
+    }
+
+    /**
      * @throws InvalidArgumentException when the environment is not owned,
      *                                  active and backed by a verified connection
      */

@@ -5,12 +5,24 @@ import {
     Link2,
     Plus,
     RefreshCcw,
+    Search,
     SortAsc,
     Table2,
     X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -20,6 +32,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { Spinner } from '@/components/ui/spinner';
+import { useResourceFields } from '@/hooks/use-resource-fields';
 import { useI18n } from '@/i18n/i18n-context';
 import {
     FILTER_OPERATORS,
@@ -73,6 +87,203 @@ function FieldPill({
             {variant === 'join' && <Link2 className="size-3 opacity-60" />}
             {label}
         </button>
+    );
+}
+
+// ─── Liste de champs avec recherche ──────────────────────────────────────────
+
+/**
+ * Sélection de colonnes compacte : seules les colonnes choisies restent dans
+ * le panneau (cliquer = retirer) ; la liste complète découverte sur le tenant,
+ * avec recherche, vit dans une boîte de dialogue.
+ */
+function FieldPickList({
+    fields,
+    loading,
+    source,
+    selected,
+    onToggle,
+    onClear,
+    variant,
+    title,
+    emptyHint,
+}: {
+    fields: string[];
+    loading: boolean;
+    source: 'live' | 'catalog';
+    selected: string[];
+    onToggle: (field: string) => void;
+    onClear: () => void;
+    variant: 'field' | 'child' | 'join';
+    title: string;
+    emptyHint: string;
+}) {
+    const [query, setQuery] = useState('');
+    // Une sélection enregistrée reste visible même hors liste découverte.
+    const all = useMemo(
+        () => Array.from(new Set([...fields, ...selected])),
+        [fields, selected],
+    );
+    const needle = query.trim().toLowerCase();
+    const visible =
+        needle === ''
+            ? all
+            : all.filter((f) => f.toLowerCase().includes(needle));
+
+    return (
+        <div className="flex flex-col gap-2">
+            {selected.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                    {selected.map((f) => (
+                        <FieldPill
+                            key={f}
+                            label={f}
+                            checked
+                            onClick={() => onToggle(f)}
+                            variant={variant}
+                        />
+                    ))}
+                </div>
+            ) : (
+                <p className="text-xs text-muted-foreground italic">
+                    {emptyHint}
+                </p>
+            )}
+
+            <Dialog
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setQuery('');
+                    }
+                }}
+            >
+                <DialogTrigger asChild>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="self-start"
+                    >
+                        <Plus className="size-3.5" />
+                        Choisir les colonnes
+                    </Button>
+                </DialogTrigger>
+                <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>{title}</DialogTitle>
+                        <DialogDescription>
+                            {selected.length === 0
+                                ? emptyHint
+                                : `${selected.length} colonne(s) sélectionnée(s) — cliquez pour ajouter ou retirer.`}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="relative">
+                        <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            autoFocus
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder="Rechercher un champ…"
+                            className="h-9 pl-9"
+                        />
+                    </div>
+
+                    {loading && (
+                        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Spinner className="size-3" />
+                            Lecture des champs sur l'environnement…
+                        </p>
+                    )}
+
+                    <div className="min-h-0 flex-1 overflow-y-auto">
+                        <div className="flex flex-wrap gap-1.5 py-1">
+                            {visible.map((f) => (
+                                <FieldPill
+                                    key={f}
+                                    label={f}
+                                    checked={selected.includes(f)}
+                                    onClick={() => onToggle(f)}
+                                    variant={variant}
+                                />
+                            ))}
+                        </div>
+                        {visible.length === 0 && needle !== '' && (
+                            <p className="text-xs text-muted-foreground italic">
+                                Aucun champ ne correspond à «{query}».
+                            </p>
+                        )}
+                        {!loading && all.length === 0 && (
+                            <p className="text-xs text-muted-foreground italic">
+                                {emptyHint}
+                            </p>
+                        )}
+                    </div>
+
+                    {!loading && source === 'live' && (
+                        <p className="text-[11px] text-muted-foreground">
+                            Champs lus depuis l'environnement sélectionné.
+                        </p>
+                    )}
+
+                    <DialogFooter className="gap-2">
+                        {selected.length > 0 && (
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={onClear}
+                            >
+                                Tout effacer
+                            </Button>
+                        )}
+                        <DialogClose asChild>
+                            <Button type="button">Terminé</Button>
+                        </DialogClose>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </div>
+    );
+}
+
+/** FieldPickList qui sonde lui-même le tenant (enfants expand et jointures). */
+function DiscoveredFieldPick({
+    resourceKey,
+    tenant,
+    child,
+    fallback,
+    selected,
+    onToggle,
+    onClear,
+    variant,
+    title,
+    emptyHint,
+}: {
+    resourceKey: string;
+    tenant: string;
+    child: string | null;
+    fallback: string[];
+    selected: string[];
+    onToggle: (field: string) => void;
+    onClear: () => void;
+    variant: 'field' | 'child' | 'join';
+    title: string;
+    emptyHint: string;
+}) {
+    const discovery = useResourceFields(resourceKey, tenant, child, fallback);
+
+    return (
+        <FieldPickList
+            fields={discovery.fields}
+            loading={discovery.loading}
+            source={discovery.source}
+            selected={selected}
+            onToggle={onToggle}
+            onClear={onClear}
+            variant={variant}
+            title={title}
+            emptyHint={emptyHint}
+        />
     );
 }
 
@@ -325,7 +536,18 @@ export function QueryConfigPanel({
     onChangeResource: () => void;
 }) {
     const { t } = useI18n();
-    const allFields = resource.fields ?? [];
+    const parentDiscovery = useResourceFields(
+        resource.key,
+        tenant,
+        null,
+        resource.fields ?? [],
+    );
+    // Champs proposés aux filtres/tri : découverte tenant + sélections déjà
+    // enregistrées (une requête existante peut référencer un champ non sondé).
+    const allFields = useMemo(
+        () => Array.from(new Set([...parentDiscovery.fields, ...fields])),
+        [parentDiscovery.fields, fields],
+    );
     const childResources = useMemo(
         () => resource.child_resources ?? [],
         [resource.child_resources],
@@ -444,20 +666,17 @@ export function QueryConfigPanel({
                 badge={fields.length}
                 defaultOpen
             >
-                <div className="flex flex-wrap gap-2">
-                    {allFields.map((f) => (
-                        <FieldPill
-                            key={f}
-                            label={f}
-                            checked={fields.includes(f)}
-                            onClick={() => toggle(fields, f, setFields)}
-                            variant="field"
-                        />
-                    ))}
-                </div>
-                <p className="mt-2 text-xs text-muted-foreground">
-                    Sans sélection → toutes les colonnes sont renvoyées.
-                </p>
+                <FieldPickList
+                    fields={parentDiscovery.fields}
+                    loading={parentDiscovery.loading}
+                    source={parentDiscovery.source}
+                    selected={fields}
+                    onToggle={(f) => toggle(fields, f, setFields)}
+                    onClear={() => setFields([])}
+                    variant="field"
+                    title={`Colonnes de «${resource.label}»`}
+                    emptyHint="Sans sélection → toutes les colonnes sont renvoyées."
+                />
             </Collapsible>
 
             {/* ─ Données liées ─ */}
@@ -494,61 +713,38 @@ export function QueryConfigPanel({
                             {/* Sélection des champs de chaque enfant activé */}
                             {childResources
                                 .filter((c) => expand.includes(c))
-                                .map((c) => {
-                                    const knownFields =
-                                        childFieldsCatalog[c] ?? [];
-
-                                    return (
-                                        <div
-                                            key={c}
-                                            className="mb-3 rounded-lg border border-blue-200 bg-blue-50/40 p-3 dark:border-blue-800 dark:bg-blue-950/20"
-                                        >
-                                            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
-                                                <ChevronRight className="size-3.5" />
-                                                Colonnes de «{c}» à inclure
-                                            </p>
-                                            {knownFields.length > 0 ? (
-                                                <>
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        {knownFields.map(
-                                                            (f) => (
-                                                                <FieldPill
-                                                                    key={f}
-                                                                    label={f}
-                                                                    checked={(
-                                                                        childFields[
-                                                                            c
-                                                                        ] ?? []
-                                                                    ).includes(
-                                                                        f,
-                                                                    )}
-                                                                    onClick={() =>
-                                                                        toggleChildField(
-                                                                            c,
-                                                                            f,
-                                                                        )
-                                                                    }
-                                                                    variant="child"
-                                                                />
-                                                            ),
-                                                        )}
-                                                    </div>
-                                                    <p className="mt-1.5 text-[11px] text-muted-foreground">
-                                                        Sans sélection → tous
-                                                        les champs de l'enfant
-                                                        sont inclus.
-                                                    </p>
-                                                </>
-                                            ) : (
-                                                <p className="text-xs text-muted-foreground italic">
-                                                    Les champs disponibles pour
-                                                    «{c}» sont déterminés à
-                                                    l'exécution.
-                                                </p>
-                                            )}
-                                        </div>
-                                    );
-                                })}
+                                .map((c) => (
+                                    <div
+                                        key={c}
+                                        className="mb-3 rounded-lg border border-blue-200 bg-blue-50/40 p-3 dark:border-blue-800 dark:bg-blue-950/20"
+                                    >
+                                        <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
+                                            <ChevronRight className="size-3.5" />
+                                            Colonnes de «{c}» à inclure
+                                        </p>
+                                        <DiscoveredFieldPick
+                                            resourceKey={resource.key}
+                                            tenant={tenant}
+                                            child={c}
+                                            fallback={
+                                                childFieldsCatalog[c] ?? []
+                                            }
+                                            selected={childFields[c] ?? []}
+                                            onToggle={(f) =>
+                                                toggleChildField(c, f)
+                                            }
+                                            onClear={() =>
+                                                setChildFields({
+                                                    ...childFields,
+                                                    [c]: [],
+                                                })
+                                            }
+                                            variant="child"
+                                            title={`Colonnes de «${c}»`}
+                                            emptyHint="Sans sélection → tous les champs de l'enfant sont inclus."
+                                        />
+                                    </div>
+                                ))}
                         </div>
                     )}
 
@@ -582,8 +778,6 @@ export function QueryConfigPanel({
                                 .filter((r) => joins.includes(r.key))
                                 .map((r) => {
                                     const joinDef = joinKeysDefs[r.key];
-                                    const knownFields =
-                                        childFieldsCatalog[r.key] ?? [];
 
                                     return (
                                         <div
@@ -601,46 +795,30 @@ export function QueryConfigPanel({
                                                     </span>
                                                 )}
                                             </div>
-                                            {knownFields.length > 0 ? (
-                                                <>
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        {knownFields.map(
-                                                            (f) => (
-                                                                <FieldPill
-                                                                    key={f}
-                                                                    label={f}
-                                                                    checked={(
-                                                                        childFields[
-                                                                            r
-                                                                                .key
-                                                                        ] ?? []
-                                                                    ).includes(
-                                                                        f,
-                                                                    )}
-                                                                    onClick={() =>
-                                                                        toggleChildField(
-                                                                            r.key,
-                                                                            f,
-                                                                        )
-                                                                    }
-                                                                    variant="join"
-                                                                />
-                                                            ),
-                                                        )}
-                                                    </div>
-                                                    <p className="mt-1.5 text-[11px] text-muted-foreground">
-                                                        Sans sélection → tous
-                                                        les champs de la
-                                                        ressource liée sont
-                                                        inclus.
-                                                    </p>
-                                                </>
-                                            ) : (
-                                                <p className="text-xs text-muted-foreground italic">
-                                                    Champs déterminés à
-                                                    l'exécution.
-                                                </p>
-                                            )}
+                                            <DiscoveredFieldPick
+                                                resourceKey={r.key}
+                                                tenant={tenant}
+                                                child={null}
+                                                fallback={
+                                                    childFieldsCatalog[r.key] ??
+                                                    []
+                                                }
+                                                selected={
+                                                    childFields[r.key] ?? []
+                                                }
+                                                onToggle={(f) =>
+                                                    toggleChildField(r.key, f)
+                                                }
+                                                onClear={() =>
+                                                    setChildFields({
+                                                        ...childFields,
+                                                        [r.key]: [],
+                                                    })
+                                                }
+                                                variant="join"
+                                                title={`Colonnes de «${joinDef?.label ?? r.label}»`}
+                                                emptyHint="Sans sélection → tous les champs de la ressource liée sont inclus."
+                                            />
                                         </div>
                                     );
                                 })}

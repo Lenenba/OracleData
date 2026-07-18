@@ -17,6 +17,8 @@ class DatabaseSeeder extends Seeder
         $this->call([
             UserSeeder::class,
             OracleTenantSeeder::class,
+            CategorySeeder::class,
+            TagSeeder::class,
             QuerySeeder::class,
         ]);
     }

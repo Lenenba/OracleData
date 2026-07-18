@@ -63,6 +63,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->middleware('throttle:60,1')
             ->name('queries.direct-preview');
 
+        // Découverte des champs d'une ressource sur le tenant du lecteur (sonde
+        // limit=1, cachée). Compteur préfixé : sans lui, la signature throttle
+        // par utilisateur est partagée avec direct-preview et les previews
+        // rapides du builder feraient rejeter les sondes en 429.
+        Route::post('queries/resource-fields', [QueryController::class, 'resourceFields'])
+            ->middleware('throttle:60,1,resource-fields')
+            ->name('queries.resource-fields');
+
         Route::get('queries/{query}', [QueryController::class, 'show'])->name('queries.show');
     });
 });

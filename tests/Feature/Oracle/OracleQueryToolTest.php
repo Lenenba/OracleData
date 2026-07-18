@@ -539,3 +539,72 @@ test('no GET parameters are sent for the optional filters when omitted', functio
         return ! isset($query['q']) && ! isset($query['fields']) && ! isset($query['expand']) && ! isset($query['orderBy']);
     });
 });
+
+// ─── Champs découverts sur le tenant (hors catalogue) ────────────────────────
+
+test('a field discovered on the tenant but absent from the catalog is accepted', function () {
+    Http::fake(['*' => Http::response([
+        'items' => [['SupplierId' => 1, 'Supplier' => 'Acme', 'InactiveDate' => null, 'links' => []]],
+        'count' => 1,
+        'hasMore' => false,
+    ])]);
+
+    $result = app(OracleQueryTool::class)->run('client_x', [
+        'resource' => 'suppliers',
+        'fields' => ['Supplier', 'InactiveDate'],
+        'limit' => 5,
+    ]);
+
+    expect($result['items'])->toHaveCount(1)
+        ->and($result['params']['fields'])->toContain('InactiveDate');
+});
+
+test('a discovered field can be used for sorting and filtering too', function () {
+    Http::fake(['*' => Http::response([
+        'items' => [['SupplierId' => 1, 'InactiveDate' => '2024-01-01', 'links' => []]],
+        'count' => 1,
+        'hasMore' => false,
+    ])]);
+
+    $result = app(OracleQueryTool::class)->run('client_x', [
+        'resource' => 'suppliers',
+        'q' => "InactiveDate='2024-01-01'",
+        'orderBy' => 'InactiveDate:desc',
+        'limit' => 5,
+    ]);
+
+    expect($result['params']['orderBy'])->toBe('InactiveDate:desc');
+});
+
+test('a field unknown to both the catalog and the tenant is still rejected', function () {
+    Http::fake(['*' => Http::response([
+        'items' => [['SupplierId' => 1, 'links' => []]],
+        'count' => 1,
+        'hasMore' => false,
+    ])]);
+
+    app(OracleQueryTool::class)->run('client_x', [
+        'resource' => 'suppliers',
+        'fields' => ['TotallyInvented'],
+    ]);
+})->throws(InvalidArgumentException::class);
+
+test('a discovered child field outside the catalog is accepted', function () {
+    Http::fake(['*' => Http::response([
+        'items' => [[
+            'SupplierId' => 1,
+            'sites' => ['items' => [['SiteId' => 7, 'BrandNewSiteField' => 'x', 'links' => []]]],
+            'links' => [],
+        ]],
+        'count' => 1,
+        'hasMore' => false,
+    ])]);
+
+    $result = app(OracleQueryTool::class)->run('client_x', [
+        'resource' => 'suppliers',
+        'expand' => ['sites'],
+        'child_fields' => ['sites' => ['BrandNewSiteField']],
+    ]);
+
+    expect($result['items'])->toHaveCount(1);
+});
