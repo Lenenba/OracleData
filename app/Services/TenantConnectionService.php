@@ -15,6 +15,8 @@ use Illuminate\Validation\ValidationException;
  */
 class TenantConnectionService
 {
+    public function __construct(private AuditRecorder $audit) {}
+
     /**
      * @param  array<string, mixed>  $data
      */
@@ -77,8 +79,16 @@ class TenantConnectionService
                 'last_test_succeeded_at' => $testedAt,
             ]);
 
+            $this->audit->record($owner, 'tenant.created', $tenant, [
+                'tenant_key' => $tenant->key,
+                'label' => $tenant->label,
+                'host' => parse_url($tenant->base_url, PHP_URL_HOST),
+                'is_default' => $tenant->is_default,
+            ]);
+
             if ($completeOnboarding && ! $owner->hasCompletedOnboarding()) {
                 $owner->forceFill(['onboarding_completed_at' => $testedAt])->save();
+                $this->audit->record($owner, 'onboarding.completed', $owner);
             }
 
             return $tenant->load('authConnections');
@@ -179,6 +189,14 @@ class TenantConnectionService
                 }
             }
 
+            $this->audit->record($owner, 'tenant.updated', $tenant, [
+                'tenant_key' => $tenant->key,
+                'is_active' => $isActive,
+                'is_default' => $makeDefault,
+                'credentials_changed' => $credentialsChanged,
+                'verified' => $testedAt !== null,
+            ]);
+
             return $tenant->refresh()->load('authConnections');
         });
     }
@@ -199,6 +217,11 @@ class TenantConnectionService
 
             $wasDefault = $tenant->is_default;
             $tenant->delete();
+
+            $this->audit->record($owner, 'tenant.deleted', $tenant, [
+                'tenant_key' => $tenant->key,
+                'label' => $tenant->label,
+            ]);
 
             if ($wasDefault) {
                 $owner->oracleTenants()

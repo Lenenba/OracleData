@@ -4,11 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\RunQueryRequest;
 use App\Http\Requests\StoreQueryRequest;
+use App\Models\Category;
 use App\Models\Query;
+use App\Models\Tag;
+use App\Services\AuditRecorder;
 use App\Services\FusionManager;
 use App\Services\OracleQueryTool;
 use App\Services\OracleResourceCatalog;
 use App\Services\QueryAgent;
+use App\Services\QueryExecutionRecorder;
 use App\Services\QueryResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -40,10 +44,13 @@ class QueryController extends Controller
     public function index(Request $request, FusionManager $fusion): Response
     {
         $userId = $request->user()->id;
+        $locale = app()->getLocale();
         $fusion = $fusion->forUser($request->user());
         $scope = $request->string('scope')->toString();
         $scope = in_array($scope, ['all', 'mine', 'shared'], true) ? $scope : 'all';
         $search = trim($request->string('search')->toString());
+        $category = trim($request->string('category')->toString());
+        $tag = trim($request->string('tag')->toString());
 
         if (mb_strlen($search) > 100) {
             $search = mb_substr($search, 0, 100);
@@ -59,6 +66,7 @@ class QueryController extends Controller
                 'tenant_key',
                 'mode',
                 'visibility',
+                'category_id',
                 'updated_at',
             ])
             ->when($scope === 'all', fn (Builder $query) => $query
@@ -72,8 +80,16 @@ class QueryController extends Controller
             ->when($search !== '', fn (Builder $query) => $query
                 ->where(fn (Builder $query) => $query
                     ->where('name', 'like', "%{$search}%")
-                    ->orWhere('description', 'like', "%{$search}%")))
-            ->with('user:id,name')
+                    ->orWhere('description', 'like', "%{$search}%")
+                    ->orWhereHas('tags', fn (Builder $query) => $query
+                        ->where('name', 'like', "%{$search}%"))))
+            ->when($category !== '', fn (Builder $query) => $query
+                ->whereHas('category', fn (Builder $query) => $query
+                    ->where('slug', $category)))
+            ->when($tag !== '', fn (Builder $query) => $query
+                ->whereHas('tags', fn (Builder $query) => $query
+                    ->where('slug', $tag)))
+            ->with(['user:id,name', 'category.translations', 'tags:tags.id,name,slug'])
             ->orderByDesc('updated_at')
             ->orderByDesc('id')
             ->paginate(25)
@@ -92,6 +108,14 @@ class QueryController extends Controller
                 ],
                 'visibility' => $query->visibility,
                 'owner' => $query->user->name,
+                'category' => $query->category === null ? null : [
+                    'slug' => $query->category->slug,
+                    'name' => $query->category->nameFor($locale),
+                    'color' => $query->category->color,
+                ],
+                'tags' => $query->tags
+                    ->map(fn (Tag $tag): array => ['name' => $tag->name, 'slug' => $tag->slug])
+                    ->values(),
                 'can' => [
                     'update' => $query->user_id === $userId,
                     'clone' => true,
@@ -102,6 +126,9 @@ class QueryController extends Controller
             'queries' => $queries,
             'scope' => $scope,
             'search' => $search,
+            'category' => $category,
+            'tag' => $tag,
+            'categories' => $this->categoryOptions($locale),
             'summary' => [
                 'all' => Query::query()
                     ->where(fn (Builder $query) => $query
@@ -135,7 +162,29 @@ class QueryController extends Controller
             'resourceSuggestions' => $catalog->suggestions(),
             'tenants' => $fusion->available(),
             'defaultTenant' => $fusion->defaultKey(),
+            'categories' => $this->categoryOptions(app()->getLocale()),
         ]);
+    }
+
+    /**
+     * Categories available to classify a query, labelled in the given locale.
+     *
+     * @return list<array{id: int, slug: string, name: string, color: string|null}>
+     */
+    private function categoryOptions(string $locale): array
+    {
+        return Category::query()
+            ->with('translations')
+            ->get()
+            ->map(fn (Category $category): array => [
+                'id' => $category->id,
+                'slug' => $category->slug,
+                'name' => $category->nameFor($locale),
+                'color' => $category->color,
+            ])
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->all();
     }
 
     /**
@@ -144,6 +193,7 @@ class QueryController extends Controller
     public function store(StoreQueryRequest $request, FusionManager $fusion): RedirectResponse
     {
         $data = $request->validated();
+        $tags = Arr::pull($data, 'tags');
         $fusion = $fusion->forUser($request->user());
         $data['oracle_tenant_id'] = $fusion->tenantId($data['tenant_key']);
 
@@ -164,11 +214,31 @@ class QueryController extends Controller
             $data['parameters'] = $params;
         }
 
-        $request->user()->queries()->create($data);
+        $query = $request->user()->queries()->create($data);
+
+        if (is_array($tags)) {
+            $this->syncTags($query, $tags);
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Requête enregistrée.')]);
 
         return to_route('queries.index');
+    }
+
+    /**
+     * Attach free-form tag names, creating missing tags by normalised slug.
+     *
+     * @param  list<string>  $tags
+     */
+    private function syncTags(Query $query, array $tags): void
+    {
+        $query->tags()->sync(
+            (new Collection($tags))
+                ->filter(fn (string $name): bool => trim($name) !== '')
+                ->map(fn (string $name): int => Tag::findOrCreateByName($name)->id)
+                ->unique()
+                ->all(),
+        );
     }
 
     /**
@@ -191,12 +261,15 @@ class QueryController extends Controller
                 'mode' => $query->mode,
                 'parameters' => (object) ($query->parameters ?? []),
                 'visibility' => $query->visibility,
+                'category_id' => $query->category_id,
+                'tags' => $query->tags->pluck('name')->values(),
             ],
             'resourceSuggestions' => $catalog->suggestions(),
             'tenants' => $fusion->available(),
             'defaultTenant' => $fusion->has($query->tenant_key)
                 ? $query->tenant_key
                 : $fusion->defaultKey(),
+            'categories' => $this->categoryOptions(app()->getLocale()),
         ]);
     }
 
@@ -208,6 +281,7 @@ class QueryController extends Controller
         Gate::authorize('update', $query);
 
         $data = $request->validated();
+        $tags = Arr::pull($data, 'tags');
         $fusion = $fusion->forUser($request->user());
         $data['oracle_tenant_id'] = $fusion->tenantId($data['tenant_key']);
 
@@ -228,6 +302,10 @@ class QueryController extends Controller
         }
 
         $query->update($data);
+
+        if (is_array($tags)) {
+            $this->syncTags($query, $tags);
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Requête mise à jour.')]);
 
@@ -412,7 +490,7 @@ class QueryController extends Controller
     /**
      * Execute the query against the selected tenant and return the rows.
      */
-    public function run(RunQueryRequest $request, Query $query, FusionManager $fusion, QueryAgent $agent, OracleQueryTool $tool): JsonResponse
+    public function run(RunQueryRequest $request, Query $query, FusionManager $fusion, QueryAgent $agent, OracleQueryTool $tool, AuditRecorder $audit, QueryExecutionRecorder $executions): JsonResponse
     {
         Gate::authorize('view', $query);
         $fusion = $fusion->forUser($request->user());
@@ -423,8 +501,31 @@ class QueryController extends Controller
                 : null;
         $tenant = (string) ($request->validated()['tenant'] ?? $ownerPreferredTenant ?? $fusion->defaultKey());
 
+        $audit->record($request->user(), 'query.executed', $query, [
+            'tenant_key' => $tenant,
+            'mode' => $query->mode,
+        ]);
+
+        $startedAt = now();
+        $startedAtNs = hrtime(true);
+        $payload = $this->executeQuery($query, $tenant, $fusion, $agent, $tool);
+        $durationMs = (int) round((hrtime(true) - $startedAtNs) / 1_000_000);
+
+        $executions->record($request->user(), $query, $tenant, $payload, $startedAt, $durationMs);
+
+        return response()->json($payload);
+    }
+
+    /**
+     * Build the run payload for every execution mode through a single exit
+     * point, so duration and outcome can be recorded uniformly.
+     *
+     * @return array<string, mixed>
+     */
+    private function executeQuery(Query $query, string $tenant, FusionManager $fusion, QueryAgent $agent, OracleQueryTool $tool): array
+    {
         if ($query->mode === 'agent') {
-            return response()->json($this->runAgent($tenant, (string) ($query->description ?? ''), $agent));
+            return $this->runAgent($tenant, (string) ($query->description ?? ''), $agent);
         }
 
         $parameters = $query->parameters ?? [];
@@ -432,23 +533,23 @@ class QueryController extends Controller
         // Requête issue du wizard (resource_key présent) : rejouée via l'outil
         // garde-fou, ce qui ré-applique validation, projection et jointures.
         if (! empty($parameters['resource_key'])) {
-            return response()->json($this->runSingle($tenant, $this->toolQueryFromParameters($parameters), $tool));
+            return $this->runSingle($tenant, $this->toolQueryFromParameters($parameters), $tool);
         }
 
         try {
             $payload = $fusion->tenant($tenant)->get((string) $query->resource_path, $parameters);
         } catch (InvalidArgumentException|RuntimeException $e) {
-            return response()->json($this->basePayload($tenant, 'single', $e->getMessage()));
+            return $this->basePayload($tenant, 'single', $e->getMessage());
         }
 
         /** @var array<int, mixed> $items */
         $items = (array) OracleQueryTool::withoutLinks($payload['items'] ?? []);
 
-        return response()->json(array_replace($this->basePayload($tenant, 'single'), [
+        return array_replace($this->basePayload($tenant, 'single'), [
             'items' => $items,
             'count' => $payload['count'] ?? count($items),
             'hasMore' => $payload['hasMore'] ?? false,
-        ]));
+        ]);
     }
 
     /**
