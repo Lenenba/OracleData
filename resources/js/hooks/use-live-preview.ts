@@ -4,14 +4,19 @@ import { readCsrfToken } from '@/lib/csrf';
 import { readError } from '@/lib/query-spec';
 import queries from '@/routes/queries';
 
-/** Spécification sérialisable de l'aperçu live (payload direct-preview). */
+/**
+ * Spécification sérialisable de l'aperçu live (payload direct-preview).
+ *
+ * La sélection de colonnes (`fields`/`childFields`) est volontairement absente :
+ * elle ne change que la projection, appliquée côté client sur les lignes déjà
+ * reçues. Oracle n'est donc resollicité que pour un changement de données
+ * (ressource, tenant, filtre, tri, enfants, jointures, limite).
+ */
 export type LivePreviewSpec = {
     resourceKey: string | null;
     tenant: string;
-    fields: string[];
     expand: string[];
     joins: string[];
-    childFields: Record<string, string[]>;
     filterQ: string;
     orderBy: string;
     limit: number;
@@ -36,12 +41,16 @@ type Failure = { key: string; message: string };
 const DEBOUNCE_MS = 600;
 
 /**
- * Aperçu live du query builder : toute modification de la spec relance le
- * POST direct-preview ~600 ms après la dernière frappe. La requête en vol est
- * annulée (AbortController) et le dernier résultat réussi de la ressource
- * reste affiché pendant le rafraîchissement.
+ * Aperçu live du query builder. Aucun appel Oracle tant que `enabled` est faux :
+ * l'aperçu démarre au premier clic sur « Visualiser », puis toute modification
+ * de la spec (données uniquement) relance le POST direct-preview ~600 ms après
+ * la dernière frappe. La requête en vol est annulée (AbortController) et le
+ * dernier résultat réussi de la ressource reste affiché pendant le rafraîchissement.
  */
-export function useLivePreview(spec: LivePreviewSpec): LivePreview {
+export function useLivePreview(
+    spec: LivePreviewSpec,
+    enabled = true,
+): LivePreview {
     const [success, setSuccess] = useState<Success | null>(null);
     const [failure, setFailure] = useState<Failure | null>(null);
     const [refreshTick, setRefreshTick] = useState(0);
@@ -49,7 +58,7 @@ export function useLivePreview(spec: LivePreviewSpec): LivePreview {
     const abortRef = useRef<AbortController | null>(null);
 
     const specKey = JSON.stringify(spec);
-    const ready = spec.resourceKey !== null && spec.tenant !== '';
+    const ready = enabled && spec.resourceKey !== null && spec.tenant !== '';
 
     const refresh = useCallback(() => {
         setFailure(null);
@@ -82,13 +91,8 @@ export function useLivePreview(spec: LivePreviewSpec): LivePreview {
                     body: JSON.stringify({
                         resource_key: current.resourceKey,
                         tenant: current.tenant,
-                        fields: current.fields,
                         expand: current.expand,
                         joins: current.joins,
-                        child_fields:
-                            Object.keys(current.childFields).length > 0
-                                ? current.childFields
-                                : undefined,
                         filter_q: current.filterQ.trim() || undefined,
                         order_by: current.orderBy.trim() || undefined,
                         limit: current.limit,

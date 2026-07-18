@@ -18,6 +18,7 @@ class OracleQueryTool
     public function __construct(
         protected FusionManager $fusion,
         protected OracleResourceCatalog $catalog,
+        protected OracleFieldDiscovery $discovery,
     ) {}
 
     /**
@@ -49,9 +50,9 @@ class OracleQueryTool
         $joins = $this->normalizeList($query['joins'] ?? null);
         $this->assertKnown($joins, array_keys($resource['join_keys']), 'ressource jointe (join)', $resource['key']);
 
-        $childFields = $this->normalizeChildFields($query['child_fields'] ?? null, $resource, $expand, $joins);
+        $childFields = $this->normalizeChildFields($query['child_fields'] ?? null, $resource, $expand, $joins, $tenantKey);
 
-        $params = $this->buildParameters($resource, $query, $joins);
+        $params = $this->buildParameters($resource, $query, $joins, $tenantKey);
 
         $fetched = $this->fetchResource($tenantKey, $resource, $params);
         $payload = $fetched['payload'];
@@ -395,14 +396,14 @@ class OracleQueryTool
      * Normalise et valide la sélection de champs par enfant/jointure.
      *
      * Les entrées orphelines (clé ni dans `expand` ni dans `joins`) sont
-     * ignorées ; un champ inconnu du catalogue est rejeté.
+     * ignorées ; un champ inconnu du catalogue et du tenant est rejeté.
      *
      * @param  array{key: string, child_fields: array<string, list<string>>, ...}  $resource
      * @param  list<string>  $expand
      * @param  list<string>  $joins
      * @return array<string, list<string>>
      */
-    protected function normalizeChildFields(mixed $value, array $resource, array $expand, array $joins): array
+    protected function normalizeChildFields(mixed $value, array $resource, array $expand, array $joins, string $tenantKey): array
     {
         if (! is_array($value)) {
             return [];
@@ -422,13 +423,13 @@ class OracleQueryTool
                 $known = $resource['child_fields'][$key] ?? [];
 
                 if ($known !== []) {
-                    $this->assertKnown($fields, $known, "champ de l'enfant « {$key} »", $resource['key']);
+                    $this->assertKnownFields($fields, $known, "champ de l'enfant « {$key} »", $tenantKey, $resource['key'], $key, $resource['key']);
                 }
             } elseif (in_array($key, $joins, true)) {
                 $target = $this->catalog->find($key);
 
                 if ($target !== null) {
-                    $this->assertKnown($fields, $target['fields'], "champ de la jointure « {$key} »", $resource['key']);
+                    $this->assertKnownFields($fields, $target['fields'], "champ de la jointure « {$key} »", $tenantKey, $key, null, $resource['key']);
                 }
             } else {
                 continue;
@@ -483,7 +484,7 @@ class OracleQueryTool
      * @param  list<string>  $joins
      * @return array<string, mixed>
      */
-    protected function buildParameters(array $resource, array $query, array $joins = []): array
+    protected function buildParameters(array $resource, array $query, array $joins, string $tenantKey): array
     {
         /** @var list<string> $allowedFields */
         $allowedFields = $resource['fields'];
@@ -508,7 +509,7 @@ class OracleQueryTool
         // après réception (voir run()).
         $fields = $this->normalizeList($query['fields'] ?? null);
         if ($fields !== []) {
-            $this->assertKnown($fields, $allowedFields, 'champ', $resource['key']);
+            $this->assertKnownFields($fields, $allowedFields, 'champ', $tenantKey, $resource['key'], null, $resource['key']);
 
             if ($expand === []) {
                 // Les clés locales des jointures doivent être demandées à Oracle
@@ -528,13 +529,13 @@ class OracleQueryTool
 
         $orderBy = isset($query['orderBy']) ? trim((string) $query['orderBy']) : '';
         if ($orderBy !== '') {
-            $this->assertKnown($this->orderByFields($orderBy), $allowedFields, 'champ de tri', $resource['key']);
+            $this->assertKnownFields($this->orderByFields($orderBy), $allowedFields, 'champ de tri', $tenantKey, $resource['key'], null, $resource['key']);
             $params['orderBy'] = $orderBy;
         }
 
         $q = isset($query['q']) ? trim((string) $query['q']) : '';
         if ($q !== '') {
-            $this->assertKnown($this->qFields($q), $allowedFields, 'champ de filtre', $resource['key']);
+            $this->assertKnownFields($this->qFields($q), $allowedFields, 'champ de filtre', $tenantKey, $resource['key'], null, $resource['key']);
             $params['q'] = $q;
         }
 
@@ -602,6 +603,40 @@ class OracleQueryTool
                 throw new InvalidArgumentException("Le {$label} « {$value} » n'existe pas pour la ressource [{$resourceKey}].");
             }
         }
+    }
+
+    /**
+     * Validation de noms de champs à deux niveaux : le catalogue d'abord, puis
+     * les champs découverts sur le tenant (même cache que l'UI du builder) —
+     * le schéma réel dépasse souvent le catalogue. Un champ inconnu des deux
+     * reste rejeté avant tout appel Oracle.
+     *
+     * @param  list<string>  $values
+     * @param  list<string>  $catalogFields
+     *
+     * @throws InvalidArgumentException
+     */
+    protected function assertKnownFields(
+        array $values,
+        array $catalogFields,
+        string $label,
+        string $tenantKey,
+        string $probeResourceKey,
+        ?string $child,
+        string $messageResourceKey,
+    ): void {
+        $unknown = array_values(array_diff($values, $catalogFields));
+
+        if ($unknown === []) {
+            return;
+        }
+
+        $userId = $this->fusion->userId();
+        $discovered = $userId === null
+            ? null
+            : $this->discovery->discovered($userId, $tenantKey, $probeResourceKey, $child);
+
+        $this->assertKnown($unknown, $discovered ?? [], $label, $messageResourceKey);
     }
 
     /**

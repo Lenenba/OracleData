@@ -2,6 +2,7 @@ import { Link, router } from '@inertiajs/react';
 import {
     Braces,
     Code2,
+    Eye,
     FolderOpen,
     Globe,
     Lock,
@@ -36,7 +37,6 @@ import {
     domainIcon,
     filterRowsToQ,
     generateBipSql,
-    isRecord,
     parseLimit,
     qToFilterRows,
 } from '@/lib/query-spec';
@@ -163,6 +163,9 @@ export function QueryBuilder({
     const [tagInput, setTagInput] = useState('');
     const [saving, setSaving] = useState(false);
     const [activeTab, setActiveTab] = useState<'preview' | 'sql'>('preview');
+    // Aucun appel Oracle tant que l'utilisateur n'a pas demandé l'aperçu. En
+    // édition, la requête existante s'affiche d'emblée (un appel attendu).
+    const [previewEnabled, setPreviewEnabled] = useState(mode === 'edit');
 
     const parsedLimit = parseLimit(limit);
     const tenantLabel = tenants[tenant] ?? tenant;
@@ -181,17 +184,36 @@ export function QueryBuilder({
         return map;
     }, [expand, joins, childFields]);
 
-    const live = useLivePreview({
-        resourceKey: resource?.key ?? null,
-        tenant,
-        fields,
-        expand,
-        joins,
-        childFields: activeChildFields,
-        filterQ,
-        orderBy,
-        limit: parsedLimit,
-    });
+    const live = useLivePreview(
+        {
+            resourceKey: resource?.key ?? null,
+            tenant,
+            expand,
+            joins,
+            filterQ,
+            orderBy,
+            limit: parsedLimit,
+        },
+        previewEnabled,
+    );
+
+    // Premier aperçu à la demande ; ensuite les changements de données se
+    // rafraîchissent seuls. Sert aussi de bouton « rafraîchir » une fois activé.
+    function triggerPreview() {
+        setPreviewEnabled(true);
+        live.refresh();
+    }
+
+    // Projection appliquée côté client à l'aperçu (aucun rappel Oracle) : sans
+    // sélection, toutes les colonnes ; sinon les champs choisis plus les enfants
+    // et jointures imbriqués, comme le fait le serveur à l'exécution.
+    const previewColumns = useMemo<string[] | undefined>(
+        () =>
+            fields.length === 0
+                ? undefined
+                : Array.from(new Set([...fields, ...expand, ...joins])),
+        [fields, expand, joins],
+    );
 
     const isSaveable =
         live.isCurrent &&
@@ -282,16 +304,40 @@ export function QueryBuilder({
 
         setSaving(true);
 
-        const baseParams: Record<string, string | number | boolean | null> =
-            isRecord(live.result.parameters)
-                ? (live.result.parameters as Record<
-                      string,
-                      string | number | boolean | null
-                  >)
-                : {};
+        // Spécification construite à partir de l'état du builder — source de
+        // vérité de ce que l'utilisateur a sélectionné — et non de l'aperçu,
+        // qui charge désormais toutes les colonnes puis projette côté client.
+        const parameters: Record<
+            string,
+            string | number | string[] | ChildFieldsMap
+        > = {
+            resource_key: resource.key,
+            limit: parsedLimit,
+        };
 
-        // resource_key permet de pré-remplir le builder à la prochaine édition
-        const parameters = { ...baseParams, resource_key: resource.key };
+        if (fields.length > 0) {
+            parameters.fields = fields;
+        }
+
+        if (expand.length > 0) {
+            parameters.expand = expand;
+        }
+
+        if (joins.length > 0) {
+            parameters.joins = joins;
+        }
+
+        if (Object.keys(activeChildFields).length > 0) {
+            parameters.child_fields = activeChildFields;
+        }
+
+        if (filterQ.trim()) {
+            parameters.q = filterQ.trim();
+        }
+
+        if (orderBy.trim()) {
+            parameters.orderBy = orderBy.trim();
+        }
 
         const payload = {
             name: resolvedName,
@@ -453,15 +499,17 @@ export function QueryBuilder({
                             {live.loading && (
                                 <Spinner className="size-4 text-muted-foreground" />
                             )}
-                            <button
-                                type="button"
-                                onClick={live.refresh}
-                                disabled={live.loading}
-                                title="Rafraîchir l'aperçu"
-                                className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-                            >
-                                <RotateCw className="size-3.5" />
-                            </button>
+                            {previewEnabled && (
+                                <button
+                                    type="button"
+                                    onClick={triggerPreview}
+                                    disabled={live.loading}
+                                    title="Rafraîchir l'aperçu"
+                                    className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                                >
+                                    <RotateCw className="size-3.5" />
+                                </button>
+                            )}
                         </div>
                     </div>
 
@@ -485,6 +533,8 @@ export function QueryBuilder({
                                     <QueryResultView
                                         result={live.result}
                                         tenantLabel={tenantLabel}
+                                        columnsOverride={previewColumns}
+                                        childColumnsOverride={activeChildFields}
                                     />
                                 </div>
                             ) : live.loading ? (
@@ -493,12 +543,24 @@ export function QueryBuilder({
                                     <Skeleton className="h-8 w-full" />
                                     <Skeleton className="h-8 w-3/4" />
                                 </div>
-                            ) : !live.error ? (
-                                <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-                                    L'aperçu apparaîtra ici dès que la
-                                    configuration est prête.
+                            ) : (
+                                <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-10 text-center">
+                                    <p className="text-sm text-muted-foreground">
+                                        {previewEnabled
+                                            ? 'Ajustez la configuration puis relancez l’aperçu.'
+                                            : 'Configurez votre requête, puis chargez un aperçu depuis Oracle.'}
+                                    </p>
+                                    <Button onClick={triggerPreview}>
+                                        <Eye data-icon="inline-start" />
+                                        Visualiser
+                                    </Button>
+                                    <p className="max-w-sm text-xs text-muted-foreground">
+                                        Une fois chargé, colonnes, tri et
+                                        recherche s’ajustent sans rappeler
+                                        Oracle.
+                                    </p>
                                 </div>
-                            ) : null}
+                            )}
                         </div>
                     )}
 

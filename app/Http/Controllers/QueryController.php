@@ -10,6 +10,7 @@ use App\Models\SavedQueryView;
 use App\Models\Tag;
 use App\Services\AuditRecorder;
 use App\Services\FusionManager;
+use App\Services\OracleFieldDiscovery;
 use App\Services\OracleQueryTool;
 use App\Services\OracleResourceCatalog;
 use App\Services\QueryAgent;
@@ -539,6 +540,34 @@ class QueryController extends Controller
      * Execute a direct Oracle query from the wizard (resource already chosen — no LLM needed).
      * Accepts: resource_key, tenant, fields[], expand[], joins[], child_fields{}, limit.
      */
+    /**
+     * Discover the fields actually exposed by a catalog resource (or one of
+     * its expand children) on one of the reader's tenants.
+     */
+    public function resourceFields(Request $request, FusionManager $fusion, OracleFieldDiscovery $discovery): JsonResponse
+    {
+        $fusion = $fusion->forUser($request->user());
+
+        $validated = $request->validate([
+            'tenant' => ['required', 'string', Rule::in($fusion->keys())],
+            'resource_key' => ['required', 'string', 'max:100'],
+            'child' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        try {
+            $result = $discovery->fields(
+                $request->user(),
+                $validated['tenant'],
+                $validated['resource_key'],
+                $validated['child'] ?? null,
+            );
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json($result);
+    }
+
     public function directPreview(Request $request, FusionManager $fusion, OracleQueryTool $tool): JsonResponse
     {
         $fusion = $fusion->forUser($request->user());

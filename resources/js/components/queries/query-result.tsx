@@ -65,9 +65,15 @@ function OracleCalls({ calls }: { calls: OracleCall[] }) {
 export function QueryResultView({
     result,
     tenantLabel,
+    columnsOverride,
+    childColumnsOverride,
 }: {
     result: QueryResult;
     tenantLabel: string;
+    /** Colonnes parent visibles (projection client) ; priorité sur result.columns. */
+    columnsOverride?: string[];
+    /** Colonnes visibles par enfant/jointure imbriqué (projection client). */
+    childColumnsOverride?: Record<string, string[]>;
 }) {
     if (result.error) {
         return (
@@ -120,7 +126,8 @@ export function QueryResultView({
             ) : (
                 <ResultsTable
                     items={result.items}
-                    columns={result.columns ?? undefined}
+                    columns={columnsOverride ?? result.columns ?? undefined}
+                    childColumns={childColumnsOverride}
                 />
             )}
         </div>

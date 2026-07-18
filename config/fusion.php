@@ -38,6 +38,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Durée de vie du cache de schéma des ressources
+    |--------------------------------------------------------------------------
+    |
+    | Les champs découverts par ressource/tenant sont stockés en base
+    | (table oracle_resource_fields) et resondés au-delà de ce délai. Les
+    | schémas Oracle changent rarement, une durée longue suffit.
+    |
+    */
+
+    'fields_ttl_days' => (int) env('FUSION_FIELDS_TTL_DAYS', 7),
+
+    /*
+    |--------------------------------------------------------------------------
     | Hôtes autorisés pour les connexions gérées par les utilisateurs
     |--------------------------------------------------------------------------
     |
