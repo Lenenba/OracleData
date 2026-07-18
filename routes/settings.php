@@ -3,6 +3,7 @@
 use App\Http\Controllers\Settings\CategoryController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
+use App\Http\Controllers\Settings\TagController;
 use Illuminate\Auth\Middleware\RequirePassword;
 use Illuminate\Support\Facades\Route;
 
@@ -31,6 +32,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('settings/categories', [CategoryController::class, 'store'])->name('categories.store');
     Route::put('settings/categories/{category}', [CategoryController::class, 'update'])->name('categories.update');
     Route::delete('settings/categories/{category}', [CategoryController::class, 'destroy'])->name('categories.destroy');
+
+    Route::post('settings/tags', [TagController::class, 'store'])->name('tags.store');
+    Route::put('settings/tags/{tag}', [TagController::class, 'update'])->name('tags.update');
+    Route::delete('settings/tags/{tag}', [TagController::class, 'destroy'])->name('tags.destroy');
 });
 
 Route::get('.well-known/passkey-endpoints', function () {

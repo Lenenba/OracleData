@@ -3,12 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Query;
+use App\Models\QueryExecution;
 use App\Services\FusionManager;
 use App\Services\OracleResourceCatalog;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
 
 class DashboardController extends Controller
 {
@@ -26,7 +28,20 @@ class DashboardController extends Controller
                 ->where('user_id', $userId)
                 ->orWhere('visibility', 'shared'));
 
+        $overview = $this->queryOverview($accessible(), $userId);
+        $usageStats = $this->usageStats($userId);
+
         $recentQueries = $accessible()
+            ->select([
+                'id',
+                'user_id',
+                'name',
+                'description',
+                'mode',
+                'tenant_key',
+                'visibility',
+                'created_at',
+            ])
             ->with('user:id,name')
             ->latest()
             ->limit(5)
@@ -48,12 +63,13 @@ class DashboardController extends Controller
 
         return Inertia::render('dashboard', [
             'stats' => [
-                'totalQueries' => $accessible()->count(),
-                'myQueries' => Query::query()->where('user_id', $userId)->count(),
-                'sharedQueries' => $accessible()->where('visibility', 'shared')->count(),
+                'totalQueries' => $overview['totalQueries'],
+                'myQueries' => $overview['myQueries'],
+                'sharedQueries' => $overview['sharedQueries'],
                 'activeTenants' => collect($tenantDetails)->where('is_active', true)->count(),
+                ...$usageStats,
             ],
-            'queriesPerWeek' => $this->queriesPerWeek($accessible()),
+            'queriesPerWeek' => $overview['queriesPerWeek'],
             'domainBreakdown' => $this->domainBreakdown($accessible(), $catalog),
             'recentQueries' => $recentQueries,
             'tenants' => $tenantDetails,
@@ -61,30 +77,83 @@ class DashboardController extends Controller
     }
 
     /**
-     * Nombre de requêtes créées par semaine sur les 8 dernières semaines
-     * (la plus ancienne d'abord, la semaine courante en dernier).
+     * Agrège en une requête les compteurs de bibliothèque et les huit semaines
+     * d'activité. Les buckets CASE sont portables et évitent de rapatrier les
+     * dates pour les regrouper en PHP.
      *
      * @param  Builder<Query>  $accessible
-     * @return list<int>
+     * @return array{
+     *     totalQueries: int,
+     *     myQueries: int,
+     *     sharedQueries: int,
+     *     queriesPerWeek: list<int>
+     * }
      */
-    protected function queriesPerWeek(Builder $accessible): array
+    protected function queryOverview(Builder $accessible, int $userId): array
     {
-        $createdAt = $accessible
-            ->where('created_at', '>=', now()->startOfWeek()->subWeeks(7))
-            ->pluck('created_at');
+        $selects = [
+            'COUNT(*) AS total_queries',
+            'COALESCE(SUM(CASE WHEN user_id = ? THEN 1 ELSE 0 END), 0) AS my_queries',
+            'COALESCE(SUM(CASE WHEN visibility = ? THEN 1 ELSE 0 END), 0) AS shared_queries',
+        ];
+        $bindings = [$userId, 'shared'];
+        $currentWeekStart = now()->startOfWeek();
+
+        for ($index = 0; $index < 8; $index++) {
+            $start = $currentWeekStart->copy()->subWeeks(7 - $index);
+            $end = $start->copy()->addWeek();
+            $selects[] = "COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN 1 ELSE 0 END), 0) AS week_{$index}";
+            $bindings[] = $start;
+            $bindings[] = $end;
+        }
+
+        $values = (array) $accessible
+            ->toBase()
+            ->selectRaw(implode(', ', $selects), $bindings)
+            ->first();
 
         $weeks = [];
 
-        for ($i = 7; $i >= 0; $i--) {
-            $start = now()->startOfWeek()->subWeeks($i);
-            $end = $start->copy()->addWeek();
-
-            $weeks[] = $createdAt
-                ->filter(fn ($date) => $date !== null && $date->gte($start) && $date->lt($end))
-                ->count();
+        for ($index = 0; $index < 8; $index++) {
+            $weeks[] = (int) ($values["week_{$index}"] ?? 0);
         }
 
-        return $weeks;
+        return [
+            'totalQueries' => (int) ($values['total_queries'] ?? 0),
+            'myQueries' => (int) ($values['my_queries'] ?? 0),
+            'sharedQueries' => (int) ($values['shared_queries'] ?? 0),
+            'queriesPerWeek' => $weeks,
+        ];
+    }
+
+    /**
+     * Statistiques des exécutions réellement lancées par l'utilisateur pendant
+     * le mois courant, indépendamment du propriétaire de la requête exécutée.
+     *
+     * @return array{executionsThisMonth: int, successRate: float|int, averageDurationMs: int}
+     */
+    protected function usageStats(int $userId): array
+    {
+        $monthStart = now()->startOfMonth();
+        $nextMonth = $monthStart->copy()->addMonth();
+        $values = (array) QueryExecution::query()
+            ->where('user_id', $userId)
+            ->where('finished_at', '>=', $monthStart)
+            ->where('finished_at', '<', $nextMonth)
+            ->toBase()
+            ->selectRaw(
+                'COUNT(*) AS execution_count, '
+                .'COALESCE(100.0 * SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 0) AS success_rate, '
+                .'COALESCE(AVG(duration_ms), 0) AS average_duration_ms',
+                [QueryExecution::STATUS_SUCCEEDED],
+            )
+            ->first();
+
+        return [
+            'executionsThisMonth' => (int) ($values['execution_count'] ?? 0),
+            'successRate' => round((float) ($values['success_rate'] ?? 0), 1),
+            'averageDurationMs' => (int) round((float) ($values['average_duration_ms'] ?? 0)),
+        ];
     }
 
     /**
@@ -96,23 +165,68 @@ class DashboardController extends Controller
      */
     protected function domainBreakdown(Builder $accessible, OracleResourceCatalog $catalog): array
     {
-        $domains = array_reduce(
+        $resourcesByDomain = array_reduce(
             $catalog->all(),
             function (array $map, array $resource): array {
-                $map[$resource['key']] = $resource['domain'];
+                $map[$resource['domain']][] = $resource['key'];
 
                 return $map;
             },
             [],
         );
 
+        if ($resourcesByDomain === []) {
+            return [];
+        }
+
+        $resourceKey = $this->resourceKeyExpression($accessible);
+        $cases = [];
+        $bindings = [];
+
+        foreach ($resourcesByDomain as $domain => $resourceKeys) {
+            $placeholders = implode(', ', array_fill(0, count($resourceKeys), '?'));
+            $cases[] = "WHEN {$resourceKey} IN ({$placeholders}) THEN ?";
+            array_push($bindings, ...$resourceKeys);
+            $bindings[] = $domain;
+        }
+
+        $domainExpression = 'CASE '.implode(' ', $cases).' ELSE ? END';
+        $bindings[] = 'Autre';
+
         return $accessible
-            ->pluck('parameters')
-            ->map(fn ($parameters): string => $domains[$parameters['resource_key'] ?? null] ?? 'Autre')
-            ->countBy()
-            ->map(fn (int $count, string $domain): array => ['domain' => $domain, 'count' => $count])
-            ->sortByDesc('count')
-            ->values()
+            ->toBase()
+            ->selectRaw("{$domainExpression} AS resource_domain, COUNT(*) AS aggregate", $bindings)
+            ->groupBy('resource_domain')
+            ->orderByDesc('aggregate')
+            ->orderBy('resource_domain')
+            ->get()
+            ->map(function (object $row): array {
+                $values = (array) $row;
+
+                return [
+                    'domain' => (string) $values['resource_domain'],
+                    'count' => (int) $values['aggregate'],
+                ];
+            })
             ->all();
+    }
+
+    /**
+     * Expression d'extraction JSON propre au moteur courant. Le reste de
+     * l'agrégation demeure identique sur SQLite, MySQL/MariaDB et PostgreSQL.
+     *
+     * @param  Builder<Query>  $query
+     * @return literal-string
+     */
+    protected function resourceKeyExpression(Builder $query): string
+    {
+        $connection = $query->getModel()->getConnection();
+
+        return match ($connection->getDriverName()) {
+            'sqlite' => "json_extract(parameters, '$.resource_key')",
+            'mysql', 'mariadb' => "JSON_UNQUOTE(JSON_EXTRACT(parameters, '$.resource_key'))",
+            'pgsql' => "parameters->>'resource_key'",
+            default => throw new RuntimeException('Unsupported database driver for dashboard domain aggregation.'),
+        };
     }
 }

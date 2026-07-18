@@ -1,6 +1,8 @@
 <?php
 
+use App\Models\Category;
 use App\Models\Query;
+use App\Models\Tag;
 use App\Models\User;
 
 test('a user clones a shared query onto their own default connection', function () {
@@ -10,6 +12,8 @@ test('a user clones a shared query onto their own default connection', function 
         'label' => 'Reader default',
     ]);
     $readerTenant = $user->oracleTenants()->sole();
+    $category = Category::factory()->create();
+    $tag = Tag::factory()->create();
 
     $source = Query::factory()->for($owner)->shared()->create([
         'name' => 'Bons de commande ouverts',
@@ -22,7 +26,9 @@ test('a user clones a shared query onto their own default connection', function 
             'fields' => 'OrderNumber,Supplier,Status',
             'limit' => 25,
         ],
+        'category_id' => $category->id,
     ]);
+    $source->tags()->attach($tag);
 
     $this->actingAs($user)
         ->post(route('queries.clone', $source))
@@ -37,7 +43,9 @@ test('a user clones a shared query onto their own default connection', function 
         ->and($copy->oracle_tenant_id)->toBe($readerTenant->id)
         ->and($copy->mode)->toBe($source->mode)
         ->and($copy->parameters)->toBe($source->parameters)
-        ->and($copy->visibility)->toBe('private');
+        ->and($copy->visibility)->toBe('private')
+        ->and($copy->category_id)->toBe($category->id)
+        ->and($copy->tags()->pluck('tags.id')->all())->toBe([$tag->id]);
 });
 
 test('a user can clone their own private query', function () {

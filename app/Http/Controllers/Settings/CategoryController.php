@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Models\CategoryTranslation;
+use App\Models\Tag;
+use App\Models\TagTranslation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -44,7 +46,25 @@ class CategoryController extends Controller
                         ->map(fn (CategoryTranslation $translation): array => [
                             'name' => $translation->name,
                             'description' => $translation->description,
-                        ]),
+                        ])
+                        ->all(),
+                ]),
+            'tags' => Tag::query()
+                ->with('translations')
+                ->withCount('queries')
+                ->orderBy('slug')
+                ->get()
+                ->map(fn (Tag $tag): array => [
+                    'id' => $tag->id,
+                    'slug' => $tag->slug,
+                    'name' => $tag->name,
+                    'queries_count' => $tag->queries_count,
+                    'translations' => $tag->translations
+                        ->keyBy('locale')
+                        ->map(fn (TagTranslation $translation): array => [
+                            'name' => $translation->name,
+                        ])
+                        ->all(),
                 ]),
         ]);
     }
@@ -110,11 +130,11 @@ class CategoryController extends Controller
     }
 
     /**
-     * @return array{slug: string, color: string|null, translations: array<string, array{name: string, description: string|null}>}
+     * @return array{slug: string, color: string|null, translations: array{fr: array{name: string, description?: string|null}, en?: array{name?: string|null, description?: string|null}, es?: array{name?: string|null, description?: string|null}}}
      */
     private function validateCategory(Request $request, ?Category $category = null): array
     {
-        /** @var array{slug: string, color: string|null, translations: array<string, array{name: string, description: string|null}>} */
+        /** @var array{slug: string, color: string|null, translations: array{fr: array{name: string, description?: string|null}, en?: array{name?: string|null, description?: string|null}, es?: array{name?: string|null, description?: string|null}}} */
         return $request->validate([
             'slug' => [
                 'required',
@@ -123,29 +143,35 @@ class CategoryController extends Controller
                 'regex:/^[a-z0-9][a-z0-9-]*$/',
                 Rule::unique('categories', 'slug')->ignore($category?->id),
             ],
-            'color' => ['nullable', 'string', 'max:32'],
-            'translations' => ['required', 'array'],
+            'color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'translations' => ['required', 'array:fr,en,es'],
             'translations.fr' => ['required', 'array'],
             'translations.fr.name' => ['required', 'string', 'max:255'],
             'translations.en' => ['sometimes', 'array'],
-            'translations.en.name' => ['required_with:translations.en', 'string', 'max:255'],
+            'translations.en.name' => ['nullable', 'string', 'max:255'],
             'translations.es' => ['sometimes', 'array'],
-            'translations.es.name' => ['required_with:translations.es', 'string', 'max:255'],
+            'translations.es.name' => ['nullable', 'string', 'max:255'],
             'translations.*.description' => ['nullable', 'string', 'max:1000'],
         ]);
     }
 
     /**
-     * @param  array<string, array{name: string, description?: string|null}>  $translations
+     * @param  array<string, array{name?: string|null, description?: string|null}>  $translations
      */
     private function syncTranslations(Category $category, array $translations): void
     {
         $category->translations()->delete();
 
         foreach ($translations as $locale => $translation) {
+            $name = trim((string) ($translation['name'] ?? ''));
+
+            if ($name === '') {
+                continue;
+            }
+
             $category->translations()->create([
                 'locale' => $locale,
-                'name' => $translation['name'],
+                'name' => $name,
                 'description' => $translation['description'] ?? null,
             ]);
         }

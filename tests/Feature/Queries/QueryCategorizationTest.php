@@ -172,6 +172,10 @@ test('category and tag filters never leak other users private queries', function
 test('available categories are shared with the create form', function () {
     $user = createConnectedUser([], ['key' => 'client_x']);
     Category::factory()->withTranslation('fr', 'Finance')->create(['slug' => 'finance']);
+    Tag::factory()->withTranslation('fr', 'Mensuel')->create([
+        'slug' => 'monthly',
+        'name' => 'Mensuel',
+    ]);
 
     $this->actingAs($user)
         ->get(route('queries.create'))
@@ -179,5 +183,24 @@ test('available categories are shared with the create form', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->count('categories', 1)
             ->where('categories.0.slug', 'finance')
-            ->where('categories.0.name', 'Finance'));
+            ->where('categories.0.name', 'Finance')
+            ->count('tags', 1)
+            ->where('tags.0.slug', 'monthly')
+            ->where('tags.0.label', 'Mensuel'));
+});
+
+test('official tags are displayed and searched in the active locale', function () {
+    $user = createConnectedUser(['locale' => 'es'], ['key' => 'client_x']);
+    $tag = Tag::factory()
+        ->withTranslation('fr', 'Mensuel')
+        ->withTranslation('es', 'Mensual')
+        ->create(['slug' => 'monthly', 'name' => 'Mensuel']);
+    $query = Query::factory()->for($user)->create(['name' => 'Rapport']);
+    $query->tags()->attach($tag);
+
+    $this->actingAs($user)
+        ->get(route('queries.index', ['search' => 'Mensual']))
+        ->assertInertia(fn (Assert $page) => $page
+            ->count('queries.data', 1)
+            ->where('queries.data.0.tags.0.name', 'Mensual'));
 });

@@ -1,12 +1,6 @@
 import type { Page, SharedPageProps } from '@inertiajs/core';
 import { router } from '@inertiajs/react';
-import {
-    createContext,
-    useContext,
-    useEffect,
-    useMemo,
-    useState,
-} from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import en from '@/locales/en.json';
 import es from '@/locales/es.json';
 import fr from '@/locales/fr.json';

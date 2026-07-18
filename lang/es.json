@@ -17,5 +17,12 @@
     "Connexion Oracle réussie.": "Conexión con Oracle realizada correctamente.",
     "Impossible de joindre cet environnement Oracle. Vérifiez l'URL et les identifiants.": "No se puede acceder a este entorno de Oracle. Compruebe la URL y las credenciales.",
     "Tenant Oracle mis à jour.": "Tenant de Oracle actualizado.",
-    "Tenant Oracle supprimé.": "Tenant de Oracle eliminado."
+    "Tenant Oracle supprimé.": "Tenant de Oracle eliminado.",
+    "Catégorie créée.": "Categoría creada.",
+    "Catégorie mise à jour.": "Categoría actualizada.",
+    "Catégorie supprimée.": "Categoría eliminada.",
+    "Tag créé.": "Etiqueta creada.",
+    "Tag mis à jour.": "Etiqueta actualizada.",
+    "Tag supprimé.": "Etiqueta eliminada.",
+    "Un tag doit contenir au moins un caractère pouvant former un identifiant.": "Una etiqueta debe contener al menos un carácter que permita formar un identificador."
 }

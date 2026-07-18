@@ -5,6 +5,8 @@ use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\OracleTenantController;
 use App\Http\Controllers\QueryController;
+use App\Http\Controllers\QueryPreferenceController;
+use App\Http\Controllers\SavedQueryViewController;
 use App\Http\Middleware\EnsureOnboardingCompleted;
 use Illuminate\Support\Facades\Route;
 
@@ -42,8 +44,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('queries/{query}/edit', [QueryController::class, 'edit'])->name('queries.edit');
         Route::put('queries/{query}', [QueryController::class, 'update'])->name('queries.update');
         Route::patch('queries/{query}/visibility', [QueryController::class, 'updateVisibility'])->name('queries.visibility');
+        Route::patch('queries/{query}/preference', [QueryPreferenceController::class, 'update'])->name('queries.preference');
         Route::post('queries/{query}/clone', [QueryController::class, 'duplicate'])->name('queries.clone');
         Route::delete('queries/{query}', [QueryController::class, 'destroy'])->name('queries.destroy');
+
+        Route::post('saved-query-views', [SavedQueryViewController::class, 'store'])->name('saved-query-views.store');
+        Route::put('saved-query-views/{savedQueryView}', [SavedQueryViewController::class, 'update'])->name('saved-query-views.update');
+        Route::delete('saved-query-views/{savedQueryView}', [SavedQueryViewController::class, 'destroy'])->name('saved-query-views.destroy');
 
         // Routes coûteuses (appels Claude + Oracle) : limitées à 15 req/min par utilisateur.
         Route::middleware('throttle:15,1')->group(function () {

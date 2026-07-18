@@ -1,15 +1,21 @@
 <?php
 
+use App\Models\Category;
 use App\Models\Query;
+use App\Models\Tag;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('the owner can view the show page with tenant options', function () {
     $user = createConnectedUser([], ['key' => 'client_y', 'label' => 'Client Y']);
+    $category = Category::factory()->withTranslation('fr', 'Finance')->create();
+    $tag = Tag::factory()->withTranslation('fr', 'Mensuel')->create();
     $query = Query::factory()->for($user)->create([
         'tenant_key' => 'client_y',
         'oracle_tenant_id' => $user->oracleTenants()->sole()->id,
+        'category_id' => $category->id,
     ]);
+    $query->tags()->attach($tag);
 
     $this->actingAs($user)
         ->get(route('queries.show', $query))
@@ -18,6 +24,8 @@ test('the owner can view the show page with tenant options', function () {
             ->component('queries/show')
             ->where('query.id', $query->id)
             ->where('query.tenant_key', 'client_y')
+            ->where('query.category.name', 'Finance')
+            ->where('query.tags.0.name', 'Mensuel')
             ->where('defaultTenant', 'client_y')
             ->has('tenants')
         );

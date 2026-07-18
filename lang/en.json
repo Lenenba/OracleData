@@ -17,5 +17,12 @@
     "Connexion Oracle réussie.": "Oracle connection successful.",
     "Impossible de joindre cet environnement Oracle. Vérifiez l'URL et les identifiants.": "Unable to reach this Oracle environment. Check the URL and credentials.",
     "Tenant Oracle mis à jour.": "Oracle tenant updated.",
-    "Tenant Oracle supprimé.": "Oracle tenant deleted."
+    "Tenant Oracle supprimé.": "Oracle tenant deleted.",
+    "Catégorie créée.": "Category created.",
+    "Catégorie mise à jour.": "Category updated.",
+    "Catégorie supprimée.": "Category deleted.",
+    "Tag créé.": "Tag created.",
+    "Tag mis à jour.": "Tag updated.",
+    "Tag supprimé.": "Tag deleted.",
+    "Un tag doit contenir au moins un caractère pouvant former un identifiant.": "A tag must contain at least one character that can form an identifier."
 }
