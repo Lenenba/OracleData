@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\OracleExecutionPolicy;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -37,7 +38,11 @@ class OracleQueryTool
      * @throws InvalidArgumentException si la ressource, un champ ou une jointure est hors catalogue
      * @throws RuntimeException si Oracle Fusion ne peut pas exécuter la lecture
      */
-    public function run(string $tenantKey, array $query): array
+    public function run(
+        string $tenantKey,
+        array $query,
+        OracleExecutionPolicy $policy = OracleExecutionPolicy::BEST_EFFORT,
+    ): array
     {
         $resourceKey = (string) ($query['resource'] ?? '');
         $resource = $this->catalog->find($resourceKey);
@@ -54,7 +59,7 @@ class OracleQueryTool
 
         $params = $this->buildParameters($resource, $query, $joins, $tenantKey);
 
-        $fetched = $this->fetchResource($tenantKey, $resource, $params);
+        $fetched = $this->fetchResource($tenantKey, $resource, $params, $policy);
         $payload = $fetched['payload'];
 
         /** @var array<int, mixed> $items */
@@ -62,7 +67,15 @@ class OracleQueryTool
         $calls = $fetched['calls'];
 
         foreach ($joins as $target) {
-            $items = $this->attachJoin($tenantKey, $resource, $target, $childFields[$target] ?? [], $items, $calls);
+            $items = $this->attachJoin(
+                $tenantKey,
+                $resource,
+                $target,
+                $childFields[$target] ?? [],
+                $items,
+                $calls,
+                $policy,
+            );
         }
 
         // Oracle interdit `fields` + `expand` : quand les deux sont demandés on
@@ -105,17 +118,30 @@ class OracleQueryTool
      * @param  array<string, mixed>  $params
      * @return array{payload: array<string, mixed>, path: string, params: array<string, mixed>, calls: list<array{resource: string, path: string, params: array<string, mixed>, count: int}>}
      */
-    protected function fetchResource(string $tenantKey, array $resource, array $params): array
+    protected function fetchResource(
+        string $tenantKey,
+        array $resource,
+        array $params,
+        OracleExecutionPolicy $policy = OracleExecutionPolicy::BEST_EFFORT,
+    ): array
     {
         $attempts = [[
             'path' => $resource['path'],
             'params' => $params,
         ]];
 
-        foreach (($resource['fallbacks'] ?? []) as $fallback) {
+        foreach ($policy->allowsFallbacks() ? ($resource['fallbacks'] ?? []) : [] as $fallback) {
+            $fallbackParams = $this->fallbackParams($params, $fallback);
+
+            // A compatibility endpoint may change shape, but it may never
+            // widen a filtered query by deleting or replacing its `q`.
+            if (! $this->preservesQueryFilter($params, $fallbackParams)) {
+                continue;
+            }
+
             $attempts[] = [
                 'path' => $fallback['path'],
-                'params' => $this->fallbackParams($params, $fallback),
+                'params' => $fallbackParams,
             ];
         }
 
@@ -127,6 +153,7 @@ class OracleQueryTool
             $path = (string) $attempt['path'];
             /** @var array<string, mixed> $attemptParams */
             $attemptParams = $attempt['params'];
+            $this->assertQueryFilterPreserved($params, $attemptParams);
 
             try {
                 $payload = $this->fusion->tenant($tenantKey)->get($path, $attemptParams);
@@ -136,6 +163,7 @@ class OracleQueryTool
                 if (array_key_exists('fields', $attemptParams)) {
                     $fieldlessParams = $attemptParams;
                     unset($fieldlessParams['fields']);
+                    $this->assertQueryFilterPreserved($params, $fieldlessParams);
 
                     try {
                         $payload = $this->fusion->tenant($tenantKey)->get($path, $fieldlessParams);
@@ -196,6 +224,11 @@ class OracleQueryTool
                 'params' => $attemptParams,
                 'calls' => $calls,
             ];
+
+            // Exact reads treat an empty primary collection as authoritative.
+            if ($policy === OracleExecutionPolicy::EXACT) {
+                return $lastEmpty;
+            }
         }
 
         if ($lastEmpty !== null) {
@@ -217,6 +250,34 @@ class OracleQueryTool
         }
 
         return array_replace($base, $fallback['params'] ?? []);
+    }
+
+    /**
+     * `q` is the authorization-like boundary of a filtered Oracle read. Once
+     * present, every network attempt must carry the exact same expression.
+     *
+     * @param  array<string, mixed>  $expected
+     * @param  array<string, mixed>  $candidate
+     */
+    protected function preservesQueryFilter(array $expected, array $candidate): bool
+    {
+        if (! array_key_exists('q', $expected)) {
+            return true;
+        }
+
+        return array_key_exists('q', $candidate)
+            && $candidate['q'] === $expected['q'];
+    }
+
+    /**
+     * @param  array<string, mixed>  $expected
+     * @param  array<string, mixed>  $candidate
+     */
+    protected function assertQueryFilterPreserved(array $expected, array $candidate): void
+    {
+        if (! $this->preservesQueryFilter($expected, $candidate)) {
+            throw new RuntimeException('Le filtre Oracle ne peut pas être retiré ou modifié pendant une exécution.');
+        }
     }
 
     /**
@@ -295,7 +356,15 @@ class OracleQueryTool
      * @param  list<array{resource: string, path?: string, params: array<string, mixed>, count: int}>  $calls
      * @return array<int, mixed>
      */
-    protected function attachJoin(string $tenantKey, array $resource, string $target, array $joinFields, array $items, array &$calls): array
+    protected function attachJoin(
+        string $tenantKey,
+        array $resource,
+        string $target,
+        array $joinFields,
+        array $items,
+        array &$calls,
+        OracleExecutionPolicy $policy = OracleExecutionPolicy::BEST_EFFORT,
+    ): array
     {
         $targetResource = $this->catalog->find($target);
 
@@ -341,30 +410,15 @@ class OracleQueryTool
             $params['fields'] = implode(',', $fetchFields);
         }
 
-        // On filtre la ressource distante sur les clés collectées via un finder
-        // multi-valeurs (`key = v1 OR key = v2 …`). Certaines ressources Oracle
-        // (ex. purchaseOrders) rejettent l'OR/IN et renvoient un 500 : on
-        // retombe alors sur une lecture bornée non filtrée, puis on regroupe
-        // localement — jointure au mieux plutôt qu'erreur.
+        // On filtre toujours la ressource distante sur les clés collectées. Si
+        // Oracle refuse ce filtre, la jointure échoue de manière fermée : une
+        // lecture non filtrée pourrait rattacher des lignes hors périmètre.
         $usedParams = array_merge($params, ['q' => implode(' OR ', $conditions)]);
+        $fetched = $this->fetchResource($tenantKey, $targetResource, $usedParams, $policy);
+        $payload = $fetched['payload'];
+        $usedParams = $fetched['params'];
 
-        try {
-            $fetched = $this->fetchResource($tenantKey, $targetResource, $usedParams);
-            $payload = $fetched['payload'];
-            $usedParams = $fetched['params'];
-
-            array_push($calls, ...$fetched['calls']);
-        } catch (RuntimeException) {
-            $usedParams = $params;
-            $payload = $this->fusion->tenant($tenantKey)->get($targetResource['path'], $usedParams);
-
-            $calls[] = [
-                'resource' => $target,
-                'path' => $targetResource['path'],
-                'params' => $usedParams,
-                'count' => $this->payloadCount($payload),
-            ];
-        }
+        array_push($calls, ...$fetched['calls']);
 
         /** @var array<int, mixed> $rows */
         $rows = self::withoutLinks($payload['items'] ?? []);

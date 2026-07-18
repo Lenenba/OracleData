@@ -545,8 +545,17 @@ export function QueryConfigPanel({
     // Champs proposés aux filtres/tri : découverte tenant + sélections déjà
     // enregistrées (une requête existante peut référencer un champ non sondé).
     const allFields = useMemo(
-        () => Array.from(new Set([...parentDiscovery.fields, ...fields])),
-        [parentDiscovery.fields, fields],
+        () =>
+            Array.from(
+                new Set([
+                    ...parentDiscovery.fields,
+                    ...fields,
+                    ...filterRows
+                        .map((row) => row.field)
+                        .filter((field) => field !== ''),
+                ]),
+            ),
+        [parentDiscovery.fields, fields, filterRows],
     );
     const childResources = useMemo(
         () => resource.child_resources ?? [],

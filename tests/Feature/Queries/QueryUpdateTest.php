@@ -4,13 +4,19 @@ use App\Models\Query;
 
 test('owner can visit the edit page', function () {
     $owner = createConnectedUser([], ['key' => 'client_x']);
-    $query = Query::factory()->create(['user_id' => $owner->id, 'mode' => 'single']);
+    $query = Query::factory()->create([
+        'user_id' => $owner->id,
+        'mode' => 'single',
+        'description' => 'Description à conserver pendant la modification',
+    ]);
 
     $this->actingAs($owner)
         ->withoutVite()
         ->get(route('queries.edit', $query))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->component('queries/edit'));
+        ->assertInertia(fn ($page) => $page
+            ->component('queries/edit')
+            ->where('query.description', 'Description à conserver pendant la modification'));
 });
 
 test('non-owner cannot visit the edit page', function () {
@@ -49,6 +55,7 @@ test('owner can update a query', function () {
         ->assertRedirect(route('queries.show', $query));
 
     expect($query->fresh()->name)->toBe('Updated name');
+    expect($query->fresh()->description)->toBe('Updated description');
     expect($query->fresh()->visibility)->toBe('shared');
     expect($query->fresh()->parameters['resource_key'])->toBe('suppliers');
     expect($query->fresh()->oracle_tenant_id)->toBe($tenant->id);

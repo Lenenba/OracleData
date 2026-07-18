@@ -191,13 +191,13 @@ export function parseChildFields(value: unknown): ChildFieldsMap {
  */
 export function filterRowsToQ(
     rows: FilterRow[],
-    parentFields: string[],
+    parentFields?: readonly string[],
 ): string {
     const valid = rows.filter(
         (r) =>
             r.field !== '' &&
             r.value.trim() !== '' &&
-            parentFields.includes(r.field),
+            (parentFields === undefined || parentFields.includes(r.field)),
     );
 
     if (valid.length === 0) {
@@ -230,7 +230,10 @@ export function filterRowsToQ(
  * Parse une chaîne q= Oracle REST en lignes de filter-builder.
  * Heuristique : supporte AND/OR de conditions simples.
  */
-export function qToFilterRows(q: string, parentFields: string[]): FilterRow[] {
+export function qToFilterRows(
+    q: string,
+    parentFields?: readonly string[],
+): FilterRow[] {
     if (!q.trim()) {
         return [];
     }
@@ -250,7 +253,7 @@ export function qToFilterRows(q: string, parentFields: string[]): FilterRow[] {
         const op = (match[3] ?? match[7] ?? '=').toUpperCase();
         const val = match[4] ?? match[8] ?? '';
 
-        if (!parentFields.includes(field)) {
+        if (parentFields !== undefined && !parentFields.includes(field)) {
             continue;
         }
 

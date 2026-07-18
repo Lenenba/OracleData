@@ -1,38 +1,121 @@
-import { useEffect, useState } from 'react';
+import { usePage } from '@inertiajs/react';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { readCsrfToken } from '@/lib/csrf';
 import queries from '@/routes/queries';
 
 export type ResourceFields = {
-    /** Champs à afficher : découverte tenant, sinon repli catalogue. */
+    /** Fields to display: tenant discovery when available, otherwise catalog. */
     fields: string[];
-    /** `live` = sonde tenant réussie ; `catalog` = repli. */
+    /** `live` for discovered fields, `catalog` for the fallback response. */
     source: 'live' | 'catalog';
-    /** Vrai pendant la sonde initiale de cette combinaison. */
+    /** Always false because catalog fields are displayed without blocking. */
     loading: boolean;
 };
 
-type CacheEntry = { fields: string[]; source: 'live' | 'catalog' };
+type CacheEntry = Pick<ResourceFields, 'fields' | 'source'>;
 
-const RETRY_DELAY_MS = 1500;
+type CacheRecord = {
+    entry: CacheEntry;
+    resolvedAt: number;
+};
 
-/**
- * Cache module par combinaison tenant/ressource/enfant, partagé entre toutes
- * les instances du builder pour la durée de la visite. Seules les réponses
- * serveur abouties y entrent : un échec réseau ou HTTP reste local à
- * l'instance et sera retenté au prochain montage.
- */
-const discovered = new Map<string, CacheEntry>();
+type ProbeAttempt = {
+    entry: CacheEntry | null;
+    retryable: boolean;
+};
 
-/** Une seule sonde en vol par clé, partagée entre instances concurrentes. */
+const CATALOG_CACHE_TTL_MS = 60_000;
+const REQUEST_TIMEOUT_MS = 15_000;
+const RETRY_DELAY_MS = 1_500;
+
+/** Successful server responses cached for the duration of the page visit. */
+const resolved = new Map<string, CacheRecord>();
+
+/** One shared request per tenant/resource/child combination. */
 const inFlight = new Map<string, Promise<CacheEntry | null>>();
+
+/** Subscribers keep every mounted hook instance synchronized with the cache. */
+const subscribers = new Map<string, Set<() => void>>();
+
+function createCacheKey(
+    userId: number,
+    tenant: string,
+    resourceKey: string | null,
+    child: string | null,
+): string {
+    return JSON.stringify([userId, tenant, resourceKey, child]);
+}
+
+function getResolved(cacheKey: string): CacheEntry | undefined {
+    return resolved.get(cacheKey)?.entry;
+}
+
+function hasFreshResolution(cacheKey: string): boolean {
+    const record = resolved.get(cacheKey);
+
+    if (record === undefined) {
+        return false;
+    }
+
+    return (
+        record.entry.source === 'live' ||
+        Date.now() - record.resolvedAt < CATALOG_CACHE_TTL_MS
+    );
+}
+
+function isCacheEntry(value: unknown): value is CacheEntry {
+    if (typeof value !== 'object' || value === null) {
+        return false;
+    }
+
+    const candidate = value as Record<string, unknown>;
+
+    return (
+        Array.isArray(candidate.fields) &&
+        candidate.fields.every((field) => typeof field === 'string') &&
+        (candidate.source === 'live' || candidate.source === 'catalog')
+    );
+}
+
+function isRetryableStatus(status: number): boolean {
+    return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+function subscribe(cacheKey: string, onStoreChange: () => void): () => void {
+    const listeners = subscribers.get(cacheKey) ?? new Set<() => void>();
+    listeners.add(onStoreChange);
+    subscribers.set(cacheKey, listeners);
+
+    return () => {
+        listeners.delete(onStoreChange);
+
+        if (listeners.size === 0) {
+            subscribers.delete(cacheKey);
+        }
+    };
+}
+
+function publish(cacheKey: string): void {
+    subscribers.get(cacheKey)?.forEach((listener) => listener());
+}
+
+function emptyServerSnapshot(): undefined {
+    return undefined;
+}
 
 async function probeOnce(
     tenant: string,
     resourceKey: string,
     child: string | null,
-): Promise<CacheEntry | null> {
+): Promise<ProbeAttempt> {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(
+        () => controller.abort(),
+        REQUEST_TIMEOUT_MS,
+    );
+
     try {
-        const res = await fetch(queries.resourceFields.url(), {
+        const response = await fetch(queries.resourceFields.url(), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -41,70 +124,99 @@ async function probeOnce(
                 'X-XSRF-TOKEN': readCsrfToken(),
             },
             credentials: 'same-origin',
+            signal: controller.signal,
             body: JSON.stringify({
                 tenant,
                 resource_key: resourceKey,
                 child: child ?? undefined,
             }),
         });
-        const data = (await res.json().catch(() => null)) as {
-            fields?: unknown;
-            source?: unknown;
-        } | null;
 
-        if (
-            res.ok &&
-            data !== null &&
-            Array.isArray(data.fields) &&
-            data.fields.every((f) => typeof f === 'string')
-        ) {
+        if (!response.ok) {
             return {
-                fields: data.fields,
-                source: data.source === 'live' ? 'live' : 'catalog',
+                entry: null,
+                retryable: isRetryableStatus(response.status),
             };
         }
 
-        return null;
+        const data: unknown = await response.json().catch(() => null);
+
+        if (!isCacheEntry(data)) {
+            return { entry: null, retryable: false };
+        }
+
+        return {
+            entry: {
+                fields: Array.from(new Set(data.fields)),
+                source: data.source,
+            },
+            retryable: false,
+        };
     } catch {
-        return null;
+        return { entry: null, retryable: !controller.signal.aborted };
+    } finally {
+        window.clearTimeout(timeout);
     }
 }
 
-/**
- * Sonde avec une relance : un « database is locked » ou un 429 ponctuel ne
- * doit pas figer le repli catalogue pour toute la session.
- */
 async function probeWithRetry(
+    tenant: string,
+    resourceKey: string,
+    child: string | null,
+): Promise<CacheEntry | null> {
+    let attempt = await probeOnce(tenant, resourceKey, child);
+
+    if (attempt.entry !== null || !attempt.retryable) {
+        return attempt.entry;
+    }
+
+    await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, RETRY_DELAY_MS);
+    });
+
+    attempt = await probeOnce(tenant, resourceKey, child);
+
+    return attempt.entry;
+}
+
+function loadResourceFields(
     cacheKey: string,
     tenant: string,
     resourceKey: string,
     child: string | null,
 ): Promise<CacheEntry | null> {
-    try {
-        let entry = await probeOnce(tenant, resourceKey, child);
+    const pending = inFlight.get(cacheKey);
 
-        if (entry === null) {
-            await new Promise((resolve) =>
-                setTimeout(resolve, RETRY_DELAY_MS),
-            );
-            entry = await probeOnce(tenant, resourceKey, child);
-        }
-
-        if (entry !== null) {
-            discovered.set(cacheKey, entry);
-        }
-
-        return entry;
-    } finally {
-        inFlight.delete(cacheKey);
+    if (pending !== undefined) {
+        return pending;
     }
+
+    const request = probeWithRetry(tenant, resourceKey, child)
+        .then((entry) => {
+            if (entry !== null) {
+                resolved.set(cacheKey, {
+                    entry,
+                    resolvedAt: Date.now(),
+                });
+                publish(cacheKey);
+            }
+
+            return entry;
+        })
+        .catch(() => null)
+        .finally(() => {
+            inFlight.delete(cacheKey);
+        });
+
+    inFlight.set(cacheKey, request);
+
+    return request;
 }
 
 /**
- * Découvre les champs réellement exposés par une ressource (ou un enfant
- * expand) sur le tenant choisi, via l'endpoint resource-fields (sonde
- * `limit=1` cachée côté serveur). En cas d'échec durable, la liste du
- * catalogue fournie en repli reste affichée sans erreur bloquante.
+ * Discovers fields exposed by a resource or expanded child on the selected
+ * tenant. Catalog fields remain available immediately while the shared request
+ * runs in the background, so field selection never depends on a spinner.
  */
 export function useResourceFields(
     resourceKey: string | null,
@@ -112,56 +224,34 @@ export function useResourceFields(
     child: string | null,
     fallback: string[],
 ): ResourceFields {
-    const cacheKey = `${tenant}::${resourceKey ?? ''}::${child ?? ''}`;
-    const ready = resourceKey !== null && tenant !== '';
-    const cached = ready ? discovered.get(cacheKey) : undefined;
-    const [, setTick] = useState(0);
-    const [failedKey, setFailedKey] = useState<string | null>(null);
+    const userId = usePage().props.auth.user.id;
+    const ready = resourceKey !== null && resourceKey !== '' && tenant !== '';
+    const cacheKey = createCacheKey(userId, tenant, resourceKey, child);
+    const subscribeToCache = useCallback(
+        (onStoreChange: () => void) => subscribe(cacheKey, onStoreChange),
+        [cacheKey],
+    );
+    const getSnapshot = useCallback(
+        () => (ready ? getResolved(cacheKey) : undefined),
+        [cacheKey, ready],
+    );
+    const cached = useSyncExternalStore(
+        subscribeToCache,
+        getSnapshot,
+        emptyServerSnapshot,
+    );
 
     useEffect(() => {
-        if (!ready || resourceKey === null || discovered.has(cacheKey)) {
+        if (!ready || resourceKey === null || hasFreshResolution(cacheKey)) {
             return;
         }
 
-        let cancelled = false;
-
-        const promise =
-            inFlight.get(cacheKey) ??
-            probeWithRetry(cacheKey, tenant, resourceKey, child);
-        inFlight.set(cacheKey, promise);
-
-        void promise.then((entry) => {
-            if (cancelled) {
-                return;
-            }
-
-            if (entry === null) {
-                setFailedKey(cacheKey);
-            } else {
-                setTick((t) => t + 1);
-            }
-        });
-
-        return () => {
-            cancelled = true;
-        };
+        void loadResourceFields(cacheKey, tenant, resourceKey, child);
     }, [cacheKey, ready, resourceKey, tenant, child]);
 
-    if (!ready) {
+    if (!ready || cached === undefined) {
         return { fields: fallback, source: 'catalog', loading: false };
     }
 
-    if (cached !== undefined) {
-        return {
-            fields: cached.fields,
-            source: cached.source,
-            loading: false,
-        };
-    }
-
-    if (failedKey === cacheKey) {
-        return { fields: fallback, source: 'catalog', loading: false };
-    }
-
-    return { fields: fallback, source: 'catalog', loading: true };
+    return { ...cached, loading: false };
 }

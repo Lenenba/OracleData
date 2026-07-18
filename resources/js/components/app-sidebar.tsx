@@ -1,5 +1,11 @@
 import { Link } from '@inertiajs/react';
-import { Database, LayoutGrid, Server, Share2 } from 'lucide-react';
+import {
+    Database,
+    FileSliders,
+    LayoutGrid,
+    Server,
+    Share2,
+} from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -16,6 +22,7 @@ import { useI18n } from '@/i18n/i18n-context';
 import { dashboard } from '@/routes';
 import oracleTenants from '@/routes/oracle-tenants';
 import queries from '@/routes/queries';
+import queryTemplates from '@/routes/query-templates';
 import type { NavItem } from '@/types';
 
 export function AppSidebar() {
@@ -23,6 +30,11 @@ export function AppSidebar() {
     const mainNavItems: NavItem[] = [
         { title: t('nav.dashboard'), href: dashboard(), icon: LayoutGrid },
         { title: t('nav.queries'), href: queries.index(), icon: Database },
+        {
+            title: t('nav.queryTemplates'),
+            href: queryTemplates.index(),
+            icon: FileSliders,
+        },
         { title: t('nav.sharedQueries'), href: queries.shared(), icon: Share2 },
         {
             title: t('nav.oracleConnections'),

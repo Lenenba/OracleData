@@ -18,9 +18,12 @@ use Illuminate\Support\Carbon;
  *
  * @property int $id
  * @property int|null $query_id
+ * @property int|null $query_template_id
  * @property int $user_id
  * @property int|null $oracle_tenant_id
  * @property int|null $auth_connection_id
+ * @property string $source_type
+ * @property string $purpose
  * @property string $status
  * @property int $duration_ms
  * @property int $rows_count
@@ -28,15 +31,19 @@ use Illuminate\Support\Carbon;
  * @property Carbon $started_at
  * @property Carbon $finished_at
  * @property-read Query|null $executedQuery
+ * @property-read QueryTemplate|null $queryTemplate
  * @property-read User $user
  * @property-read OracleTenant|null $oracleTenant
  * @property-read AuthConnection|null $authConnection
  */
 #[Fillable([
     'query_id',
+    'query_template_id',
     'user_id',
     'oracle_tenant_id',
     'auth_connection_id',
+    'source_type',
+    'purpose',
     'status',
     'duration_ms',
     'rows_count',
@@ -48,6 +55,14 @@ class QueryExecution extends Model
 {
     /** @use HasFactory<QueryExecutionFactory> */
     use HasFactory;
+
+    public const string SOURCE_SAVED_QUERY = 'saved_query';
+
+    public const string SOURCE_QUERY_TEMPLATE = 'query_template';
+
+    public const string PURPOSE_RUN = 'run';
+
+    public const string PURPOSE_PREVIEW = 'preview';
 
     public const string STATUS_SUCCEEDED = 'succeeded';
 
@@ -72,6 +87,17 @@ class QueryExecution extends Model
     public function executedQuery(): BelongsTo
     {
         return $this->belongsTo(Query::class, 'query_id');
+    }
+
+    /**
+     * The predefined template directly previewed or executed by the user.
+     * Personal copies remain attached to executedQuery() instead.
+     *
+     * @return BelongsTo<QueryTemplate, $this>
+     */
+    public function queryTemplate(): BelongsTo
+    {
+        return $this->belongsTo(QueryTemplate::class);
     }
 
     /**

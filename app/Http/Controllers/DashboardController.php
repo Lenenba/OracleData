@@ -138,6 +138,7 @@ class DashboardController extends Controller
         $nextMonth = $monthStart->copy()->addMonth();
         $values = (array) QueryExecution::query()
             ->where('user_id', $userId)
+            ->where('purpose', QueryExecution::PURPOSE_RUN)
             ->where('finished_at', '>=', $monthStart)
             ->where('finished_at', '<', $nextMonth)
             ->toBase()

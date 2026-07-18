@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Models\Query;
 use App\Models\QueryExecution;
+use App\Models\QueryTemplate;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -23,9 +24,12 @@ class QueryExecutionFactory extends Factory
 
         return [
             'query_id' => Query::factory(),
+            'query_template_id' => null,
             'user_id' => User::factory(),
             'oracle_tenant_id' => null,
             'auth_connection_id' => null,
+            'source_type' => QueryExecution::SOURCE_SAVED_QUERY,
+            'purpose' => QueryExecution::PURPOSE_RUN,
             'status' => QueryExecution::STATUS_SUCCEEDED,
             'duration_ms' => fake()->numberBetween(50, 2000),
             'rows_count' => fake()->numberBetween(0, 500),
@@ -41,6 +45,22 @@ class QueryExecutionFactory extends Factory
             'status' => QueryExecution::STATUS_FAILED,
             'error_code' => $errorCode,
             'rows_count' => 0,
+        ]);
+    }
+
+    public function forQueryTemplate(?QueryTemplate $template = null): static
+    {
+        return $this->state(fn (): array => [
+            'query_id' => null,
+            'query_template_id' => $template?->id ?? QueryTemplate::factory(),
+            'source_type' => QueryExecution::SOURCE_QUERY_TEMPLATE,
+        ]);
+    }
+
+    public function preview(): static
+    {
+        return $this->state(fn (): array => [
+            'purpose' => QueryExecution::PURPOSE_PREVIEW,
         ]);
     }
 }

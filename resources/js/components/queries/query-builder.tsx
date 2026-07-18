@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
+import { Textarea } from '@/components/ui/textarea';
 import { useLivePreview } from '@/hooks/use-live-preview';
 import { useI18n } from '@/i18n/i18n-context';
 import {
@@ -53,6 +54,7 @@ type BuilderMode = 'create' | 'edit';
 type BuilderInitialState = {
     queryId?: number;
     name?: string;
+    description?: string | null;
     visibility?: 'private' | 'shared';
     resourceKey?: string;
     tenantKey?: string;
@@ -131,10 +133,7 @@ export function QueryBuilder({
         initialState?.childFields ?? {},
     );
     const [filterRows, setFilterRows] = useState<FilterRow[]>(() =>
-        qToFilterRows(
-            initialState?.filterQ ?? '',
-            initialResource?.fields ?? [],
-        ),
+        qToFilterRows(initialState?.filterQ ?? ''),
     );
     const [orderBy, setOrderBy] = useState(initialState?.orderBy ?? '');
     const [tenant, setTenant] = useState(() => {
@@ -153,6 +152,9 @@ export function QueryBuilder({
     );
 
     const [name, setName] = useState(initialState?.name ?? '');
+    const [queryDescription, setQueryDescription] = useState(
+        initialState?.description ?? '',
+    );
     const [visibility, setVisibility] = useState<'private' | 'shared'>(
         initialState?.visibility ?? 'private',
     );
@@ -162,6 +164,7 @@ export function QueryBuilder({
     const [tags, setTags] = useState<string[]>(initialState?.tags ?? []);
     const [tagInput, setTagInput] = useState('');
     const [saving, setSaving] = useState(false);
+    const [saveErrors, setSaveErrors] = useState<string[]>([]);
     const [activeTab, setActiveTab] = useState<'preview' | 'sql'>('preview');
     // Aucun appel Oracle tant que l'utilisateur n'a pas demandé l'aperçu. En
     // édition, la requête existante s'affiche d'emblée (un appel attendu).
@@ -169,7 +172,7 @@ export function QueryBuilder({
 
     const parsedLimit = parseLimit(limit);
     const tenantLabel = tenants[tenant] ?? tenant;
-    const filterQ = filterRowsToQ(filterRows, resource?.fields ?? []);
+    const filterQ = filterRowsToQ(filterRows);
 
     // Ne transmet que les sélections de champs des enfants/jointures actifs
     const activeChildFields = useMemo(() => {
@@ -222,32 +225,6 @@ export function QueryBuilder({
         live.result.resource !== null;
 
     const resolvedName = name.trim() || resource?.label || '';
-
-    const description = useMemo(() => {
-        if (!resource) {
-            return '';
-        }
-
-        const parts: string[] = [resource.label];
-
-        if (expand.length > 0) {
-            parts.push(`avec ${expand.join(', ')}`);
-        }
-
-        if (joins.length > 0) {
-            parts.push(`joint à ${joins.join(', ')}`);
-        }
-
-        if (filterQ.trim()) {
-            parts.push(`filtré : ${filterQ.trim()}`);
-        }
-
-        if (orderBy.trim()) {
-            parts.push(`trié par ${orderBy.trim()}`);
-        }
-
-        return parts.join(' — ');
-    }, [resource, expand, joins, filterQ, orderBy]);
 
     const bipSql = useMemo(
         () =>
@@ -303,6 +280,7 @@ export function QueryBuilder({
         }
 
         setSaving(true);
+        setSaveErrors([]);
 
         // Spécification construite à partir de l'état du builder — source de
         // vérité de ce que l'utilisateur a sélectionné — et non de l'aperçu,
@@ -316,15 +294,15 @@ export function QueryBuilder({
         };
 
         if (fields.length > 0) {
-            parameters.fields = fields;
+            parameters.fields = fields.join(',');
         }
 
         if (expand.length > 0) {
-            parameters.expand = expand;
+            parameters.expand = expand.join(',');
         }
 
         if (joins.length > 0) {
-            parameters.joins = joins;
+            parameters.joins = joins.join(',');
         }
 
         if (Object.keys(activeChildFields).length > 0) {
@@ -341,7 +319,7 @@ export function QueryBuilder({
 
         const payload = {
             name: resolvedName,
-            description,
+            description: queryDescription.trim() || null,
             mode: 'single',
             resource_path: live.result.resource?.path ?? '',
             tenant_key: tenant,
@@ -351,14 +329,21 @@ export function QueryBuilder({
             parameters,
         };
 
+        const visitOptions = {
+            onError: (errors: Record<string, string>) => {
+                setSaveErrors(Object.values(errors));
+            },
+            onFinish: () => setSaving(false),
+        };
+
         if (mode === 'edit' && initialState?.queryId !== undefined) {
-            router.put(queries.update.url(initialState.queryId), payload, {
-                onError: () => setSaving(false),
-            });
+            router.put(
+                queries.update.url(initialState.queryId),
+                payload,
+                visitOptions,
+            );
         } else {
-            router.post(queries.store.url(), payload, {
-                onError: () => setSaving(false),
-            });
+            router.post(queries.store.url(), payload, visitOptions);
         }
     }
 
@@ -645,6 +630,33 @@ export function QueryBuilder({
                         </div>
                     </div>
 
+                    <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between gap-3">
+                            <Label
+                                htmlFor="qb-description"
+                                className="text-xs font-medium"
+                            >
+                                {t('queries.descriptionLabel')}
+                            </Label>
+                            <span className="text-[11px] text-muted-foreground tabular-nums">
+                                {queryDescription.length}/2000
+                            </span>
+                        </div>
+                        <Textarea
+                            id="qb-description"
+                            value={queryDescription}
+                            onChange={(event) =>
+                                setQueryDescription(event.target.value)
+                            }
+                            maxLength={2000}
+                            rows={3}
+                            placeholder={t('queries.descriptionPlaceholder')}
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                            {t('queries.descriptionHint')}
+                        </p>
+                    </div>
+
                     <div className="grid gap-3 md:grid-cols-2">
                         <div className="flex flex-col gap-1.5">
                             <Label
@@ -776,6 +788,13 @@ export function QueryBuilder({
                             </p>
                         </div>
                     </div>
+
+                    {saveErrors.length > 0 && (
+                        <AlertError
+                            title="Enregistrement impossible"
+                            errors={saveErrors}
+                        />
+                    )}
 
                     <div className="flex items-center justify-between gap-3">
                         {isSaveable ? (

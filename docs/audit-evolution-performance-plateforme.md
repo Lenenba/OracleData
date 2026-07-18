@@ -142,7 +142,7 @@ Le futur SSO de la plateforme utilisera des tables d'identité distinctes et ne 
 
 ### Suivi d'avancement
 
-Dernière mise à jour : 17 juillet 2026.
+Dernière mise à jour : 18 juillet 2026.
 
 | Étape | Sujet | État |
 | ---: | --- | --- |
@@ -151,8 +151,8 @@ Dernière mise à jour : 17 juillet 2026.
 | 3 | Tenants personnels, onboarding et contrôle d'accès | **En cours — fondation livrée le 17 juillet 2026** |
 | 4 | Bibliothèque organisée | **Fait — 17 juillet 2026** |
 | 5 | Partage ciblé et collaboration | À faire |
-| 6 | Gouvernance et templates officiels | À faire |
-| 7 | Couche sémantique Oracle | À faire |
+| 6 | Gouvernance et templates officiels | **En cours — socle des modèles prédéfinis livré le 18 juillet 2026** |
+| 7 | Couche sémantique Oracle | À faire — catalogue technique et découverte des champs déjà partiels |
 | 8 | Fiabilité et tests de données | À faire |
 | 9 | Exécution asynchrone et automatisation | À faire |
 | 10 | Dashboards et analyse avancée | À faire |
@@ -184,7 +184,7 @@ Résultat de l'étape 1 :
 - journalisation structurée des appels Oracle et requêtes HTTP lentes ;
 - migrations de stabilisation locales appliquées et `test@example.com` promu super-administrateur ;
 - migration multi-tenant prête, avec arrêt sécurisé si les tenants historiques n'ont pas de propriétaire non ambigu ;
-- validation cumulative actuelle : 318 tests et 1 510 assertions réussis à l'issue de l'étape 4 ;
+- validation cumulative actuelle : 355 tests et 1 690 assertions réussis au 18 juillet 2026 ;
 - PHPStan, ESLint, TypeScript et build de production validés.
 
 Chantier parallèle restant : **Étape 2 — finaliser la fondation multilingue FR/EN/ES**.
@@ -217,7 +217,8 @@ Progression de l'étape 4 :
 - [x] créer favoris et épinglage — préférences strictement personnelles, priorité des épingles, mutations optimistes et rollback frontend en cas d'échec ; ce comportement React est implémenté mais reste à couvrir par un test composant ou E2E dédié ;
 - [x] ajouter filtres, tris et statistiques à la bibliothèque — recherche nom/description/propriétaire/tags, filtres catégorie/tag/favoris/épingles, six tris serveur et agrégats d'exécution ;
 - [x] créer les vues enregistrées — filtres nommés par utilisateur, vue par défaut, validation par liste blanche, application et suppression depuis la bibliothèque ;
-- [x] optimiser le dashboard — compteurs, huit semaines et domaines agrégés en SQL, colonnes récentes limitées et métriques mensuelles par utilisateur exécutant.
+- [x] optimiser le dashboard — compteurs, huit semaines et domaines agrégés en SQL, colonnes récentes limitées et métriques mensuelles par utilisateur exécutant ;
+- [x] rendre la description d'une requête éditable et durable — champ facultatif limité à 2 000 caractères, prérempli en édition, affiché dans la bibliothèque et le détail, y compris pour les lecteurs d'une requête partagée ; une valeur vide est conservée comme `null` et n'est plus remplacée par un résumé technique automatique.
 
 Résultat de l'étape 4 :
 
@@ -227,9 +228,38 @@ Résultat de l'étape 4 :
 - favoris et épingles isolés par utilisateur, y compris pour une requête partagée, sans élargir les droits sur sa définition ;
 - filtres conservés dans l'URL et vues enregistrées cloisonnées par propriétaire avec refus IDOR en `404` ;
 - statistiques de bibliothèque fondées sur les agrégats atomiques et statistiques du dashboard fondées sur l'utilisateur qui a réellement exécuté la requête ; le test anti-N+1 maintient le chargement du dashboard à dix requêtes SQL au plus avec cinquante requêtes accessibles ;
-- 318 tests et 1 510 assertions réussis ; Pint, PHPStan, ESLint, Prettier, TypeScript et build Vite de production validés.
+- 318 tests et 1 510 assertions réussis à la clôture initiale de l'étape 4 ; Pint, PHPStan, ESLint, Prettier, TypeScript et build Vite de production validés.
 
-Fonctionnalités couvertes :
+Progression de l'étape 6 — **socle livré de manière anticipée le 18 juillet 2026** :
+
+- [x] créer une table système `query_templates` distincte des requêtes personnelles afin que l'original ne puisse jamais être altéré par un utilisateur ;
+- [x] exposer une bibliothèque dédiée de modèles actifs avec recherche, catégorie, description et ressource Oracle ;
+- [x] permettre l'aperçu et l'exécution avec le tenant du lecteur et des paramètres typés (`number`, `integer`, `date`, `select`, `boolean`, `string`) ;
+- [x] lier les valeurs côté serveur à des champs, opérateurs et paramètres d'exécution placés sur liste blanche, sans laisser le navigateur construire librement le filtre Oracle ;
+- [x] permettre le clonage en requête privée et modifiable, en matérialisant les paramètres choisis et en conservant la provenance avec `queries.query_template_id` ;
+- [x] garantir l'immutabilité applicative du modèle original et vérifier que l'aperçu, l'exécution et le clonage ne le modifient pas ;
+- [x] fournir quatre modèles initiaux par seeder idempotent, dont les factures fournisseurs supérieures à un montant choisi ;
+- [x] journaliser l'exécution et le clonage sans élargir l'accès aux connexions Oracle d'un autre utilisateur ;
+- [ ] traduire les noms, descriptions, options et aides des contenus officiels en FR/EN/ES ; l'interface de la bibliothèque est déjà traduite, mais le contenu seedé reste principalement en français ;
+- [ ] enregistrer les exécutions de modèles dans un journal statistique avec durée, statut, nombre de lignes, tenant et connexion, en plus de l'événement d'audit actuel ;
+- [ ] définir pour chaque paramètre une politique d'audit (`clair`, `masqué`, `empreinte` ou `omis`) avant d'introduire des valeurs potentiellement sensibles comme un fournisseur ou un texte libre ;
+- [ ] faire échouer l'exécution d'un modèle de manière fermée lorsqu'un fallback de compatibilité Oracle devrait retirer un filtre `q`, au lieu d'accepter silencieusement un résultat plus large ;
+- [ ] ajouter une console de gouvernance avec brouillon, revue, publication, archivage, propriétaire métier et date de révision ;
+- [ ] ajouter l'historique des versions, la comparaison, la restauration et la certification.
+
+Résultat partiel de l'étape 6 :
+
+- les modèles globaux sont indépendants de tout propriétaire utilisateur et seuls les modèles actifs sont visibles ;
+- l'aperçu est borné à 25 lignes, tandis que l'exécution respecte la limite validée du modèle ;
+- les paramètres inconnus, valeurs hors domaine, structures de requête injectées et tenants non accessibles sont refusés avant l'appel Oracle ;
+- le clone reçoit sa propre description éditable, sa catégorie, ses paramètres résolus et sa visibilité privée sans modifier le modèle source ;
+- les exécutions sont auditées, mais ne contribuent pas encore à `query_executions` ni aux statistiques d'usage, et les valeurs de paramètres nécessitent une stratégie de masquage avant l'ajout de paramètres sensibles ;
+- 11 scénarios fonctionnels dédiés couvrent visibilité, isolation des tenants, liaison typée, échappement, limites, audit, clonage, immutabilité et idempotence du seeder ;
+- validation cumulative : 355 tests et 1 690 assertions, TypeScript, ESLint, Prettier et build Vite de production réussis.
+
+Clôture technique du lot actuel : ajouter la politique de confidentialité des paramètres d'audit, relier les exécutions de modèles aux métriques d'usage et compléter les traductions officielles. Le prochain chantier stratégique reste ensuite l'**étape 5 — partage ciblé et collaboration**. La suite éditoriale de l'étape 6 ne doit pas être déclarée terminée avant la livraison du versionnement, du workflow de publication et de la certification.
+
+Périmètre analysé par ce document, qu'il soit déjà livré ou encore planifié :
 
 - tags et catégories ;
 - favoris et épinglage ;
@@ -249,7 +279,7 @@ Fonctionnalités couvertes :
 
 ### Architecture
 
-- Laravel 13 et PHP 8.4 ;
+- Laravel 13 et PHP `>= 8.3` ; le runtime local de validation utilise PHP 8.4 ;
 - Inertia.js 3 ;
 - React 19 et TypeScript ;
 - Vite 8 et Tailwind CSS 4 ;
@@ -279,13 +309,15 @@ Recommandations :
 - conservation des filtres dans l'URL ;
 - debounce de la recherche.
 
-### 3.2 Lectures répétées des tenants
+### 3.2 Lectures répétées des tenants — corrigé le 17 juillet 2026
 
 `FusionManager` peut relire la table des tenants chaque fois qu'un libellé est demandé. Dans une liste, cela peut produire un N+1 et, si le cache n'est pas correctement segmenté, une fuite de métadonnées entre utilisateurs.
 
 Recommandation : mémoïser la liste des tenants du seul utilisateur courant pendant toute la requête HTTP, inclure son `user_id` dans toute clé de cache persistante et invalider ce cache après création, modification ou suppression d'un tenant.
 
-### 3.3 Index insuffisants
+État actuel : `FusionManager` est désormais résolu dans le périmètre de l'utilisateur courant, mémoïsé pendant la requête et invalidé après mutation. Les tests d'isolation empêchent la réutilisation de la liste ou des connexions d'un autre utilisateur.
+
+### 3.3 Index insuffisants — corrigé pour les parcours actuels le 17 juillet 2026
 
 Index recommandés :
 
@@ -299,7 +331,7 @@ query_executions(user_id, finished_at)
 query_user_preferences(user_id, is_pinned, pinned_at)
 ```
 
-L'ordre exact devra être confirmé avec les requêtes finales et les plans d'exécution de la base de production.
+Ces index sont présents dans les migrations actuelles, notamment sur la bibliothèque, les catégories et les exécutions. Leur ordre devra encore être confirmé avec les plans d'exécution et la volumétrie réels de la base de production.
 
 ### 3.4 Grands tableaux de résultats
 
@@ -324,7 +356,7 @@ Recommandations :
 - agrégats pré-calculés pour les exécutions ;
 - cache court pour les indicateurs peu changeants.
 
-### 3.6 Appels Oracle
+### 3.6 Appels Oracle — socle de fiabilité livré les 17 et 18 juillet 2026
 
 Les appels Oracle doivent recevoir :
 
@@ -334,6 +366,17 @@ Les appels Oracle doivent recevoir :
 - une journalisation de la durée et du statut ;
 - des erreurs normalisées sans secret ni détail technique sensible ;
 - un identifiant de corrélation pour le support.
+
+Le client Oracle applique maintenant des délais de connexion et d'exécution configurables, des retries bornés aux erreurs transitoires, une journalisation structurée et les identifiants de corrélation de la requête HTTP.
+
+La découverte dynamique des champs du query builder est également livrée :
+
+- fallback immédiat vers le catalogue statique pour ne pas bloquer l'interface ;
+- sondage Oracle puis cache persistant `oracle_resource_fields`, isolé par tenant, ressource et enfant ;
+- commandes de préchauffage et d'invalidation du cache de schéma ;
+- cache frontend segmenté par utilisateur, tenant, ressource et enfant ;
+- déduplication des appels simultanés, timeout et retry borné côté navigateur ;
+- utilisation des champs découverts par l'interface et la validation backend des requêtes.
 
 ### 3.7 Analyses agent synchrones
 
@@ -349,16 +392,28 @@ Une analyse agent peut réaliser plusieurs cycles LLM et plusieurs appels Oracle
 
 ### 3.8 Bundle frontend
 
-Mesures observées lors du build de validation de l'étape 4 :
+Mesures observées lors du build de production validé le 18 juillet 2026 :
 
-- bundle principal : 226,7 Ko, soit 64,2 Ko gzip ;
-- bibliothèque de requêtes : 22,4 Ko, soit 7,1 Ko gzip ;
-- query builder chargé séparément : 52,3 Ko, soit 18,1 Ko gzip ;
-- console catégories/tags : 11,8 Ko, soit 3,7 Ko gzip ;
+- bundle principal : 237,2 Ko, soit 66,6 Ko gzip ;
+- bibliothèque de requêtes : 23,3 Ko, soit 7,3 Ko gzip ;
+- query builder chargé séparément : 61,2 Ko, soit 21,5 Ko gzip ;
+- bibliothèque des modèles prédéfinis : 4,8 Ko, soit 2,2 Ko gzip ;
+- console catégories/tags : 11,1 Ko, soit 3,4 Ko gzip ;
 - chunk Wayfinder : 318,8 Ko, soit 100,5 Ko gzip ;
-- CSS : 105,5 Ko, soit 17,2 Ko gzip.
+- CSS : 105,9 Ko, soit 17,2 Ko gzip.
 
 Le chunk Wayfinder doit être analysé : vérifier le tree-shaking, limiter les routes générées si possible et confirmer les dépendances réellement chargées au premier affichage. Les composants lourds du query builder peuvent aussi être chargés à la demande.
+
+### 3.9 Limites actuelles à conserver dans le backlog
+
+- l'enregistrement d'une modification de métadonnées dans le query builder, y compris la description, reste conditionné à un aperçu Oracle réussi ; une mise à jour partielle dédiée sera nécessaire pour rendre ces modifications indépendantes de la disponibilité d'Oracle ;
+- la bibliothèque des modèles charge actuellement tous les modèles actifs et applique recherche et catégorie dans le navigateur ; ajouter pagination et recherche serveur avant une croissance importante du catalogue ;
+- plusieurs textes du query builder, des breadcrumbs et de l'affichage des résultats restent codés en français malgré la fondation i18n ;
+- le générateur SQL actuel produit du SQL pour BI Publisher à partir d'une configuration déjà structurée ; il ne constitue pas le futur traducteur de SQL standard vers un plan d'appels API ;
+- la console de publication, le versionnement, les rôles éditoriaux, la certification, le propriétaire métier et la date de révision des modèles restent à livrer ;
+- l'exécution d'un modèle produit un événement d'audit, mais pas encore une ligne `query_executions` complète ; les valeurs runtime actuellement auditées devront être masquées ou omises selon leur sensibilité ;
+- avant d'ajouter un modèle sur une ressource utilisant un fallback de compatibilité, notamment les bons de commande, interdire explicitement tout fallback qui supprimerait le filtre validé du modèle ;
+- le chunk Wayfinder reste le principal poste frontend à analyser.
 
 ## 4. Tags et catégories
 
@@ -590,37 +645,63 @@ Les e-mails et intégrations externes doivent être envoyés via la queue.
 
 ## 9. Templates officiels verrouillés
 
-### Modèle recommandé
+### Modèle retenu et livré le 18 juillet 2026
 
-Ajouter à `queries` :
+Les modèles globaux sont séparés des requêtes personnelles. Cette séparation évite qu'une évolution des droits ou du formulaire utilisateur permette de modifier accidentellement un original officiel.
 
 ```text
-type: user | official
-is_locked
-published_at
-published_by
+query_templates
+  id
+  slug unique
+  name
+  description nullable
+  category_id nullable
+  resource_key
+  resource_path
+  parameters JSON
+  parameter_definitions JSON
+  is_active
+  sort_order
+  timestamps
+
+queries
+  query_template_id nullable -> query_templates.id
 ```
 
-Si un workflow éditorial est nécessaire, remplacer le simple verrouillage par des statuts `draft`, `review`, `published` et `archived`.
+`query_templates` porte la définition immuable et les paramètres autorisés. `queries.query_template_id` conserve uniquement la provenance d'une copie personnelle ; la copie possède ensuite son propre nom, sa description, sa visibilité, son tenant et ses paramètres matérialisés.
+
+La prochaine évolution de gouvernance ajoutera des statuts `draft`, `review`, `published` et `archived`, ainsi que `published_at`, `published_by`, le propriétaire métier et la date de révision. Ces champs ne doivent pas être simulés avec `is_active` : celui-ci représente seulement la disponibilité opérationnelle actuelle.
 
 ### Règles
 
-- un template officiel publié est partagé ;
+- un modèle actif est visible par les utilisateurs authentifiés, vérifiés et ayant terminé l'onboarding ;
 - un utilisateur standard ne peut ni le modifier, ni le supprimer, ni changer sa visibilité ;
-- tous les utilisateurs autorisés peuvent le cloner ;
+- chaque utilisateur l'exécute uniquement avec l'une de ses propres connexions Oracle ;
+- les valeurs personnalisées sont validées et liées côté serveur à une structure placée sur liste blanche ;
+- tous les utilisateurs autorisés peuvent le prévisualiser, l'exécuter ou le cloner ;
 - le clone devient une requête utilisateur privée et modifiable ;
-- toute modification officielle crée une version ;
-- seuls les administrateurs autorisés peuvent publier ou déverrouiller.
+- le clone conserve un lien de provenance, mais sa modification n'altère jamais le modèle ;
+- les mises à jour système passent actuellement par un seeder idempotent contrôlé ;
+- lorsque la console éditoriale sera livrée, toute modification officielle créera une version et seuls les administrateurs autorisés pourront publier ou archiver.
 
-La Policy Laravel reste la source d'autorité. Masquer un bouton dans React ne suffit pas.
+L'autorité actuelle repose sur les middlewares d'authentification, de vérification et d'onboarding, sur `ensureActive()`, sur l'absence de route utilisateur de mutation et sur les protections du modèle Eloquent. Une future console éditoriale devra introduire une Policy ou un Gate explicite ; masquer un bouton dans React ne suffira pas.
 
 ### Interface
 
 - badge « Template officiel » ;
 - icône de verrouillage ;
-- version publiée ;
-- bouton « Utiliser ce template » ou « Cloner » ;
-- filtre ou section dédiée.
+- version publiée — future ;
+- boutons « Prévisualiser », « Exécuter » et « Créer ma version » ;
+- recherche et filtre par catégorie dans une section dédiée ;
+- formulaire de paramètres typés avec valeurs par défaut, contraintes et aide ;
+- choix limité aux environnements Oracle du lecteur ;
+- rappel visible que l'original est immuable.
+
+### État livré le 18 juillet 2026
+
+La bibliothèque dédiée, les quatre modèles initiaux, la liaison typée et contrôlée de leurs paramètres, l'aperçu, l'exécution auditée et le clonage privé sont opérationnels. Le modèle original est protégé contre les mises à jour et suppressions applicatives. Les copies personnelles peuvent être modifiées et leur description peut être adaptée sans toucher à l'original. L'ajout de nouveaux modèles restera conditionné à une exécution qui échoue de manière fermée plutôt que de retirer silencieusement un filtre pour contourner une incompatibilité Oracle.
+
+Le périmètre restant de cette section est la gouvernance éditoriale : version publiée, workflow de revue, certification, traduction du contenu officiel, comparaison et restauration.
 
 ## 10. Architecture cible
 
@@ -633,6 +714,11 @@ users
   ├── query_executions
   └── query_change_requests
 
+query_templates
+  ├── category
+  ├── paramètres et définitions placés sur liste blanche
+  └── copies personnelles via queries.query_template_id
+
 oracle_tenants
   ├── user propriétaire
   ├── auth_connections
@@ -641,6 +727,7 @@ oracle_tenants
 queries
   ├── category
   ├── tags via query_tag
+  ├── query_template source nullable
   ├── query_versions
   ├── query_executions
   ├── query_change_requests
@@ -716,6 +803,8 @@ Ces valeurs devront être adaptées à l'infrastructure réelle.
 
 ## 14. Feuille de route
 
+Cette feuille de route initiale est conservée comme historique de l'audit. La section 29 est la feuille de route maîtresse et fait autorité en cas d'écart.
+
 ### Phase 1 — Fondations de performance
 
 1. Mémoïser les tenants par utilisateur.
@@ -759,6 +848,8 @@ Ces valeurs devront être adaptées à l'infrastructure réelle.
 
 ## 15. Tests à prévoir
 
+Cette section mélange les régressions déjà automatisées et le backlog restant. Les états détaillés du suivi d'avancement et les critères de passage de la section 29 déterminent ce qui est réellement livré.
+
 ### Backend
 
 - pagination et filtrage des requêtes accessibles ;
@@ -790,6 +881,13 @@ Ces valeurs devront être adaptées à l'infrastructure réelle.
 - redirection vers l'onboarding tant que la première connexion n'est pas validée ;
 - ajout et gestion de plusieurs connexions depuis les paramètres ;
 - sélecteur des seuls tenants du lecteur sur une requête partagée ;
+- préremplissage, conservation et effacement vers `null` de la description d'une requête ;
+- payload de création et de mise à jour incluant la description personnalisée ;
+- recherche, configuration, aperçu, exécution et clonage d'un modèle prédéfini ;
+- affichage des erreurs de paramètres et de clonage ;
+- cache, déduplication, timeout et retry de la découverte des champs ;
+- sérialisation canonique des champs, expansions, jointures et `child_fields` ;
+- parcours clavier et accessibilité du formulaire de paramètres ;
 - navigation dans l'historique ;
 - progression d'une exécution asynchrone.
 
@@ -1156,11 +1254,18 @@ users
 
 queries
   ├── category et tags
+  ├── modèle source nullable
   ├── versions
   ├── executions
   ├── change requests
   ├── user/group shares
   └── audit events
+
+query templates
+  ├── définition système immuable
+  ├── paramètres typés et liaisons autorisées
+  ├── catégorie et traductions futures
+  └── copies personnelles traçables
 
 platform
   ├── identity providers
@@ -1171,6 +1276,8 @@ platform
 ```
 
 ## 24. Feuille de route étendue
+
+Cette extension est conservée pour retracer les décisions d'architecture. Sa numérotation n'est plus prescriptive ; la section 29 constitue l'ordre de réalisation officiel.
 
 ### Phase 3 — Tenants personnels, onboarding et gouvernance renforcée
 
@@ -1224,7 +1331,14 @@ platform
 - déprovisionnement et fin de session ;
 - isolation des identités et jetons entre tenants ;
 - fallback contrôlé du mode délégué vers le compte de service ;
-- masquage des données et restrictions d'export.
+- masquage des données et restrictions d'export ;
+- refus de tout SQL de mutation, de toute requête multiple et de tout identifiant hors catalogue ;
+- conversion reproductible du sous-ensemble SQL supporté vers un plan d'appels API ;
+- comparaison des résultats traduits avec des jeux de référence couvrant filtres, jointures, agrégations, doublons, ordre et valeurs nulles ;
+- diagnostic localisé des fragments SQL partiellement ou non pris en charge ;
+- proposition d'une alternative actionnable lorsque l'équivalence complète est impossible ;
+- isolation du traducteur SQL par utilisateur, tenant, connexion et droits de colonne ;
+- respect des limites de lignes, d'appels, de durée et de mémoire des transformations locales.
 
 ## 26. Conclusion générale
 
@@ -1345,11 +1459,14 @@ tag_translations
 - name
 
 query_template_translations
-- query_id
+- query_template_id
 - locale
 - name
 - description
 - usage_instructions nullable
+- parameter_labels JSON ou table enfant dédiée
+- parameter_descriptions JSON ou table enfant dédiée
+- parameter_options JSON ou table enfant dédiée
 
 semantic_resource_translations
 - semantic_resource_id
@@ -1437,6 +1554,63 @@ Les capacités suivantes complètent la cible compétitive déjà décrite :
 - niveau de confiance et sources interrogées ;
 - respect obligatoire des droits utilisateur, tenant et colonne.
 
+### SQL standard vers appels API Oracle — évolution future
+
+L'utilisateur pourra saisir une requête SQL standard afin d'exprimer un besoin connu sans devoir identifier lui-même les endpoints Oracle correspondants. La plateforme n'exécutera jamais ce SQL directement contre la base de données Oracle, la base applicative ou une connexion arbitraire. Elle analysera sa structure, la confrontera à la couche sémantique autorisée, puis tentera de produire un plan d'appels API en lecture seule donnant un résultat équivalent.
+
+Cette évolution ne doit pas être confondue avec l'onglet SQL actuel du query builder. Celui-ci génère un SQL BI Publisher à partir d'une requête déjà configurée ; il ne parse pas un SQL fourni par l'utilisateur et ne construit aucun plan d'API.
+
+Le parcours cible est le suivant :
+
+1. parser le SQL en arbre syntaxique avec un parseur dédié, sans interprétation par expressions régulières ni exécution préalable ;
+2. refuser avant toute résolution les instructions autres que la lecture, les requêtes multiples et les constructions ambiguës ;
+3. résoudre tables, alias, colonnes, relations et fonctions à partir du catalogue sémantique Oracle versionné ;
+4. construire un plan explicite d'appels API : ressources, projections, filtres, tris, pagination, jointures autorisées et éventuelles transformations locales bornées ;
+5. classer la conversion `exacte`, `partielle` ou `impossible`, avec un niveau de confiance et les raisons détaillées ;
+6. afficher le SQL reçu, le plan produit, les hypothèses et les limites avant l'exécution ;
+7. exécuter uniquement après validation, avec les droits, le tenant, la connexion, les quotas et les limites de l'utilisateur courant ;
+8. conserver dans l'audit le SQL normalisé ou son empreinte selon sa sensibilité, la version du traducteur, la version du catalogue sémantique, le plan d'API et le statut d'équivalence.
+
+Le premier périmètre doit se limiter à un sous-ensemble déterministe de `SELECT` ANSI :
+
+- sélection et alias de colonnes connues ;
+- `WHERE` avec comparaisons, listes, intervalles et opérateurs booléens pris en charge par les API ciblées ;
+- `ORDER BY`, pagination et limites ;
+- jointures déclarées dans la couche sémantique ;
+- agrégations simples uniquement lorsqu'une API Oracle ou une transformation locale bornée permet de préserver la sémantique ;
+- paramètres nommés validés séparément des identifiants SQL.
+
+Sont refusés ou signalés comme non convertibles tant qu'une équivalence démontrable n'existe pas :
+
+- `INSERT`, `UPDATE`, `DELETE`, `MERGE`, DDL, transactions et blocs procéduraux ;
+- accès à une table, colonne ou relation absente du catalogue autorisé ;
+- SQL spécifique à un moteur sans correspondance connue ;
+- CTE récursives, sous-requêtes corrélées, fonctions analytiques ou fenêtres non supportées ;
+- jointures arbitraires, agrégations non bornées et opérations nécessitant de charger un volume excessif côté application ;
+- toute construction dont la traduction modifierait silencieusement les filtres, la cardinalité, les doublons, l'ordre ou la gestion des valeurs nulles.
+
+Une conversion partielle ne doit jamais être présentée comme équivalente. Le diagnostic indique précisément, pour chaque fragment SQL, s'il est converti, approximé ou non pris en charge, ainsi que son impact attendu sur le résultat. Les données ne sont exécutées que si le niveau d'équivalence annoncé respecte le seuil choisi par l'utilisateur ou la politique de gouvernance.
+
+Lorsque la conversion complète est impossible, la plateforme propose une ou plusieurs alternatives actionnables :
+
+- une réécriture SQL compatible avec le sous-ensemble pris en charge ;
+- un template de requête API à compléter ou à faire valider ;
+- plusieurs appels API avec une transformation locale bornée, clairement identifiée comme telle ;
+- un rapport OTBI ou BI Publisher lorsque ce canal est configuré, autorisé et plus fidèle au besoin ;
+- une demande d'ajout de mapping dans la couche sémantique, avec les tables, colonnes, fonctions ou relations manquantes déjà extraites.
+
+L'interface doit fournir côte à côte le SQL, le diagnostic de compatibilité et le plan API. Elle distingue visuellement l'aperçu du plan, l'exécution et le résultat, et permet à l'utilisateur de corriger le SQL sans perdre les paramètres reconnus. Aucun nom de ressource, filtre ou relation généré par un modèle ne contourne les listes blanches du backend.
+
+Les critères d'acceptation minimaux sont :
+
+- aucune instruction de mutation ne peut atteindre Oracle ou la base applicative ;
+- une requête totalement supportée produit un plan reproductible et des résultats comparés à un jeu de référence ;
+- toute perte d'équivalence est annoncée avant l'exécution et localisée dans le SQL ;
+- les éléments non pris en charge donnent lieu à une alternative concrète, jamais à un échec opaque ;
+- deux utilisateurs traduisant le même SQL restent isolés par leurs droits, tenants, connexions et champs autorisés ;
+- les limites de lignes, d'appels, de durée et de transformations locales sont appliquées avant l'exécution ;
+- le SQL, le plan et les résultats sensibles ne sont ni journalisés en clair ni transmis à un modèle externe sans politique explicite.
+
 ### Cycle de vie des requêtes
 
 ```text
@@ -1464,7 +1638,9 @@ Chaque promotion peut exiger tests automatiques, approbation, résumé de change
 
 ### Requêtes paramétrables
 
-Les templates peuvent exposer des paramètres validés : dates, unité opérationnelle, statut, fournisseur, devise et tenant. Les listes de valeurs peuvent provenir d'Oracle et être mises en cache prudemment.
+**Partiellement livré le 18 juillet 2026 pour les modèles prédéfinis.** Les types nombre, entier, texte, date, liste et booléen sont pris en charge avec valeurs par défaut, obligation, bornes et options autorisées. Les liaisons de filtre et de limite sont construites côté serveur à partir de définitions contrôlées.
+
+La suite ajoutera les paramètres métier comme l'unité opérationnelle, le fournisseur, la devise et les listes de valeurs provenant d'Oracle, avec cache prudent et isolation par tenant.
 
 ### Dashboards composables
 
@@ -1504,7 +1680,7 @@ Chaque résultat doit pouvoir être relié à l'utilisateur, au tenant, à l'ide
 
 ## 29. Feuille de route maîtresse — réalisation étape par étape
 
-Cette feuille de route remplace l'ordre indicatif des sections précédentes. Chaque étape doit être livrée, testée et mesurée avant le démarrage de la suivante. Le SSO est volontairement placé en dernier.
+Cette feuille de route remplace l'ordre indicatif des sections précédentes. Elle définit l'ordre des priorités et le SSO reste volontairement placé en dernier. Une fondation peut être livrée de manière anticipée lorsqu'un besoin utilisateur direct l'exige, mais cela ne clôt ni les étapes intermédiaires ni l'étape concernée ; le chantier suivant revient ensuite à la première priorité incomplète et actionnable.
 
 ### Étape 1 — Stabilisation et sécurité immédiate
 
@@ -1553,9 +1729,11 @@ Cette feuille de route remplace l'ordre indicatif des sections précédentes. Ch
 
 ### Étape 6 — Gouvernance et templates officiels
 
+**En cours. Socle des modèles prédéfinis livré et validé le 18 juillet 2026 ; gouvernance éditoriale restante.**
+
 - historique des versions ;
 - comparaison et restauration ;
-- templates verrouillés ;
+- templates verrouillés — bibliothèque, paramètres, aperçu, exécution et clone privé livrés ;
 - workflow de validation et certification ;
 - propriétaires métier et dates de révision.
 
@@ -1565,7 +1743,8 @@ Cette feuille de route remplace l'ordre indicatif des sections précédentes. Ch
 - relations, synonymes et glossaire trilingue ;
 - classification des données ;
 - détection de changements de schéma ;
-- lignée entre requêtes et ressources.
+- lignée entre requêtes et ressources ;
+- mappings déterministes entre tables/colonnes SQL autorisées et ressources/champs API, prérequis du futur traducteur SQL.
 
 ### Étape 8 — Fiabilité et tests de données
 
@@ -1573,7 +1752,8 @@ Cette feuille de route remplace l'ordre indicatif des sections précédentes. Ch
 - validation automatique avant publication ;
 - surveillance des requêtes certifiées ;
 - score de santé ;
-- détection des requêtes lentes ou cassées.
+- détection des requêtes lentes ou cassées ;
+- jeux de référence et comparaisons d'équivalence couvrant filtres, jointures, doublons, ordre, agrégations et valeurs nulles pour le futur traducteur SQL.
 
 ### Étape 9 — Exécution asynchrone et automatisation
 
@@ -1594,6 +1774,8 @@ Cette feuille de route remplace l'ordre indicatif des sections précédentes. Ch
 ### Étape 11 — Copilote IA gouverné
 
 - génération fondée sur la couche sémantique ;
+- analyse de SQL standard et traduction déterministe en plans d'appels API en lecture seule ;
+- diagnostic `exact`, `partiel` ou `impossible`, avec fragments non pris en charge et alternatives ;
 - suggestions et explications ;
 - génération de tests et visualisations ;
 - confiance, provenance et limites ;
