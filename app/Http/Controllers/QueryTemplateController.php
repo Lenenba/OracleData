@@ -17,6 +17,7 @@ use App\Services\OracleResourceCatalog;
 use App\Services\QueryExecutionRecorder;
 use App\Services\QueryTemplateAuditSanitizer;
 use App\Services\QueryTemplateParameterBinder;
+use App\Services\QueryTemplateQualityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -92,6 +93,7 @@ class QueryTemplateController extends Controller
         QueryExecutionRecorder $executions,
         QueryTemplateAuditSanitizer $auditParameters,
         AuditRecorder $audit,
+        QueryTemplateQualityService $quality,
     ): JsonResponse {
         return $this->executeTemplate(
             $request,
@@ -102,6 +104,7 @@ class QueryTemplateController extends Controller
             $executions,
             $auditParameters,
             $audit,
+            $quality,
             preview: true,
         );
     }
@@ -118,6 +121,7 @@ class QueryTemplateController extends Controller
         QueryExecutionRecorder $executions,
         QueryTemplateAuditSanitizer $auditParameters,
         AuditRecorder $audit,
+        QueryTemplateQualityService $quality,
     ): JsonResponse {
         return $this->executeTemplate(
             $request,
@@ -128,6 +132,7 @@ class QueryTemplateController extends Controller
             $executions,
             $auditParameters,
             $audit,
+            $quality,
             preview: false,
         );
     }
@@ -220,6 +225,7 @@ class QueryTemplateController extends Controller
         QueryExecutionRecorder $executions,
         QueryTemplateAuditSanitizer $auditParameters,
         AuditRecorder $audit,
+        QueryTemplateQualityService $quality,
         bool $preview,
     ): JsonResponse {
         [$queryTemplate, $runtimeTemplate, $publishedVersion] = $this->capturePublishedTemplate($queryTemplate);
@@ -283,7 +289,7 @@ class QueryTemplateController extends Controller
                 $purpose,
             );
         } else {
-            DB::transaction(function () use (
+            $execution = DB::transaction(function () use (
                 $request,
                 $queryTemplate,
                 $tenant,
@@ -295,7 +301,7 @@ class QueryTemplateController extends Controller
                 $audit,
                 $auditedParameters,
                 $publishedVersionId,
-            ): void {
+            ): QueryExecution {
                 $execution = $executions->recordTemplateAction(
                     $request->user(),
                     $queryTemplate,
@@ -315,7 +321,18 @@ class QueryTemplateController extends Controller
                     'execution_policy' => OracleExecutionPolicy::EXACT->value,
                     'audited_parameters' => $auditedParameters,
                 ]);
+
+                return $execution;
             });
+
+            $quality->observeExecution(
+                $queryTemplate,
+                $publishedVersion,
+                $request->user(),
+                $execution,
+                $bound['values'],
+                $payload,
+            );
         }
 
         return response()->json($payload);
@@ -381,8 +398,8 @@ class QueryTemplateController extends Controller
             ],
             'parameter_definitions' => $displayTemplate->parameterDefinitionsFor($locale),
             'is_certified' => $isCertified,
-            'certification_note' => $isCertified ? $certification?->public_note : null,
-            'certification' => ! $isCertified || $certification === null ? null : [
+            'certification_note' => $isCertified ? $certification->public_note : null,
+            'certification' => ! $isCertified ? null : [
                 'public_note' => $certification->public_note,
                 'certified_at' => $certification->certified_at->toISOString(),
                 'version_number' => $publishedVersion?->version_number,

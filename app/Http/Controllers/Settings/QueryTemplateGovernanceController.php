@@ -2,19 +2,26 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Enums\DataQualityAssertionType;
+use App\Enums\DataQualityHealthStatus;
+use App\Enums\DataQualityRunStatus;
 use App\Enums\QueryTemplateGovernanceStatus;
 use App\Enums\QueryTemplateVersionStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Models\QueryTemplate;
+use App\Models\QueryTemplateReferenceDataset;
 use App\Models\QueryTemplateRoleAssignment;
+use App\Models\QueryTemplateValidationRun;
 use App\Models\QueryTemplateVersion;
 use App\Models\User;
+use App\Services\FusionManager;
 use App\Services\OracleResourceCatalog;
 use App\Services\QueryTemplateGovernanceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -79,8 +86,11 @@ class QueryTemplateGovernanceController extends Controller
         Request $request,
         QueryTemplate $queryTemplate,
         OracleResourceCatalog $catalog,
+        FusionManager $fusion,
     ): Response {
         Gate::authorize('viewGovernance', $queryTemplate);
+        /** @var User $actor */
+        $actor = $request->user();
         /** @var array{owner_search?: string|null} $validated */
         $validated = $request->validate([
             'owner_search' => ['nullable', 'string', 'max:100'],
@@ -166,6 +176,26 @@ class QueryTemplateGovernanceController extends Controller
                     ->sort()
                     ->values()
                     ->all());
+        $qualityRuns = $queryTemplate->validationRuns()
+            ->with([
+                'queryTemplateVersion:id,query_template_id,version_number',
+                'oracleTenant:id,key,label',
+                'referenceDataset:id,name,scenario',
+            ])
+            ->orderByDesc('started_at')
+            ->orderByDesc('id')
+            ->limit(20)
+            ->get();
+        $references = $queryTemplate->referenceDatasets()
+            ->with([
+                'queryTemplateVersion:id,query_template_id,version_number',
+                'oracleTenant:id,key,label',
+                'capturedBy:id,name',
+            ])
+            ->latest('captured_at')
+            ->limit(20)
+            ->get();
+        $fusion = $fusion->forUser($actor);
 
         return Inertia::render('settings/query-templates/show', [
             'template' => [
@@ -192,6 +222,9 @@ class QueryTemplateGovernanceController extends Controller
             'governanceCapabilities' => $capabilities,
             'oracleResources' => $catalog->suggestions(),
             'ownerSearch' => $ownerSearch,
+            'quality' => $this->qualityPayload($queryTemplate, $qualityRuns, $references),
+            'tenants' => $fusion->available(),
+            'defaultTenant' => $fusion->defaultKey() ?: null,
         ]);
     }
 
@@ -282,6 +315,10 @@ class QueryTemplateGovernanceController extends Controller
             'sort_order' => $template->sort_order,
             'lock_version' => $template->lock_version,
             'published_at' => $template->published_at?->toISOString(),
+            'quality_status' => $template->quality_status->value,
+            'quality_score' => $template->quality_score === null ? null : (float) $template->quality_score,
+            'quality_checked_at' => $template->quality_checked_at?->toISOString(),
+            'quality_failure_streak' => $template->quality_failure_streak,
             'published_version' => $template->publishedVersion === null ? null : [
                 'id' => $template->publishedVersion->id,
                 'version_number' => $template->publishedVersion->version_number,
@@ -344,6 +381,12 @@ class QueryTemplateGovernanceController extends Controller
             'archive' => Gate::allows('archive', $template),
             'manage_roles' => Gate::allows('manageRoles', $template),
             'assign_technical_owner' => Gate::allows('assignTechnicalOwner', $template),
+            'run_quality_validation' => $openVersion !== null
+                ? Gate::allows('runQualityValidation', [$template, $openVersion])
+                : ($template->publishedVersion !== null
+                    && Gate::allows('runQualityValidation', [$template, $template->publishedVersion])),
+            'capture_quality_reference' => $openVersion !== null
+                && Gate::allows('captureQualityReference', [$template, $openVersion]),
         ];
     }
 
@@ -357,6 +400,7 @@ class QueryTemplateGovernanceController extends Controller
             'restored_from_version_id' => $version->restored_from_version_id,
             'definition' => $version->definition,
             'translations' => $version->translations,
+            'quality_rules' => $version->quality_rules ?? [],
             'change_summary' => $version->change_summary,
             'content_hash' => $version->content_hash,
             'lock_version' => $version->lock_version,
@@ -366,6 +410,74 @@ class QueryTemplateGovernanceController extends Controller
             'submitted_at' => $version->submitted_at?->toISOString(),
             'published_at' => $version->published_at?->toISOString(),
             'created_at' => $version->created_at?->toISOString(),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, QueryTemplateValidationRun>  $runs
+     * @param  Collection<int, QueryTemplateReferenceDataset>  $references
+     * @return array<string, mixed>
+     */
+    private function qualityPayload(QueryTemplate $template, $runs, $references): array
+    {
+        /** @var QueryTemplateValidationRun|null $latest */
+        $latest = $runs->first();
+        $qualityStatus = $template->quality_status;
+        $checkedAt = $template->quality_checked_at;
+        $isSlow = $latest !== null && collect($latest->assertion_results ?? [])->contains(
+            fn (array $result): bool => ($result['type'] ?? null) === DataQualityAssertionType::MaxDuration->value
+                && ($result['passed'] ?? false) !== true,
+        );
+
+        return [
+            'health' => [
+                'status' => $qualityStatus->value,
+                'score' => $template->quality_score === null ? null : (float) $template->quality_score,
+                'failure_streak' => $template->quality_failure_streak,
+                'is_slow' => $isSlow,
+                'is_broken' => $latest !== null && $latest->status !== DataQualityRunStatus::Passed,
+                'is_stale' => $checkedAt === null || $checkedAt->isBefore(now()->subDays(30)),
+                'certification_suspended' => $template->activeCertification !== null
+                    && $qualityStatus === DataQualityHealthStatus::Failing,
+                'last_run_at' => $checkedAt?->toISOString(),
+            ],
+            'latest_run' => $latest === null ? null : $this->qualityRunPayload($latest),
+            'runs' => $runs->map(fn (QueryTemplateValidationRun $run): array => $this->qualityRunPayload($run))->values(),
+            'references' => $references->map(fn (QueryTemplateReferenceDataset $reference): array => [
+                'id' => $reference->id,
+                'name' => $reference->name,
+                'scenario' => $reference->scenario->value,
+                'version_number' => $reference->queryTemplateVersion->version_number,
+                'tenant_key' => $reference->oracleTenant?->key,
+                'rows_count' => $reference->row_count,
+                'dataset_hash' => $reference->dataset_hash,
+                'captured_at' => $reference->captured_at->toISOString(),
+                'captured_by' => $reference->capturedBy?->only(['id', 'name']),
+            ])->values(),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function qualityRunPayload(QueryTemplateValidationRun $run): array
+    {
+        $results = collect($run->assertion_results ?? []);
+
+        return [
+            'id' => $run->id,
+            'purpose' => $run->purpose->value,
+            'status' => $run->status->value,
+            'score' => $run->score === null ? null : (float) $run->score,
+            'version_number' => $run->queryTemplateVersion->version_number,
+            'tenant_key' => $run->oracleTenant?->key,
+            'duration_ms' => $run->duration_ms,
+            'rows_count' => $run->row_count,
+            'assertions_passed' => $results->where('passed', true)->count(),
+            'assertions_failed' => $results->where('passed', false)->count(),
+            'assertion_results' => $results->values(),
+            'error_code' => $run->error_code,
+            'reference_dataset_id' => $run->query_template_reference_dataset_id,
+            'started_at' => $run->started_at->toISOString(),
+            'finished_at' => $run->finished_at->toISOString(),
         ];
     }
 }

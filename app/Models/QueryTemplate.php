@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\DataQualityHealthStatus;
 use App\Enums\QueryTemplateGovernanceStatus;
 use Database\Factories\QueryTemplateFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -39,6 +40,11 @@ use LogicException;
  * @property Carbon|null $archived_at
  * @property int|null $archived_by_user_id
  * @property int $lock_version
+ * @property DataQualityHealthStatus $quality_status
+ * @property string|null $quality_score
+ * @property Carbon|null $quality_checked_at
+ * @property int $quality_failure_streak
+ * @property int|null $latest_quality_run_id
  * @property int $sort_order
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -55,6 +61,9 @@ use LogicException;
  * @property-read Collection<int, Query> $queries
  * @property-read Collection<int, QueryExecution> $executions
  * @property-read Collection<int, QueryTemplateTranslation> $translations
+ * @property-read Collection<int, QueryTemplateReferenceDataset> $referenceDatasets
+ * @property-read Collection<int, QueryTemplateValidationRun> $validationRuns
+ * @property-read QueryTemplateValidationRun|null $latestQualityRun
  */
 #[Fillable([
     'slug',
@@ -76,12 +85,23 @@ use LogicException;
     'archived_at',
     'archived_by_user_id',
     'lock_version',
+    'quality_status',
+    'quality_score',
+    'quality_checked_at',
+    'quality_failure_streak',
+    'latest_quality_run_id',
     'sort_order',
 ])]
 class QueryTemplate extends Model
 {
     /** @use HasFactory<QueryTemplateFactory> */
     use HasFactory;
+
+    /** @var array<string, mixed> */
+    protected $attributes = [
+        'quality_status' => 'unknown',
+        'quality_failure_streak' => 0,
+    ];
 
     /**
      * The public model stays immutable. Only the governance workflow may
@@ -116,6 +136,10 @@ class QueryTemplate extends Model
             'published_at' => 'datetime',
             'archived_at' => 'datetime',
             'lock_version' => 'integer',
+            'quality_status' => DataQualityHealthStatus::class,
+            'quality_score' => 'decimal:2',
+            'quality_checked_at' => 'datetime',
+            'quality_failure_streak' => 'integer',
             'sort_order' => 'integer',
         ];
     }
@@ -341,6 +365,24 @@ class QueryTemplate extends Model
     public function executions(): HasMany
     {
         return $this->hasMany(QueryExecution::class);
+    }
+
+    /** @return HasMany<QueryTemplateReferenceDataset, $this> */
+    public function referenceDatasets(): HasMany
+    {
+        return $this->hasMany(QueryTemplateReferenceDataset::class);
+    }
+
+    /** @return HasMany<QueryTemplateValidationRun, $this> */
+    public function validationRuns(): HasMany
+    {
+        return $this->hasMany(QueryTemplateValidationRun::class);
+    }
+
+    /** @return BelongsTo<QueryTemplateValidationRun, $this> */
+    public function latestQualityRun(): BelongsTo
+    {
+        return $this->belongsTo(QueryTemplateValidationRun::class, 'latest_quality_run_id');
     }
 
     /**

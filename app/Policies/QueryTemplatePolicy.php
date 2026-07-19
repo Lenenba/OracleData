@@ -105,6 +105,28 @@ class QueryTemplatePolicy
             && $version->status === QueryTemplateVersionStatus::DRAFT;
     }
 
+    public function runQualityValidation(
+        User $user,
+        QueryTemplate $template,
+        QueryTemplateVersion $version,
+    ): bool {
+        return $this->viewGovernance($user, $template)
+            && $version->belongsToTemplate($template)
+            && in_array($version->status, [
+                QueryTemplateVersionStatus::DRAFT,
+                QueryTemplateVersionStatus::REVIEW,
+                QueryTemplateVersionStatus::PUBLISHED,
+            ], true);
+    }
+
+    public function captureQualityReference(
+        User $user,
+        QueryTemplate $template,
+        QueryTemplateVersion $version,
+    ): bool {
+        return $this->updateDraft($user, $template, $version);
+    }
+
     public function assignTechnicalOwner(User $user, QueryTemplate $template): bool
     {
         return $user->isSuperAdmin()

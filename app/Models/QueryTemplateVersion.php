@@ -24,6 +24,7 @@ use LogicException;
  * @property int|null $open_slot
  * @property array<string, mixed> $definition
  * @property array<string, array<string, mixed>> $translations
+ * @property list<array<string, mixed>>|null $quality_rules
  * @property string $content_hash
  * @property string|null $change_summary
  * @property int|null $created_by_user_id
@@ -42,6 +43,8 @@ use LogicException;
  * @property-read Collection<int, QueryTemplateCertification> $certifications
  * @property-read Collection<int, QueryTemplateVersionSemanticResource> $semanticResources
  * @property-read Collection<int, OracleSchemaImpact> $schemaImpacts
+ * @property-read Collection<int, QueryTemplateReferenceDataset> $referenceDatasets
+ * @property-read Collection<int, QueryTemplateValidationRun> $validationRuns
  */
 #[Fillable([
     'query_template_id',
@@ -51,6 +54,7 @@ use LogicException;
     'open_slot',
     'definition',
     'translations',
+    'quality_rules',
     'content_hash',
     'change_summary',
     'created_by_user_id',
@@ -68,7 +72,7 @@ class QueryTemplateVersion extends Model
     protected static function booted(): void
     {
         static::updating(function (QueryTemplateVersion $version): void {
-            $contentFields = ['definition', 'translations', 'content_hash', 'change_summary'];
+            $contentFields = ['definition', 'translations', 'quality_rules', 'content_hash', 'change_summary'];
             $contentChanged = collect($contentFields)->contains(
                 fn (string $field): bool => $version->isDirty($field),
             );
@@ -98,6 +102,7 @@ class QueryTemplateVersion extends Model
             'open_slot' => 'integer',
             'definition' => 'array',
             'translations' => 'array',
+            'quality_rules' => 'array',
             'submitted_at' => 'datetime',
             'published_at' => 'datetime',
             'lock_version' => 'integer',
@@ -140,6 +145,18 @@ class QueryTemplateVersion extends Model
         return $this->hasMany(OracleSchemaImpact::class);
     }
 
+    /** @return HasMany<QueryTemplateReferenceDataset, $this> */
+    public function referenceDatasets(): HasMany
+    {
+        return $this->hasMany(QueryTemplateReferenceDataset::class);
+    }
+
+    /** @return HasMany<QueryTemplateValidationRun, $this> */
+    public function validationRuns(): HasMany
+    {
+        return $this->hasMany(QueryTemplateValidationRun::class);
+    }
+
     /** @return BelongsTo<User, $this> */
     public function createdBy(): BelongsTo
     {
@@ -166,12 +183,44 @@ class QueryTemplateVersion extends Model
     /**
      * @param  array<string, mixed>  $definition
      * @param  array<string, array<string, mixed>>  $translations
+     * @param  list<array<string, mixed>>  $qualityRules
      */
-    public static function contentHash(array $definition, array $translations): string
-    {
+    public static function contentHash(
+        array $definition,
+        array $translations,
+        array $qualityRules = [],
+    ): string {
+        $content = $qualityRules === []
+            ? [$definition, $translations]
+            : [$definition, $translations, self::normalizeForHash($qualityRules)];
+
         return hash('sha256', json_encode(
-            [$definition, $translations],
+            $content,
             JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
         ));
+    }
+
+    /** @param list<array<string, mixed>> $qualityRules */
+    public static function qualityRulesHash(array $qualityRules): string
+    {
+        return hash('sha256', json_encode(
+            self::normalizeForHash($qualityRules),
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        ));
+    }
+
+    private static function normalizeForHash(mixed $value): mixed
+    {
+        if (! is_array($value)) {
+            return $value;
+        }
+
+        if (array_is_list($value)) {
+            return array_map(self::normalizeForHash(...), $value);
+        }
+
+        ksort($value, SORT_STRING);
+
+        return array_map(self::normalizeForHash(...), $value);
     }
 }

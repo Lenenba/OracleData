@@ -25,6 +25,8 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, AuthConnection> $authConnections
  * @property-read Collection<int, OracleResourceSchemaSnapshot> $schemaSnapshots
  * @property-read Collection<int, OracleSchemaImpact> $schemaImpacts
+ * @property-read Collection<int, QueryTemplateReferenceDataset> $queryTemplateReferenceDatasets
+ * @property-read Collection<int, QueryTemplateValidationRun> $queryTemplateValidationRuns
  */
 #[Fillable(['user_id', 'key', 'label', 'base_url', 'is_default', 'is_active'])]
 class OracleTenant extends Model
@@ -79,5 +81,17 @@ class OracleTenant extends Model
     public function schemaImpacts(): HasMany
     {
         return $this->hasMany(OracleSchemaImpact::class);
+    }
+
+    /** @return HasMany<QueryTemplateReferenceDataset, $this> */
+    public function queryTemplateReferenceDatasets(): HasMany
+    {
+        return $this->hasMany(QueryTemplateReferenceDataset::class);
+    }
+
+    /** @return HasMany<QueryTemplateValidationRun, $this> */
+    public function queryTemplateValidationRuns(): HasMany
+    {
+        return $this->hasMany(QueryTemplateValidationRun::class);
     }
 }

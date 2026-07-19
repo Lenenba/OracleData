@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\DataQualityHealthStatus;
 use App\Enums\QueryTemplateVersionStatus;
 use Database\Factories\QueryTemplateCertificationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -146,7 +147,8 @@ class QueryTemplateCertification extends Model
             || $template->published_version_id !== $this->query_template_version_id
             || $template->business_owner_user_id === null
             || $template->review_due_at === null
-            || $template->review_due_at->isBefore(today())) {
+            || $template->review_due_at->isBefore(today())
+            || $template->quality_status === DataQualityHealthStatus::Failing) {
             return false;
         }
 
@@ -154,6 +156,7 @@ class QueryTemplateCertification extends Model
         $computedHash = QueryTemplateVersion::contentHash(
             $version->definition,
             $version->translations,
+            $version->quality_rules ?? [],
         );
 
         return $version->query_template_id === $template->id

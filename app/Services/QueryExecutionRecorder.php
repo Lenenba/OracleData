@@ -105,7 +105,11 @@ class QueryExecutionRecorder
         int $durationMs,
         string $purpose,
     ): QueryExecution {
-        if (! in_array($purpose, [QueryExecution::PURPOSE_RUN, QueryExecution::PURPOSE_PREVIEW], true)) {
+        if (! in_array($purpose, [
+            QueryExecution::PURPOSE_RUN,
+            QueryExecution::PURPOSE_PREVIEW,
+            QueryExecution::PURPOSE_QUALITY_VALIDATION,
+        ], true)) {
             throw new InvalidArgumentException("Unknown query-template execution purpose [{$purpose}].");
         }
 

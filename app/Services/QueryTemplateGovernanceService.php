@@ -2,13 +2,19 @@
 
 namespace App\Services;
 
+use App\Enums\DataQualityAssertionType;
+use App\Enums\DataQualityHealthStatus;
+use App\Enums\DataQualityRunPurpose;
+use App\Enums\DataQualityRunStatus;
 use App\Enums\QueryTemplateGovernanceStatus;
 use App\Enums\QueryTemplateRole;
 use App\Enums\QueryTemplateVersionStatus;
 use App\Models\Category;
 use App\Models\QueryTemplate;
 use App\Models\QueryTemplateCertification;
+use App\Models\QueryTemplateReferenceDataset;
 use App\Models\QueryTemplateRoleAssignment;
+use App\Models\QueryTemplateValidationRun;
 use App\Models\QueryTemplateVersion;
 use App\Models\Role;
 use App\Models\User;
@@ -58,6 +64,9 @@ class QueryTemplateGovernanceService
     /** @var list<string> */
     private const array PARAMETER_AUDIT_KEYS = ['mode', 'key_version'];
 
+    /** @var list<string> */
+    private const array QUALITY_RULE_KEYS = ['id', 'name', 'type', 'enabled', 'required', 'config'];
+
     public function __construct(
         private readonly AuditRecorder $audit,
         private readonly OracleResourceCatalog $catalog,
@@ -92,16 +101,27 @@ class QueryTemplateGovernanceService
             $nextNumber = ((int) $lockedTemplate->versions()->max('version_number')) + 1;
             $definition = $published->definition;
             $translations = $published->translations;
+            $qualityRules = $published->quality_rules ?? [];
             $version = $lockedTemplate->versions()->create([
                 'version_number' => $nextNumber,
                 'status' => QueryTemplateVersionStatus::DRAFT,
                 'open_slot' => 1,
                 'definition' => $definition,
                 'translations' => $translations,
-                'content_hash' => QueryTemplateVersion::contentHash($definition, $translations),
+                'quality_rules' => $qualityRules,
+                'content_hash' => QueryTemplateVersion::contentHash($definition, $translations, $qualityRules),
                 'change_summary' => $this->nullableTrim($changeSummary),
                 'created_by_user_id' => $actor->id,
                 'lock_version' => 1,
+            ]);
+            $qualityRules = $this->copyReferenceDatasetsForVersion(
+                $published,
+                $version,
+                $qualityRules,
+            );
+            $version->update([
+                'quality_rules' => $qualityRules,
+                'content_hash' => QueryTemplateVersion::contentHash($definition, $translations, $qualityRules),
             ]);
             $this->lineage->syncTemplateVersion($version, $definition);
 
@@ -255,10 +275,24 @@ class QueryTemplateGovernanceService
                 'open_slot' => 1,
                 'definition' => $lockedSource->definition,
                 'translations' => $lockedSource->translations,
+                'quality_rules' => $lockedSource->quality_rules ?? [],
                 'content_hash' => $lockedSource->content_hash,
                 'change_summary' => $this->nullableTrim($changeSummary),
                 'created_by_user_id' => $actor->id,
                 'lock_version' => 1,
+            ]);
+            $restoredQualityRules = $this->copyReferenceDatasetsForVersion(
+                $lockedSource,
+                $draft,
+                $lockedSource->quality_rules ?? [],
+            );
+            $draft->update([
+                'quality_rules' => $restoredQualityRules,
+                'content_hash' => QueryTemplateVersion::contentHash(
+                    $lockedSource->definition,
+                    $lockedSource->translations,
+                    $restoredQualityRules,
+                ),
             ]);
             $this->lineage->syncTemplateVersion($draft, $lockedSource->definition);
 
@@ -330,6 +364,7 @@ class QueryTemplateGovernanceService
 
             $this->assertSnapshotHash($publishedVersion);
             $this->validateSnapshot($publishedVersion->definition, $publishedVersion->translations);
+            $this->assertPublicationQualityPassed($publishedVersion);
             $note = $this->normalizePublicNote($publicNote);
             $certifiedAt = now();
             $certification = $lockedTemplate->certifications()->create([
@@ -421,6 +456,7 @@ class QueryTemplateGovernanceService
         ?DateTimeInterface $reviewDueAt,
         int $expectedTemplateLock,
         int $expectedVersionLock,
+        ?array $qualityRules = null,
     ): QueryTemplateVersion {
         return DB::transaction(function () use (
             $template,
@@ -433,6 +469,7 @@ class QueryTemplateGovernanceService
             $reviewDueAt,
             $expectedTemplateLock,
             $expectedVersionLock,
+            $qualityRules,
         ): QueryTemplateVersion {
             $lockedTemplate = $this->lockTemplate($template);
             $lockedVersion = $this->lockVersion($lockedTemplate, $version);
@@ -458,11 +495,21 @@ class QueryTemplateGovernanceService
             $beforeContentHash = $lockedVersion->content_hash;
             $this->validateSnapshot($definition, $translations);
             $this->assertBusinessOwnerExists($businessOwnerUserId);
-            $contentHash = QueryTemplateVersion::contentHash($definition, $translations);
+            $normalizedQualityRules = $this->validateQualityRules(
+                $qualityRules ?? ($lockedVersion->quality_rules ?? []),
+                $definition,
+                $lockedVersion,
+            );
+            $contentHash = QueryTemplateVersion::contentHash(
+                $definition,
+                $translations,
+                $normalizedQualityRules,
+            );
 
             $lockedVersion->update([
                 'definition' => $definition,
                 'translations' => $translations,
+                'quality_rules' => $normalizedQualityRules,
                 'content_hash' => $contentHash,
                 'change_summary' => $this->nullableTrim($changeSummary),
                 'lock_version' => $lockedVersion->lock_version + 1,
@@ -478,6 +525,8 @@ class QueryTemplateGovernanceService
                 'version_number' => $lockedVersion->version_number,
                 'business_owner_user_id' => $businessOwnerUserId,
                 'review_due_at' => $reviewDueAt?->format('Y-m-d'),
+                'quality_rule_count' => count($normalizedQualityRules),
+                'quality_rules_hash' => QueryTemplateVersion::qualityRulesHash($normalizedQualityRules),
             ]);
 
             if ($technicalChanges !== []) {
@@ -520,6 +569,12 @@ class QueryTemplateGovernanceService
             Gate::forUser($actor)->authorize('submitForReview', [$lockedTemplate, $lockedVersion]);
 
             $this->validateSnapshot($lockedVersion->definition, $lockedVersion->translations);
+            $this->validateQualityRules(
+                $lockedVersion->quality_rules ?? [],
+                $lockedVersion->definition,
+                $lockedVersion,
+            );
+            $this->assertSnapshotHash($lockedVersion);
             $lockedVersion->update([
                 'status' => QueryTemplateVersionStatus::REVIEW,
                 'submitted_by_user_id' => $actor->id,
@@ -566,6 +621,13 @@ class QueryTemplateGovernanceService
             Gate::forUser($actor)->authorize('publish', [$lockedTemplate, $lockedVersion]);
 
             $this->validateSnapshot($lockedVersion->definition, $lockedVersion->translations);
+            $this->validateQualityRules(
+                $lockedVersion->quality_rules ?? [],
+                $lockedVersion->definition,
+                $lockedVersion,
+            );
+            $this->assertSnapshotHash($lockedVersion);
+            $qualityRun = $this->assertPublicationQualityPassed($lockedVersion);
             $previousPublishedId = $lockedTemplate->published_version_id;
 
             $this->revokeActiveCertification(
@@ -597,12 +659,26 @@ class QueryTemplateGovernanceService
                 'lock_version' => $lockedVersion->lock_version + 1,
             ]);
             $this->projectPublishedSnapshot($lockedTemplate, $lockedVersion, $actor, $publishedAt);
+            if ($qualityRun !== null) {
+                $lockedTemplate->applyGovernanceProjection([
+                    'quality_status' => match (true) {
+                        $qualityRun->status !== DataQualityRunStatus::Passed => DataQualityHealthStatus::Failing,
+                        (float) ($qualityRun->score ?? 0) < 90 => DataQualityHealthStatus::Degraded,
+                        default => DataQualityHealthStatus::Healthy,
+                    },
+                    'quality_score' => $qualityRun->score,
+                    'quality_checked_at' => $qualityRun->finished_at,
+                    'quality_failure_streak' => 0,
+                    'latest_quality_run_id' => $qualityRun->id,
+                ]);
+            }
             $this->audit->record($actor, 'query_template.version_published', $lockedTemplate, [
                 'query_template_version_id' => $lockedVersion->id,
                 'version_number' => $lockedVersion->version_number,
                 'previous_published_version_id' => $previousPublishedId,
                 'from_status' => QueryTemplateVersionStatus::REVIEW->value,
                 'to_status' => QueryTemplateVersionStatus::PUBLISHED->value,
+                'quality_validation_run_id' => $qualityRun?->id,
             ]);
 
             return $lockedVersion->refresh();
@@ -974,11 +1050,338 @@ class QueryTemplateGovernanceService
         }
     }
 
+    /**
+     * @param  list<array<string, mixed>>  $rules
+     * @param  array<string, mixed>  $definition
+     * @return list<array<string, mixed>>
+     */
+    private function validateQualityRules(
+        array $rules,
+        array $definition,
+        QueryTemplateVersion $version,
+    ): array {
+        if (count($rules) > 50) {
+            throw ValidationException::withMessages([
+                'quality_rules' => __('Un maximum de 50 assertions est autorisé par version.'),
+            ]);
+        }
+
+        $normalized = [];
+        $identifiers = [];
+        $allowedFields = $this->qualityOutputFields($definition);
+
+        foreach ($rules as $index => $rule) {
+            if (! is_array($rule)
+                || array_is_list($rule)
+                || array_diff(array_keys($rule), self::QUALITY_RULE_KEYS) !== []) {
+                throw ValidationException::withMessages([
+                    "quality_rules.{$index}" => __('La définition de cette assertion contient des clés non autorisées.'),
+                ]);
+            }
+
+            $id = trim((string) ($rule['id'] ?? ''));
+            $name = trim((string) ($rule['name'] ?? ''));
+            $type = DataQualityAssertionType::tryFrom((string) ($rule['type'] ?? ''));
+            $config = $rule['config'] ?? [];
+
+            if ((array_key_exists('enabled', $rule) && ! is_bool($rule['enabled']))
+                || (array_key_exists('required', $rule) && ! is_bool($rule['required']))) {
+                throw ValidationException::withMessages([
+                    "quality_rules.{$index}" => __('Les indicateurs enabled et required doivent être booléens.'),
+                ]);
+            }
+
+            if (preg_match('/^[a-z][a-z0-9_-]{0,63}$/', $id) !== 1 || isset($identifiers[$id])) {
+                throw ValidationException::withMessages([
+                    "quality_rules.{$index}.id" => __('Chaque assertion doit avoir un identifiant unique et stable.'),
+                ]);
+            }
+
+            if ($name === '' || mb_strlen($name) > 255) {
+                throw ValidationException::withMessages([
+                    "quality_rules.{$index}.name" => __('Le nom de l’assertion est requis et limité à 255 caractères.'),
+                ]);
+            }
+
+            if ($type === null || ! is_array($config)) {
+                throw ValidationException::withMessages([
+                    "quality_rules.{$index}.type" => __('Le type ou la configuration de l’assertion est invalide.'),
+                ]);
+            }
+
+            $identifiers[$id] = true;
+            $normalized[] = [
+                'id' => $id,
+                'name' => $name,
+                'type' => $type->value,
+                'enabled' => (bool) ($rule['enabled'] ?? true),
+                'required' => (bool) ($rule['required'] ?? true),
+                'config' => $this->normalizeQualityRuleConfig(
+                    $type,
+                    $config,
+                    $allowedFields,
+                    $version,
+                    $index,
+                ),
+            ];
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     * @param  list<string>  $allowedFields
+     * @return array<string, mixed>
+     */
+    private function normalizeQualityRuleConfig(
+        DataQualityAssertionType $type,
+        array $config,
+        array $allowedFields,
+        QueryTemplateVersion $version,
+        int $index,
+    ): array {
+        if ($type === DataQualityAssertionType::NonEmpty) {
+            return [];
+        }
+
+        if ($type === DataQualityAssertionType::RowCountRange) {
+            $min = isset($config['min']) && is_numeric($config['min']) ? (int) $config['min'] : 0;
+            $max = isset($config['max']) && is_numeric($config['max']) ? (int) $config['max'] : null;
+
+            if ($min < 0 || ($max !== null && ($max < $min || $max > 1_000_000))) {
+                throw ValidationException::withMessages([
+                    "quality_rules.{$index}.config" => __('La fourchette de lignes est invalide.'),
+                ]);
+            }
+
+            return array_filter(['min' => $min, 'max' => $max], fn (mixed $value): bool => $value !== null);
+        }
+
+        if (in_array($type, [DataQualityAssertionType::Unique, DataQualityAssertionType::RequiredFields], true)) {
+            $fields = $this->normalizeQualityFields($config['fields'] ?? null, $allowedFields, $index);
+
+            return ['fields' => $fields];
+        }
+
+        if ($type === DataQualityAssertionType::AllowedValues) {
+            $fields = $this->normalizeQualityFields([$config['field'] ?? null], $allowedFields, $index);
+            $values = $config['values'] ?? null;
+
+            if (! is_array($values) || $values === [] || count($values) > 100 || collect($values)->contains(
+                fn (mixed $value): bool => ! is_scalar($value) && $value !== null,
+            )) {
+                throw ValidationException::withMessages([
+                    "quality_rules.{$index}.config.values" => __('La liste des valeurs autorisées est invalide.'),
+                ]);
+            }
+
+            return ['field' => $fields[0], 'values' => array_values($values)];
+        }
+
+        if ($type === DataQualityAssertionType::MaxDuration) {
+            $maximum = isset($config['max_ms']) && is_numeric($config['max_ms'])
+                ? (int) $config['max_ms']
+                : 0;
+
+            if ($maximum < 1 || $maximum > 300_000) {
+                throw ValidationException::withMessages([
+                    "quality_rules.{$index}.config.max_ms" => __('Le seuil de durée doit être compris entre 1 ms et 300 000 ms.'),
+                ]);
+            }
+
+            return ['max_ms' => $maximum];
+        }
+
+        $referenceId = isset($config['reference_dataset_id']) && is_numeric($config['reference_dataset_id'])
+            ? (int) $config['reference_dataset_id']
+            : 0;
+        $referenceExists = $referenceId > 0 && QueryTemplateReferenceDataset::query()
+            ->whereKey($referenceId)
+            ->where('query_template_id', $version->query_template_id)
+            ->where('query_template_version_id', $version->id)
+            ->exists();
+
+        if (! $referenceExists) {
+            throw ValidationException::withMessages([
+                "quality_rules.{$index}.config.reference_dataset_id" => __('Le jeu de référence doit appartenir à cette version.'),
+            ]);
+        }
+
+        return ['reference_dataset_id' => $referenceId];
+    }
+
+    /**
+     * @param  list<string>  $allowedFields
+     * @return list<string>
+     */
+    private function normalizeQualityFields(mixed $value, array $allowedFields, int $index): array
+    {
+        if (! is_array($value)) {
+            $value = [];
+        }
+
+        $fields = array_values(array_unique(array_map(
+            fn (mixed $field): string => trim((string) $field),
+            $value,
+        )));
+
+        if ($fields === [] || count($fields) > 20 || array_diff($fields, $allowedFields) !== []) {
+            throw ValidationException::withMessages([
+                "quality_rules.{$index}.config.fields" => __('Les champs de l’assertion doivent provenir de la projection Oracle autorisée.'),
+            ]);
+        }
+
+        return $fields;
+    }
+
+    /** @param array<string, mixed> $definition @return list<string> */
+    private function qualityOutputFields(array $definition): array
+    {
+        $parameters = is_array($definition['parameters'] ?? null) ? $definition['parameters'] : [];
+        $fields = $this->normalizeStringList($parameters['fields'] ?? []);
+        $childFields = is_array($parameters['child_fields'] ?? null) ? $parameters['child_fields'] : [];
+
+        foreach ($childFields as $child => $children) {
+            foreach ($this->normalizeStringList($children) as $field) {
+                $fields[] = (string) $child.'.'.$field;
+            }
+        }
+
+        if ($fields === []) {
+            $resource = $this->catalog->find((string) ($definition['resource_key'] ?? ''));
+            $fields = is_array($resource['fields'] ?? null) ? $resource['fields'] : [];
+        }
+
+        return array_values(array_unique($fields));
+    }
+
+    /** @return list<string> */
+    private function normalizeStringList(mixed $value): array
+    {
+        if (is_string($value)) {
+            $value = explode(',', $value);
+        }
+
+        if (! is_array($value)) {
+            return [];
+        }
+
+        return array_values(array_filter(array_map(
+            fn (mixed $item): string => trim((string) $item),
+            $value,
+        )));
+    }
+
+    private function assertPublicationQualityPassed(
+        QueryTemplateVersion $version,
+    ): ?QueryTemplateValidationRun {
+        $rules = array_values(array_filter(
+            $version->quality_rules ?? [],
+            fn (array $rule): bool => ($rule['enabled'] ?? true) === true,
+        ));
+
+        if ($rules === []) {
+            return null;
+        }
+
+        $referenceIds = collect($rules)
+            ->filter(fn (array $rule): bool => ($rule['type'] ?? null) === DataQualityAssertionType::ReferenceEquivalence->value)
+            ->map(fn (array $rule): int => (int) ($rule['config']['reference_dataset_id'] ?? 0))
+            ->filter()
+            ->unique()
+            ->values();
+        $requiredReferenceIds = $referenceIds->isEmpty() ? collect([null]) : $referenceIds;
+        $runs = collect();
+
+        foreach ($requiredReferenceIds as $referenceId) {
+            $run = $version->validationRuns()
+                ->where('purpose', DataQualityRunPurpose::PrePublication->value)
+                ->where('status', DataQualityRunStatus::Passed->value)
+                ->where('version_content_hash', $version->content_hash)
+                ->where('rules_hash', QueryTemplateVersion::qualityRulesHash($version->quality_rules ?? []))
+                ->when(
+                    $referenceId === null,
+                    fn ($query) => $query->whereNull('query_template_reference_dataset_id'),
+                    fn ($query) => $query->where('query_template_reference_dataset_id', $referenceId),
+                )
+                ->when(
+                    $version->submitted_at !== null,
+                    fn ($query) => $query->where('finished_at', '>=', $version->submitted_at),
+                )
+                ->latest('finished_at')
+                ->first();
+
+            if ($run === null) {
+                throw ValidationException::withMessages([
+                    'quality_validation' => __('Une validation de données réussie et à jour est requise pour chaque scénario avant la publication ou la certification.'),
+                ]);
+            }
+
+            $runs->push($run);
+        }
+
+        return $runs->sortByDesc('finished_at')->first();
+    }
+
+    /**
+     * Copy value-free reference profiles when a published snapshot becomes a
+     * new draft, then rewrite only the technical identifiers in its rules.
+     *
+     * @param  list<array<string, mixed>>  $rules
+     * @return list<array<string, mixed>>
+     */
+    private function copyReferenceDatasetsForVersion(
+        QueryTemplateVersion $source,
+        QueryTemplateVersion $target,
+        array $rules,
+    ): array {
+        $referenceIds = collect($rules)
+            ->filter(fn (array $rule): bool => ($rule['type'] ?? null) === DataQualityAssertionType::ReferenceEquivalence->value)
+            ->map(fn (array $rule): int => (int) ($rule['config']['reference_dataset_id'] ?? 0))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($referenceIds->isEmpty()) {
+            return $rules;
+        }
+
+        $sources = $source->referenceDatasets()
+            ->whereIn('id', $referenceIds)
+            ->get()
+            ->keyBy('id');
+
+        if ($sources->count() !== $referenceIds->count()) {
+            throw new ConflictHttpException(__('Un jeu de référence de la version source est introuvable.'));
+        }
+
+        $mapping = [];
+        foreach ($sources as $sourceReference) {
+            $copy = $sourceReference->replicate();
+            $copy->query_template_version_id = $target->id;
+            $copy->save();
+            $mapping[$sourceReference->id] = $copy->id;
+        }
+
+        return array_map(function (array $rule) use ($mapping): array {
+            if (($rule['type'] ?? null) !== DataQualityAssertionType::ReferenceEquivalence->value) {
+                return $rule;
+            }
+
+            $sourceId = (int) ($rule['config']['reference_dataset_id'] ?? 0);
+            $rule['config']['reference_dataset_id'] = $mapping[$sourceId];
+
+            return $rule;
+        }, $rules);
+    }
+
     private function assertSnapshotHash(QueryTemplateVersion $version): void
     {
         $computedHash = QueryTemplateVersion::contentHash(
             $version->definition,
             $version->translations,
+            $version->quality_rules ?? [],
         );
 
         if (! hash_equals($version->content_hash, $computedHash)) {
@@ -1109,6 +1512,11 @@ class QueryTemplateGovernanceService
             'published_by_user_id' => $actor->id,
             'archived_at' => null,
             'archived_by_user_id' => null,
+            'quality_status' => DataQualityHealthStatus::Unknown,
+            'quality_score' => null,
+            'quality_checked_at' => null,
+            'quality_failure_streak' => 0,
+            'latest_quality_run_id' => null,
             'lock_version' => $template->lock_version + 1,
         ]);
     }

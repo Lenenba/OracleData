@@ -5,6 +5,8 @@ use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\QueryTemplateCertificationController;
 use App\Http\Controllers\Settings\QueryTemplateDelegationController;
 use App\Http\Controllers\Settings\QueryTemplateGovernanceController;
+use App\Http\Controllers\Settings\QueryTemplateQualityController;
+use App\Http\Controllers\Settings\QueryTemplateReferenceDatasetController;
 use App\Http\Controllers\Settings\QueryTemplateVersionComparisonController;
 use App\Http\Controllers\Settings\QueryTemplateVersionController;
 use App\Http\Controllers\Settings\SecurityController;
@@ -70,6 +72,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('query-template-governance.versions.compare');
     Route::patch('settings/query-templates/{queryTemplate}/versions/{queryTemplateVersion}', [QueryTemplateVersionController::class, 'update'])
         ->name('query-template-governance.versions.update');
+    Route::post('settings/query-templates/{queryTemplate}/versions/{queryTemplateVersion}/quality-runs', [QueryTemplateQualityController::class, 'store'])
+        ->name('query-template-governance.versions.quality-runs.store');
+    Route::post('settings/query-templates/{queryTemplate}/versions/{queryTemplateVersion}/reference-datasets', [QueryTemplateReferenceDatasetController::class, 'store'])
+        ->name('query-template-governance.versions.reference-datasets.store');
     Route::post('settings/query-templates/{queryTemplate}/versions/{queryTemplateVersion}/submit', [QueryTemplateVersionController::class, 'submit'])
         ->name('query-template-governance.versions.submit');
     Route::post('settings/query-templates/{queryTemplate}/versions/{queryTemplateVersion}/publish', [QueryTemplateVersionController::class, 'publish'])

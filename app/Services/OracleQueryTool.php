@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\OracleExecutionPolicy;
+use App\Models\User;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -22,6 +23,18 @@ class OracleQueryTool
         protected OracleFieldDiscovery $discovery,
         protected SemanticCatalogReader $semanticCatalog,
     ) {}
+
+    /**
+     * Return an isolated execution context for background and explicit-user
+     * flows that cannot rely on the current authentication guard.
+     */
+    public function forUser(User|int $user): self
+    {
+        $scoped = clone $this;
+        $scoped->fusion = $this->fusion->forUser($user);
+
+        return $scoped;
+    }
 
     /**
      * Valide puis exécute la requête contre le tenant donné.

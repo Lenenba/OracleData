@@ -44,6 +44,8 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property-read Collection<int, QueryChangeRequestComment> $queryChangeRequestComments
  * @property-read Collection<int, Role> $queryTemplateRoles
  * @property-read Collection<int, QueryTemplate> $technicallyOwnedQueryTemplates
+ * @property-read Collection<int, QueryTemplateReferenceDataset> $capturedReferenceDatasets
+ * @property-read Collection<int, QueryTemplateValidationRun> $queryTemplateValidationRuns
  */
 #[Fillable(['name', 'email', 'password', 'locale', 'timezone'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
@@ -240,6 +242,18 @@ class User extends Authenticatable implements HasLocalePreference, PasskeyUser
     public function authConnections(): HasMany
     {
         return $this->hasMany(AuthConnection::class);
+    }
+
+    /** @return HasMany<QueryTemplateReferenceDataset, $this> */
+    public function capturedReferenceDatasets(): HasMany
+    {
+        return $this->hasMany(QueryTemplateReferenceDataset::class, 'captured_by_user_id');
+    }
+
+    /** @return HasMany<QueryTemplateValidationRun, $this> */
+    public function queryTemplateValidationRuns(): HasMany
+    {
+        return $this->hasMany(QueryTemplateValidationRun::class, 'run_by_user_id');
     }
 
     /**

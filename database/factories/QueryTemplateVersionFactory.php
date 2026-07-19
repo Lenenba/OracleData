@@ -23,7 +23,12 @@ class QueryTemplateVersionFactory extends Factory
             'open_slot' => 1,
             'definition' => $definition,
             'translations' => $translations,
-            'content_hash' => QueryTemplateVersion::contentHash($definition, $translations),
+            'quality_rules' => null,
+            'content_hash' => fn (array $attributes): string => QueryTemplateVersion::contentHash(
+                $attributes['definition'],
+                $attributes['translations'],
+                $attributes['quality_rules'] ?? [],
+            ),
             'change_summary' => fake()->sentence(),
             'created_by_user_id' => null,
             'submitted_by_user_id' => null,

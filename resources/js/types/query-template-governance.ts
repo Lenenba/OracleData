@@ -38,6 +38,8 @@ export type QueryTemplateGovernanceCapabilities = {
     archive: boolean;
     manage_roles: boolean;
     assign_technical_owner: boolean;
+    run_quality_validation: boolean;
+    capture_quality_reference: boolean;
 };
 
 export type OracleResourceSuggestion = {
@@ -106,6 +108,82 @@ export type QueryTemplateVersionDefinition = {
     [key: string]: unknown;
 };
 
+export type QueryTemplateQualityRule = Record<string, unknown>;
+
+export type QueryTemplateQualityHealthStatus =
+    | 'unknown'
+    | 'healthy'
+    | 'degraded'
+    | 'failing';
+
+export type QueryTemplateQualityRunStatus = 'passed' | 'failed' | 'error';
+
+export type QueryTemplateQualityAssertionResult = {
+    index: number;
+    type: string;
+    required: boolean;
+    passed: boolean;
+    code: string;
+    metrics: Record<string, unknown>;
+};
+
+export type QueryTemplateQualityRun = {
+    id: number;
+    version_number: number;
+    purpose: string;
+    status: QueryTemplateQualityRunStatus;
+    score: number | null;
+    tenant_key: string | null;
+    duration_ms: number;
+    rows_count: number;
+    assertions_passed: number;
+    assertions_failed: number;
+    error_code: string | null;
+    reference_dataset_id: number | null;
+    assertion_results: QueryTemplateQualityAssertionResult[];
+    started_at: string;
+    finished_at: string;
+};
+
+export type QueryTemplateReferenceScenario =
+    | 'baseline'
+    | 'filter'
+    | 'join'
+    | 'duplicates'
+    | 'order'
+    | 'aggregate'
+    | 'nulls';
+
+export type QueryTemplateReferenceDataset = {
+    id: number;
+    version_number: number;
+    name: string;
+    scenario: QueryTemplateReferenceScenario;
+    tenant_key: string | null;
+    rows_count: number;
+    dataset_hash: string;
+    captured_by: GovernanceUser | null;
+    captured_at: string;
+};
+
+export type QueryTemplateQualityHealth = {
+    status: QueryTemplateQualityHealthStatus;
+    score: number | null;
+    failure_streak: number;
+    is_slow: boolean;
+    is_broken: boolean;
+    is_stale: boolean;
+    certification_suspended: boolean;
+    last_run_at: string | null;
+};
+
+export type QueryTemplateQualityOverview = {
+    health: QueryTemplateQualityHealth;
+    latest_run: QueryTemplateQualityRun | null;
+    runs: QueryTemplateQualityRun[];
+    references: QueryTemplateReferenceDataset[];
+};
+
 export type QueryTemplateGovernanceVersion = {
     id: number;
     version_number: number;
@@ -114,6 +192,7 @@ export type QueryTemplateGovernanceVersion = {
     translations: Partial<
         Record<'fr' | 'en' | 'es', QueryTemplateTranslationSnapshot>
     >;
+    quality_rules: QueryTemplateQualityRule[];
     change_summary: string | null;
     content_hash: string;
     lock_version: number;
