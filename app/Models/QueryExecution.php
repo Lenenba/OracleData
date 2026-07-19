@@ -20,6 +20,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $query_id
  * @property int|null $query_template_id
  * @property int|null $query_template_version_id
+ * @property int|null $semantic_catalog_version_id
+ * @property list<array<string, mixed>>|null $semantic_lineage
  * @property int $user_id
  * @property int|null $oracle_tenant_id
  * @property int|null $auth_connection_id
@@ -34,6 +36,7 @@ use Illuminate\Support\Carbon;
  * @property-read Query|null $executedQuery
  * @property-read QueryTemplate|null $queryTemplate
  * @property-read QueryTemplateVersion|null $queryTemplateVersion
+ * @property-read SemanticCatalogVersion|null $semanticCatalogVersion
  * @property-read User $user
  * @property-read OracleTenant|null $oracleTenant
  * @property-read AuthConnection|null $authConnection
@@ -42,6 +45,8 @@ use Illuminate\Support\Carbon;
     'query_id',
     'query_template_id',
     'query_template_version_id',
+    'semantic_catalog_version_id',
+    'semantic_lineage',
     'user_id',
     'oracle_tenant_id',
     'auth_connection_id',
@@ -77,6 +82,7 @@ class QueryExecution extends Model
     protected function casts(): array
     {
         return [
+            'semantic_lineage' => 'array',
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
         ];
@@ -111,6 +117,12 @@ class QueryExecution extends Model
     public function queryTemplateVersion(): BelongsTo
     {
         return $this->belongsTo(QueryTemplateVersion::class);
+    }
+
+    /** @return BelongsTo<SemanticCatalogVersion, $this> */
+    public function semanticCatalogVersion(): BelongsTo
+    {
+        return $this->belongsTo(SemanticCatalogVersion::class);
     }
 
     /**

@@ -6,4 +6,5 @@ export type * from './notifications';
 export type * from './oracle-connection';
 export type * from './query-sharing';
 export type * from './query-template-governance';
+export type * from './semantic-catalog';
 export type * from './ui';

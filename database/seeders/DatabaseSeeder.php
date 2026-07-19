@@ -21,6 +21,7 @@ class DatabaseSeeder extends Seeder
             TagSeeder::class,
             QueryTemplateSeeder::class,
             QuerySeeder::class,
+            SemanticLayerSeeder::class,
         ]);
     }
 }

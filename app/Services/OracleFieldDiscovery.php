@@ -6,6 +6,7 @@ use App\Models\OracleResourceField;
 use App\Models\OracleTenant;
 use App\Models\User;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -117,6 +118,10 @@ class OracleFieldDiscovery
             ->where('child', $childKey)
             ->first();
 
+        if ($cached?->source === 'describe') {
+            return $this->memo[$memoKey] = $cached->fields;
+        }
+
         if ($cached !== null && $cached->discovered_at->gt($this->staleBefore())) {
             return $this->memo[$memoKey] = $cached->fields;
         }
@@ -124,17 +129,36 @@ class OracleFieldDiscovery
         $discovered = $this->probe($this->fusion->forUser($userId), $tenantKey, $resource['path'], $child);
 
         if ($discovered !== null) {
-            OracleResourceField::query()->updateOrCreate(
-                [
-                    'oracle_tenant_id' => $tenant->id,
-                    'resource_key' => $resourceKey,
-                    'child' => $childKey,
-                ],
-                [
-                    'fields' => $discovered,
-                    'discovered_at' => now(),
-                ],
-            );
+            $discovered = DB::transaction(function () use ($tenant, $resourceKey, $childKey, $discovered): array {
+                $current = OracleResourceField::query()
+                    ->where('oracle_tenant_id', $tenant->id)
+                    ->where('resource_key', $resourceKey)
+                    ->where('child', $childKey)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($current?->source === 'describe') {
+                    return $current->fields;
+                }
+
+                OracleResourceField::query()->updateOrCreate(
+                    [
+                        'oracle_tenant_id' => $tenant->id,
+                        'resource_key' => $resourceKey,
+                        'child' => $childKey,
+                    ],
+                    [
+                        'fields' => $discovered,
+                        'source' => 'probe',
+                        'title' => null,
+                        'attributes' => null,
+                        'schema_hash' => null,
+                        'discovered_at' => now(),
+                    ],
+                );
+
+                return $discovered;
+            });
         }
 
         return $this->memo[$memoKey] = $discovered;

@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Enums\QueryTemplateGovernanceStatus;
+use App\Enums\QueryTemplateVersionStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Models\QueryTemplate;
+use App\Models\QueryTemplateRoleAssignment;
 use App\Models\QueryTemplateVersion;
 use App\Models\User;
+use App\Services\OracleResourceCatalog;
 use App\Services\QueryTemplateGovernanceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -23,6 +26,8 @@ class QueryTemplateGovernanceController extends Controller
     public function index(Request $request): Response
     {
         Gate::authorize('viewAnyGovernance', QueryTemplate::class);
+        /** @var User $actor */
+        $actor = $request->user();
         /** @var array{search?: string|null, status?: string|null} $validated */
         $validated = $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
@@ -31,8 +36,14 @@ class QueryTemplateGovernanceController extends Controller
         $search = trim((string) ($validated['search'] ?? ''));
         $status = $validated['status'] ?? null;
         $templates = QueryTemplate::query()
+            ->when(! $actor->isSuperAdmin(), fn ($query) => $query->where(function ($accessible) use ($actor): void {
+                $accessible
+                    ->where('technical_owner_user_id', $actor->id)
+                    ->orWhereHas('governanceUsers', fn ($users) => $users->whereKey($actor->id));
+            }))
             ->with([
                 'businessOwner:id,name',
+                'technicalOwner:id,name,email',
                 'publishedVersion:id,query_template_id,version_number,status,published_at',
                 'activeCertification' => fn ($query) => $query->with([
                     'certifiedBy:id,name',
@@ -64,8 +75,11 @@ class QueryTemplateGovernanceController extends Controller
         ]);
     }
 
-    public function show(Request $request, QueryTemplate $queryTemplate): Response
-    {
+    public function show(
+        Request $request,
+        QueryTemplate $queryTemplate,
+        OracleResourceCatalog $catalog,
+    ): Response {
         Gate::authorize('viewGovernance', $queryTemplate);
         /** @var array{owner_search?: string|null} $validated */
         $validated = $request->validate([
@@ -74,6 +88,8 @@ class QueryTemplateGovernanceController extends Controller
         $queryTemplate->load([
             'translations',
             'businessOwner:id,name,email',
+            'technicalOwner:id,name,email',
+            'governanceUsers:id,name,email',
             'publishedBy:id,name',
             'archivedBy:id,name',
             'publishedVersion',
@@ -122,6 +138,34 @@ class QueryTemplateGovernanceController extends Controller
             ->orderBy('name')
             ->limit(25)
             ->get();
+        $capabilities = $this->capabilities($queryTemplate);
+        $technicalOwnerCandidates = $capabilities['assign_technical_owner']
+            ? $ownerCandidates
+                ->when($queryTemplate->technicalOwner !== null, fn ($users) => $users->push($queryTemplate->technicalOwner))
+                ->when($queryTemplate->businessOwner !== null, fn ($users) => $users->push($queryTemplate->businessOwner))
+                ->unique('id')
+                ->values()
+            : collect();
+        $roleCandidates = $capabilities['manage_roles']
+            ? $technicalOwnerCandidates
+                ->concat($queryTemplate->governanceUsers)
+                ->unique('id')
+                ->values()
+            : collect();
+        $candidateIds = $roleCandidates->pluck('id');
+        $rolesByUser = $candidateIds->isEmpty()
+            ? collect()
+            : QueryTemplateRoleAssignment::query()
+                ->where('query_template_id', $queryTemplate->id)
+                ->whereIn('user_id', $candidateIds)
+                ->with('role:id,name')
+                ->get()
+                ->groupBy('user_id')
+                ->map(fn ($assignments): array => $assignments
+                    ->pluck('role.name')
+                    ->sort()
+                    ->values()
+                    ->all());
 
         return Inertia::render('settings/query-templates/show', [
             'template' => [
@@ -138,8 +182,50 @@ class QueryTemplateGovernanceController extends Controller
             'version_options' => $versionOptions,
             'categories' => Category::query()->orderBy('slug')->get(['id', 'slug']),
             'businessOwnerCandidates' => $ownerCandidates,
+            'technicalOwnerCandidates' => $technicalOwnerCandidates->map->only(['id', 'name', 'email']),
+            'governanceRoleCandidates' => $roleCandidates->map(fn (User $user): array => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'roles' => $rolesByUser->get($user->id, []),
+            ]),
+            'governanceCapabilities' => $capabilities,
+            'oracleResources' => $catalog->suggestions(),
             'ownerSearch' => $ownerSearch,
         ]);
+    }
+
+    public function updateTechnicalOwner(
+        Request $request,
+        QueryTemplate $queryTemplate,
+        QueryTemplateGovernanceService $governance,
+    ): JsonResponse|RedirectResponse {
+        Gate::authorize('assignTechnicalOwner', $queryTemplate);
+        /** @var array{technical_owner_user_id?: int|null, lock_version: int} $validated */
+        $validated = $request->validate([
+            'technical_owner_user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'lock_version' => ['required', 'integer', 'min:1'],
+        ]);
+        /** @var User $actor */
+        $actor = $request->user();
+        $technicalOwner = isset($validated['technical_owner_user_id'])
+            ? User::query()->findOrFail($validated['technical_owner_user_id'])
+            : null;
+
+        try {
+            $governance->assignTechnicalOwner(
+                $queryTemplate,
+                $technicalOwner,
+                $actor,
+                $validated['lock_version'],
+            );
+        } catch (ConflictHttpException $exception) {
+            return $this->conflictResponse($request, $exception);
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Responsable technique enregistré.')]);
+
+        return to_route('query-template-governance.show', $queryTemplate);
     }
 
     public function archive(
@@ -210,6 +296,11 @@ class QueryTemplateGovernanceController extends Controller
                 'id' => $template->businessOwner->id,
                 'name' => $template->businessOwner->name,
             ],
+            'technical_owner' => $template->technicalOwner === null ? null : [
+                'id' => $template->technicalOwner->id,
+                'name' => $template->technicalOwner->name,
+                'email' => $template->technicalOwner->email,
+            ],
             'review_due_at' => $template->review_due_at?->toDateString(),
             // A review remains due throughout its calendar date; it only
             // becomes overdue on the following day.
@@ -224,6 +315,35 @@ class QueryTemplateGovernanceController extends Controller
                 'lock_version' => $certification->lock_version,
                 'is_effective' => $certification->isEffectiveFor($template),
             ],
+        ];
+    }
+
+    /** @return array<string, bool> */
+    private function capabilities(QueryTemplate $template): array
+    {
+        $openVersion = $template->versions->first();
+        $restoreVersion = $template->versions()
+            ->where('status', QueryTemplateVersionStatus::SUPERSEDED->value)
+            ->whereNotNull('published_at')
+            ->whereKeyNot($template->published_version_id)
+            ->latest('version_number')
+            ->first();
+
+        return [
+            'view' => Gate::allows('viewGovernance', $template),
+            'create_draft' => Gate::allows('createDraft', $template),
+            'update_draft' => $openVersion !== null && Gate::allows('updateDraft', [$template, $openVersion]),
+            'update_technical_definition' => $openVersion !== null
+                && Gate::allows('updateTechnicalDefinition', [$template, $openVersion]),
+            'submit' => $openVersion !== null && Gate::allows('submitForReview', [$template, $openVersion]),
+            'publish' => $openVersion !== null && Gate::allows('publish', [$template, $openVersion]),
+            'restore' => $restoreVersion !== null && Gate::allows('restoreVersion', [$template, $restoreVersion]),
+            'certify' => Gate::allows('certify', $template),
+            'revoke_certification' => $template->activeCertification !== null
+                && Gate::allows('revokeCertification', [$template, $template->activeCertification]),
+            'archive' => Gate::allows('archive', $template),
+            'manage_roles' => Gate::allows('manageRoles', $template),
+            'assign_technical_owner' => Gate::allows('assignTechnicalOwner', $template),
         ];
     }
 

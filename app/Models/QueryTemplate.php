@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
@@ -31,6 +32,7 @@ use LogicException;
  * @property QueryTemplateGovernanceStatus $governance_status
  * @property int|null $published_version_id
  * @property int|null $business_owner_user_id
+ * @property int|null $technical_owner_user_id
  * @property Carbon|null $review_due_at
  * @property Carbon|null $published_at
  * @property int|null $published_by_user_id
@@ -42,6 +44,8 @@ use LogicException;
  * @property Carbon|null $updated_at
  * @property-read Category|null $category
  * @property-read User|null $businessOwner
+ * @property-read User|null $technicalOwner
+ * @property-read Collection<int, User> $governanceUsers
  * @property-read User|null $publishedBy
  * @property-read User|null $archivedBy
  * @property-read QueryTemplateVersion|null $publishedVersion
@@ -65,6 +69,7 @@ use LogicException;
     'governance_status',
     'published_version_id',
     'business_owner_user_id',
+    'technical_owner_user_id',
     'review_due_at',
     'published_at',
     'published_by_user_id',
@@ -183,6 +188,21 @@ class QueryTemplate extends Model
     public function businessOwner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'business_owner_user_id');
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function technicalOwner(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'technical_owner_user_id');
+    }
+
+    /** @return BelongsToMany<User, $this> */
+    public function governanceUsers(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'query_template_role_user')
+            ->using(QueryTemplateRoleAssignment::class)
+            ->withPivot(['role_id', 'assigned_by_user_id'])
+            ->withTimestamps();
     }
 
     /** @return BelongsTo<User, $this> */

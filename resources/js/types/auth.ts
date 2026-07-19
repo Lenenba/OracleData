@@ -16,6 +16,7 @@ export type User = {
 
 export type Auth = {
     user: User;
+    can_view_query_template_governance: boolean;
     onboarding: {
         completed: boolean;
         required: boolean;

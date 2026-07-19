@@ -23,6 +23,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  * @property-read User $user
  * @property-read Collection<int, AuthConnection> $authConnections
+ * @property-read Collection<int, OracleResourceSchemaSnapshot> $schemaSnapshots
+ * @property-read Collection<int, OracleSchemaImpact> $schemaImpacts
  */
 #[Fillable(['user_id', 'key', 'label', 'base_url', 'is_default', 'is_active'])]
 class OracleTenant extends Model
@@ -65,5 +67,17 @@ class OracleTenant extends Model
     public function queries(): HasMany
     {
         return $this->hasMany(Query::class);
+    }
+
+    /** @return HasMany<OracleResourceSchemaSnapshot, $this> */
+    public function schemaSnapshots(): HasMany
+    {
+        return $this->hasMany(OracleResourceSchemaSnapshot::class);
+    }
+
+    /** @return HasMany<OracleSchemaImpact, $this> */
+    public function schemaImpacts(): HasMany
+    {
+        return $this->hasMany(OracleSchemaImpact::class);
     }
 }

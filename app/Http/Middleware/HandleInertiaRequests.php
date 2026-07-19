@@ -2,7 +2,9 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\QueryTemplate;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -36,6 +38,16 @@ class HandleInertiaRequests extends Middleware
     public function share(Request $request): array
     {
         $user = $request->user();
+        $canViewQueryTemplateGovernance = $user?->isSuperAdmin() ?? false;
+
+        if (
+            ! $canViewQueryTemplateGovernance
+            && $user !== null
+            && str_starts_with($request->path(), 'settings')
+        ) {
+            $canViewQueryTemplateGovernance = Gate::forUser($user)
+                ->allows('viewAnyGovernance', QueryTemplate::class);
+        }
 
         return [
             ...parent::share($request),
@@ -46,6 +58,7 @@ class HandleInertiaRequests extends Middleware
                     'completed' => $user?->hasCompletedOnboarding() ?? false,
                     'required' => $user !== null && ! $user->hasCompletedOnboarding(),
                 ],
+                'can_view_query_template_governance' => $canViewQueryTemplateGovernance,
             ],
             'notificationSummary' => [
                 'unread_count' => $user?->unreadNotifications()->count() ?? 0,

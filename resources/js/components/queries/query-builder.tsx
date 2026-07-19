@@ -248,7 +248,7 @@ export function QueryBuilder({
                       orderBy,
                       parsedLimit,
                   )
-                : '',
+                : null,
         [
             resource,
             fields,
@@ -572,18 +572,34 @@ export function QueryBuilder({
                                 <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() =>
-                                        void navigator.clipboard.writeText(
-                                            bipSql,
-                                        )
-                                    }
+                                    disabled={bipSql === null}
+                                    onClick={() => {
+                                        if (bipSql !== null) {
+                                            void navigator.clipboard.writeText(
+                                                bipSql,
+                                            );
+                                        }
+                                    }}
                                 >
                                     Copier
                                 </Button>
                             </div>
-                            <pre className="overflow-x-auto rounded-lg border bg-muted p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-foreground">
-                                {bipSql}
-                            </pre>
+                            {bipSql === null ? (
+                                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+                                    <p className="font-medium">
+                                        {t('semanticCatalog.sqlUnavailable')}
+                                    </p>
+                                    <p className="mt-1 text-xs">
+                                        {t(
+                                            'semanticCatalog.sqlUnavailableDescription',
+                                        )}
+                                    </p>
+                                </div>
+                            ) : (
+                                <pre className="overflow-x-auto rounded-lg border bg-muted p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-foreground">
+                                    {bipSql}
+                                </pre>
+                            )}
                         </div>
                     )}
                 </div>

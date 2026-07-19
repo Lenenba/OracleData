@@ -6,6 +6,7 @@ import {
     ChevronLeft,
     ChevronRight,
     CircleHelp,
+    Database,
     FileClock,
     FilePlus2,
     LockKeyhole,
@@ -13,6 +14,8 @@ import {
     RotateCcw,
     Search,
     Send,
+    UserCog,
+    Users,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
@@ -31,6 +34,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogContent,
@@ -44,14 +48,20 @@ import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { useI18n } from '@/i18n/i18n-context';
+import queryTemplateGovernance from '@/routes/query-template-governance';
+import delegations from '@/routes/query-template-governance/delegations';
+import technicalOwner from '@/routes/query-template-governance/technical-owner';
 import type {
     GovernanceCategory,
+    GovernanceRoleCandidate,
     GovernanceUser,
     LaravelPaginator,
+    OracleResourceSuggestion,
+    QueryTemplateGovernanceCapabilities,
     QueryTemplateGovernanceDetail,
+    QueryTemplateGovernanceRole,
     QueryTemplateGovernanceVersion,
     QueryTemplateGovernanceVersionOption,
-    QueryTemplateTranslationSnapshot,
 } from '@/types/query-template-governance';
 
 type ShowProps = {
@@ -61,6 +71,10 @@ type ShowProps = {
     categories: GovernanceCategory[];
     businessOwnerCandidates: GovernanceUser[];
     ownerSearch: string;
+    governanceCapabilities: QueryTemplateGovernanceCapabilities;
+    governanceRoleCandidates: GovernanceRoleCandidate[];
+    technicalOwnerCandidates: GovernanceUser[];
+    oracleResources: OracleResourceSuggestion[];
 };
 
 type Feedback = { type: 'success' | 'error'; message: string } | null;
@@ -72,19 +86,20 @@ const LOCALES = [
     { value: 'es', label: 'taxonomy.spanish' },
 ] as const;
 
-const governanceIndexUrl = '/settings/query-templates';
+const governanceIndexUrl = queryTemplateGovernance.index.url();
 const governanceShowUrl = (slug: string) =>
-    `/settings/query-templates/${encodeURIComponent(slug)}`;
-const versionsUrl = (slug: string) => `${governanceShowUrl(slug)}/versions`;
+    queryTemplateGovernance.show.url(slug);
+const versionsUrl = (slug: string) =>
+    queryTemplateGovernance.versions.store.url(slug);
 const versionUrl = (slug: string, versionId: number) =>
-    `${versionsUrl(slug)}/${versionId}`;
+    queryTemplateGovernance.versions.update.url([slug, versionId]);
 const submitUrl = (slug: string, versionId: number) =>
-    `${versionUrl(slug, versionId)}/submit`;
+    queryTemplateGovernance.versions.submit.url([slug, versionId]);
 const publishUrl = (slug: string, versionId: number) =>
-    `${versionUrl(slug, versionId)}/publish`;
+    queryTemplateGovernance.versions.publish.url([slug, versionId]);
 const restoreUrl = (slug: string, versionId: number) =>
-    `${versionUrl(slug, versionId)}/restore`;
-const archiveUrl = (slug: string) => `${governanceShowUrl(slug)}/archive`;
+    queryTemplateGovernance.versions.restore.url([slug, versionId]);
+const archiveUrl = (slug: string) => queryTemplateGovernance.archive.url(slug);
 
 function firstError(errors: Record<string, string>, fallback: string) {
     return Object.values(errors)[0] ?? fallback;
@@ -106,12 +121,16 @@ function DraftEditor({
     categories,
     candidates,
     ownerSearch,
+    oracleResources,
+    canUpdateTechnicalDefinition,
 }: {
     template: QueryTemplateGovernanceDetail;
     version: QueryTemplateGovernanceVersion;
     categories: GovernanceCategory[];
     candidates: GovernanceUser[];
     ownerSearch: string;
+    oracleResources: OracleResourceSuggestion[];
+    canUpdateTechnicalDefinition: boolean;
 }) {
     const { t } = useI18n();
     const [name, setName] = useState(
@@ -138,26 +157,46 @@ function DraftEditor({
     const [reviewDueAt, setReviewDueAt] = useState(
         template.review_due_at ?? '',
     );
-    const [translations, setTranslations] = useState(() =>
-        Object.fromEntries(
-            LOCALES.map(({ value }) => {
-                const translation =
-                    version.translations[value] ??
-                    template.translations[value] ??
-                    {};
+    const [resourceKey, setResourceKey] = useState(
+        stringValue(version.definition.resource_key, template.resource_key),
+    );
+    const [parametersJson, setParametersJson] = useState(() =>
+        JSON.stringify(
+            version.definition.parameters ?? template.parameters,
+            null,
+            2,
+        ),
+    );
+    const [parameterDefinitionsJson, setParameterDefinitionsJson] = useState(
+        () =>
+            JSON.stringify(
+                version.definition.parameter_definitions ??
+                    template.parameter_definitions,
+                null,
+                2,
+            ),
+    );
+    const [translations, setTranslations] = useState(
+        () =>
+            Object.fromEntries(
+                LOCALES.map(({ value }) => {
+                    const translation =
+                        version.translations[value] ??
+                        template.translations[value] ??
+                        {};
 
-                return [
-                    value,
-                    {
-                        name: translation.name ?? '',
-                        description: translation.description ?? '',
-                    },
-                ];
-            }),
-        ) as Record<
-            'fr' | 'en' | 'es',
-            { name: string; description: string }
-        >,
+                    return [
+                        value,
+                        {
+                            name: translation.name ?? '',
+                            description: translation.description ?? '',
+                        },
+                    ];
+                }),
+            ) as Record<
+                'fr' | 'en' | 'es',
+                { name: string; description: string }
+            >,
     );
     const [candidateSearch, setCandidateSearch] = useState(ownerSearch);
     const [ownerSearchPending, setOwnerSearchPending] = useState(false);
@@ -176,6 +215,9 @@ function DraftEditor({
 
         return [...byId.values()];
     }, [candidates, template.business_owner]);
+    const selectedResource = oracleResources.find(
+        (resource) => resource.key === resourceKey,
+    );
 
     function updateTranslation(
         locale: 'fr' | 'en' | 'es',
@@ -207,24 +249,112 @@ function DraftEditor({
         event.preventDefault();
         setErrors({});
         setFeedback(null);
+
+        let technicalDefinition:
+            | {
+                  resource_key: string;
+                  parameters: Record<string, unknown>;
+                  parameter_definitions: Array<Record<string, unknown>>;
+              }
+            | undefined;
+
+        if (canUpdateTechnicalDefinition) {
+            const clientErrors: Record<string, string> = {};
+            let parsedParameters: unknown;
+            let parsedParameterDefinitions: unknown;
+
+            try {
+                parsedParameters = JSON.parse(parametersJson);
+            } catch {
+                clientErrors.parameters = t(
+                    'templateGovernance.parametersJsonInvalid',
+                );
+            }
+
+            try {
+                parsedParameterDefinitions = JSON.parse(
+                    parameterDefinitionsJson,
+                );
+            } catch {
+                clientErrors.parameter_definitions = t(
+                    'templateGovernance.parameterDefinitionsJsonInvalid',
+                );
+            }
+
+            if (
+                parsedParameters !== undefined &&
+                (parsedParameters === null ||
+                    typeof parsedParameters !== 'object' ||
+                    Array.isArray(parsedParameters))
+            ) {
+                clientErrors.parameters = t(
+                    'templateGovernance.parametersJsonObjectRequired',
+                );
+            }
+
+            if (
+                parsedParameterDefinitions !== undefined &&
+                (!Array.isArray(parsedParameterDefinitions) ||
+                    parsedParameterDefinitions.some(
+                        (definition) =>
+                            definition === null ||
+                            typeof definition !== 'object' ||
+                            Array.isArray(definition),
+                    ))
+            ) {
+                clientErrors.parameter_definitions = t(
+                    'templateGovernance.parameterDefinitionsJsonArrayRequired',
+                );
+            }
+
+            if (resourceKey === '') {
+                clientErrors.resource_key = t(
+                    'templateGovernance.oracleResourceRequired',
+                );
+            }
+
+            if (Object.keys(clientErrors).length > 0) {
+                setErrors(clientErrors);
+                setFeedback({
+                    type: 'error',
+                    message: t(
+                        'templateGovernance.technicalDefinitionJsonError',
+                    ),
+                });
+
+                return;
+            }
+
+            technicalDefinition = {
+                resource_key: resourceKey,
+                parameters: {
+                    ...(parsedParameters as Record<string, unknown>),
+                    resource_key: resourceKey,
+                },
+                parameter_definitions: parsedParameterDefinitions as Array<
+                    Record<string, unknown>
+                >,
+            };
+        }
+
+        const payload = {
+            name: name.trim(),
+            description: description.trim() || null,
+            category_id: categoryId === 'none' ? null : Number(categoryId),
+            sort_order: Number(sortOrder),
+            translations,
+            change_summary: changeSummary.trim() || null,
+            business_owner_user_id:
+                businessOwnerId === 'none' ? null : Number(businessOwnerId),
+            review_due_at: reviewDueAt || null,
+            template_lock_version: template.lock_version,
+            version_lock_version: version.lock_version,
+            ...(technicalDefinition ?? {}),
+        };
+
         router.patch(
             versionUrl(template.slug, version.id),
-            {
-                name: name.trim(),
-                description: description.trim() || null,
-                category_id:
-                    categoryId === 'none' ? null : Number(categoryId),
-                sort_order: Number(sortOrder),
-                translations,
-                change_summary: changeSummary.trim() || null,
-                business_owner_user_id:
-                    businessOwnerId === 'none'
-                        ? null
-                        : Number(businessOwnerId),
-                review_due_at: reviewDueAt || null,
-                template_lock_version: template.lock_version,
-                version_lock_version: version.lock_version,
-            },
+            payload as NonNullable<Parameters<typeof router.patch>[1]>,
             {
                 preserveScroll: true,
                 onStart: () => setProcessing(true),
@@ -263,7 +393,9 @@ function DraftEditor({
                         </CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
-                        <TemplateGovernanceStatusBadge status={version.status} />
+                        <TemplateGovernanceStatusBadge
+                            status={version.status}
+                        />
                         <Badge variant="outline">
                             <LockKeyhole aria-hidden="true" />
                             {t('templateGovernance.lockVersion', {
@@ -376,6 +508,119 @@ function DraftEditor({
                         </div>
                     </div>
 
+                    {canUpdateTechnicalDefinition && (
+                        <section className="space-y-4 rounded-lg border p-4">
+                            <div>
+                                <h3 className="flex items-center gap-2 font-semibold">
+                                    <Database
+                                        className="size-4"
+                                        aria-hidden="true"
+                                    />
+                                    {t(
+                                        'templateGovernance.oracleDefinitionTitle',
+                                    )}
+                                </h3>
+                                <p className="text-sm text-muted-foreground">
+                                    {t(
+                                        'templateGovernance.oracleDefinitionDescription',
+                                    )}
+                                </p>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="template-oracle-resource">
+                                    {t(
+                                        'templateGovernance.oracleResourceLabel',
+                                    )}
+                                </Label>
+                                <select
+                                    id="template-oracle-resource"
+                                    value={resourceKey}
+                                    onChange={(event) =>
+                                        setResourceKey(event.target.value)
+                                    }
+                                    disabled={processing}
+                                    className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs"
+                                >
+                                    {oracleResources.map((resource) => (
+                                        <option
+                                            key={resource.key}
+                                            value={resource.key}
+                                        >
+                                            {resource.label} — {resource.domain}
+                                        </option>
+                                    ))}
+                                </select>
+                                {selectedResource && (
+                                    <p className="text-xs text-muted-foreground">
+                                        {selectedResource.description}
+                                    </p>
+                                )}
+                                <InputError
+                                    message={
+                                        errors.resource_key ??
+                                        errors['definition.resource_key']
+                                    }
+                                />
+                            </div>
+                            <div className="grid gap-4 lg:grid-cols-2">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="template-oracle-parameters">
+                                        {t(
+                                            'templateGovernance.parametersJsonLabel',
+                                        )}
+                                    </Label>
+                                    <Textarea
+                                        id="template-oracle-parameters"
+                                        value={parametersJson}
+                                        onChange={(event) =>
+                                            setParametersJson(
+                                                event.target.value,
+                                            )
+                                        }
+                                        rows={12}
+                                        spellCheck={false}
+                                        disabled={processing}
+                                        className="font-mono text-xs"
+                                    />
+                                    <InputError
+                                        message={
+                                            errors.parameters ??
+                                            errors['definition.parameters']
+                                        }
+                                    />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="template-parameter-definitions">
+                                        {t(
+                                            'templateGovernance.parameterDefinitionsJsonLabel',
+                                        )}
+                                    </Label>
+                                    <Textarea
+                                        id="template-parameter-definitions"
+                                        value={parameterDefinitionsJson}
+                                        onChange={(event) =>
+                                            setParameterDefinitionsJson(
+                                                event.target.value,
+                                            )
+                                        }
+                                        rows={12}
+                                        spellCheck={false}
+                                        disabled={processing}
+                                        className="font-mono text-xs"
+                                    />
+                                    <InputError
+                                        message={
+                                            errors.parameter_definitions ??
+                                            errors[
+                                                'definition.parameter_definitions'
+                                            ]
+                                        }
+                                    />
+                                </div>
+                            </div>
+                        </section>
+                    )}
+
                     <section className="space-y-3">
                         <div>
                             <h3 className="font-semibold">
@@ -481,9 +726,7 @@ function DraftEditor({
                         >
                             <div className="grid flex-1 gap-2">
                                 <Label htmlFor="business-owner-search">
-                                    {t(
-                                        'templateGovernance.ownerSearchLabel',
-                                    )}
+                                    {t('templateGovernance.ownerSearchLabel')}
                                 </Label>
                                 <div className="relative">
                                     <Search
@@ -523,9 +766,7 @@ function DraftEditor({
                                 disabled={processing || ownerSearchPending}
                             >
                                 {ownerSearchPending && (
-                                    <Spinner
-                                        aria-label={t('common.loading')}
-                                    />
+                                    <Spinner aria-label={t('common.loading')} />
                                 )}
                                 {t('templateGovernance.searchOwner')}
                             </Button>
@@ -617,6 +858,311 @@ function DraftEditor({
     );
 }
 
+const GOVERNANCE_ROLES = [
+    {
+        value: 'template_editor',
+        label: 'templateGovernance.editorRoleLabel',
+    },
+    {
+        value: 'template_publisher',
+        label: 'templateGovernance.publisherRoleLabel',
+    },
+] as const satisfies ReadonlyArray<{
+    value: QueryTemplateGovernanceRole;
+    label: string;
+}>;
+
+function ScopedDelegationsCard({
+    template,
+    candidates,
+}: {
+    template: QueryTemplateGovernanceDetail;
+    candidates: GovernanceRoleCandidate[];
+}) {
+    const { t } = useI18n();
+    const [selectedUserId, setSelectedUserId] = useState(
+        candidates[0] ? String(candidates[0].id) : '',
+    );
+    const [roles, setRoles] = useState<QueryTemplateGovernanceRole[]>(
+        candidates[0]?.roles ?? [],
+    );
+    const [processing, setProcessing] = useState(false);
+    const [feedback, setFeedback] = useState<Feedback>(null);
+    const selectedCandidate = candidates.find(
+        (candidate) => String(candidate.id) === selectedUserId,
+    );
+
+    function selectCandidate(userId: string) {
+        const candidate = candidates.find((item) => String(item.id) === userId);
+
+        setSelectedUserId(userId);
+        setRoles(candidate?.roles ?? []);
+        setFeedback(null);
+    }
+
+    function toggleRole(role: QueryTemplateGovernanceRole, checked: boolean) {
+        setRoles((current) =>
+            checked
+                ? [...new Set([...current, role])]
+                : current.filter((item) => item !== role),
+        );
+    }
+
+    function saveRoles() {
+        if (!selectedCandidate) {
+            return;
+        }
+
+        setFeedback(null);
+        router.patch(
+            delegations.update.url([template.slug, selectedCandidate.id]),
+            { roles },
+            {
+                preserveScroll: true,
+                onStart: () => setProcessing(true),
+                onError: (errors) =>
+                    setFeedback({
+                        type: 'error',
+                        message: firstError(
+                            errors,
+                            t('templateGovernance.delegationSaveError'),
+                        ),
+                    }),
+                onSuccess: () =>
+                    setFeedback({
+                        type: 'success',
+                        message: t('templateGovernance.delegationSaveSuccess'),
+                    }),
+                onFinish: () => setProcessing(false),
+            },
+        );
+    }
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <Users className="size-5" aria-hidden="true" />
+                    {t('templateGovernance.delegationsTitle')}
+                </CardTitle>
+                <CardDescription>
+                    {t('templateGovernance.delegationsDescription')}
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                {candidates.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                        {t('templateGovernance.noDelegationCandidates')}
+                    </p>
+                ) : (
+                    <>
+                        <div className="grid gap-2">
+                            <Label htmlFor="governance-role-candidate">
+                                {t(
+                                    'templateGovernance.delegationCandidateLabel',
+                                )}
+                            </Label>
+                            <select
+                                id="governance-role-candidate"
+                                value={selectedUserId}
+                                onChange={(event) =>
+                                    selectCandidate(event.target.value)
+                                }
+                                disabled={processing}
+                                className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs"
+                            >
+                                {candidates.map((candidate) => (
+                                    <option
+                                        key={candidate.id}
+                                        value={candidate.id}
+                                    >
+                                        {candidate.name} — {candidate.email}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="flex flex-wrap gap-4 rounded-md border p-3">
+                            {GOVERNANCE_ROLES.map((role) => (
+                                <div
+                                    key={role.value}
+                                    className="flex items-center gap-2"
+                                >
+                                    <Checkbox
+                                        id={`governance-role-${role.value}`}
+                                        checked={roles.includes(role.value)}
+                                        onCheckedChange={(checked) =>
+                                            toggleRole(
+                                                role.value,
+                                                checked === true,
+                                            )
+                                        }
+                                        disabled={processing}
+                                    />
+                                    <Label
+                                        htmlFor={`governance-role-${role.value}`}
+                                    >
+                                        {t(role.label)}
+                                    </Label>
+                                </div>
+                            ))}
+                        </div>
+                        {feedback && (
+                            <p
+                                className={
+                                    feedback.type === 'error'
+                                        ? 'text-sm text-destructive'
+                                        : 'text-sm text-muted-foreground'
+                                }
+                                aria-live="polite"
+                            >
+                                {feedback.message}
+                            </p>
+                        )}
+                        <div className="flex justify-end">
+                            <Button
+                                type="button"
+                                size="sm"
+                                onClick={saveRoles}
+                                disabled={processing || !selectedCandidate}
+                            >
+                                {processing && (
+                                    <Spinner aria-label={t('common.loading')} />
+                                )}
+                                {t('templateGovernance.saveDelegation')}
+                            </Button>
+                        </div>
+                    </>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
+function TechnicalOwnerCard({
+    template,
+    candidates,
+}: {
+    template: QueryTemplateGovernanceDetail;
+    candidates: GovernanceUser[];
+}) {
+    const { t } = useI18n();
+    const [technicalOwnerId, setTechnicalOwnerId] = useState(
+        template.technical_owner ? String(template.technical_owner.id) : 'none',
+    );
+    const [processing, setProcessing] = useState(false);
+    const [feedback, setFeedback] = useState<Feedback>(null);
+    const ownerCandidates = useMemo(() => {
+        const byId = new Map<number, GovernanceUser>();
+
+        if (template.technical_owner) {
+            byId.set(template.technical_owner.id, template.technical_owner);
+        }
+
+        candidates.forEach((candidate) => byId.set(candidate.id, candidate));
+
+        return [...byId.values()];
+    }, [candidates, template.technical_owner]);
+
+    function saveTechnicalOwner() {
+        setFeedback(null);
+        router.patch(
+            technicalOwner.update.url(template.slug),
+            {
+                technical_owner_user_id:
+                    technicalOwnerId === 'none'
+                        ? null
+                        : Number(technicalOwnerId),
+                lock_version: template.lock_version,
+            },
+            {
+                preserveScroll: true,
+                onStart: () => setProcessing(true),
+                onError: (errors) =>
+                    setFeedback({
+                        type: 'error',
+                        message: firstError(
+                            errors,
+                            t('templateGovernance.technicalOwnerSaveError'),
+                        ),
+                    }),
+                onSuccess: () =>
+                    setFeedback({
+                        type: 'success',
+                        message: t(
+                            'templateGovernance.technicalOwnerSaveSuccess',
+                        ),
+                    }),
+                onFinish: () => setProcessing(false),
+            },
+        );
+    }
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <UserCog className="size-5" aria-hidden="true" />
+                    {t('templateGovernance.technicalOwnerTitle')}
+                </CardTitle>
+                <CardDescription>
+                    {t('templateGovernance.technicalOwnerDescription')}
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="grid gap-2">
+                    <Label htmlFor="template-technical-owner">
+                        {t('templateGovernance.technicalOwnerLabel')}
+                    </Label>
+                    <select
+                        id="template-technical-owner"
+                        value={technicalOwnerId}
+                        onChange={(event) =>
+                            setTechnicalOwnerId(event.target.value)
+                        }
+                        disabled={processing}
+                        className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs"
+                    >
+                        <option value="none">
+                            {t('templateGovernance.noTechnicalOwner')}
+                        </option>
+                        {ownerCandidates.map((candidate) => (
+                            <option key={candidate.id} value={candidate.id}>
+                                {candidate.name}
+                                {candidate.email ? ` — ${candidate.email}` : ''}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+                {feedback && (
+                    <p
+                        className={
+                            feedback.type === 'error'
+                                ? 'text-sm text-destructive'
+                                : 'text-sm text-muted-foreground'
+                        }
+                        aria-live="polite"
+                    >
+                        {feedback.message}
+                    </p>
+                )}
+                <div className="flex justify-end">
+                    <Button
+                        type="button"
+                        size="sm"
+                        onClick={saveTechnicalOwner}
+                        disabled={processing}
+                    >
+                        {processing && (
+                            <Spinner aria-label={t('common.loading')} />
+                        )}
+                        {t('templateGovernance.saveTechnicalOwner')}
+                    </Button>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
 export default function QueryTemplateGovernanceShow({
     template,
     versions,
@@ -624,6 +1170,10 @@ export default function QueryTemplateGovernanceShow({
     categories,
     businessOwnerCandidates,
     ownerSearch,
+    governanceCapabilities,
+    governanceRoleCandidates,
+    technicalOwnerCandidates,
+    oracleResources,
 }: ShowProps) {
     const { t, formatDate } = useI18n();
     const [createDraftOpen, setCreateDraftOpen] = useState(false);
@@ -643,10 +1193,13 @@ export default function QueryTemplateGovernanceShow({
           ) ?? null)
         : null;
     const canCreateDraft =
+        governanceCapabilities.create_draft &&
         template.governance_status === 'published' &&
         template.published_version !== null &&
         template.open_version === null;
-    const canArchive = template.governance_status === 'published';
+    const canArchive =
+        governanceCapabilities.archive &&
+        template.governance_status === 'published';
     const parameterCount = Array.isArray(template.parameter_definitions)
         ? template.parameter_definitions.length
         : 0;
@@ -657,6 +1210,11 @@ export default function QueryTemplateGovernanceShow({
 
     function createDraft(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
+
+        if (!canCreateDraft) {
+            return;
+        }
+
         setFeedback(null);
         router.post(
             versionsUrl(template.slug),
@@ -690,7 +1248,7 @@ export default function QueryTemplateGovernanceShow({
     function restoreVersion(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
 
-        if (restoreSource === null) {
+        if (restoreSource === null || !governanceCapabilities.restore) {
             return;
         }
 
@@ -733,6 +1291,15 @@ export default function QueryTemplateGovernanceShow({
 
         const action = confirmation;
         const version = openVersion;
+
+        if (
+            (action === 'archive' && !canArchive) ||
+            (action === 'submit' && !governanceCapabilities.submit) ||
+            (action === 'publish' && !governanceCapabilities.publish)
+        ) {
+            return;
+        }
+
         let route: string;
         let payload:
             | { lock_version: number }
@@ -760,34 +1327,27 @@ export default function QueryTemplateGovernanceShow({
         }
 
         setFeedback(null);
-        router.post(
-            route,
-            payload,
-            {
-                preserveScroll: true,
-                onStart: () => setPending(action),
-                onError: (errors) => {
-                    setConfirmation(null);
-                    mutationError(
-                        errors,
-                        t('templateGovernance.actionError'),
-                    );
-                },
-                onSuccess: () => {
-                    setConfirmation(null);
-                    setFeedback({
-                        type: 'success',
-                        message:
-                            action === 'submit'
-                                ? t('templateGovernance.submitSuccess')
-                                : action === 'publish'
-                                  ? t('templateGovernance.publishSuccess')
-                                  : t('templateGovernance.archiveSuccess'),
-                    });
-                },
-                onFinish: () => setPending(null),
+        router.post(route, payload, {
+            preserveScroll: true,
+            onStart: () => setPending(action),
+            onError: (errors) => {
+                setConfirmation(null);
+                mutationError(errors, t('templateGovernance.actionError'));
             },
-        );
+            onSuccess: () => {
+                setConfirmation(null);
+                setFeedback({
+                    type: 'success',
+                    message:
+                        action === 'submit'
+                            ? t('templateGovernance.submitSuccess')
+                            : action === 'publish'
+                              ? t('templateGovernance.publishSuccess')
+                              : t('templateGovernance.archiveSuccess'),
+                });
+            },
+            onFinish: () => setPending(null),
+        });
     }
 
     function loadVersionPage(page: number) {
@@ -910,9 +1470,7 @@ export default function QueryTemplateGovernanceShow({
                             {t('templateGovernance.reviewOverdue')}
                         </AlertTitle>
                         <AlertDescription>
-                            {t(
-                                'templateGovernance.reviewOverdueDescription',
-                            )}
+                            {t('templateGovernance.reviewOverdueDescription')}
                         </AlertDescription>
                     </Alert>
                 )}
@@ -923,9 +1481,7 @@ export default function QueryTemplateGovernanceShow({
                             <div className="flex flex-wrap items-start justify-between gap-3">
                                 <div>
                                     <CardTitle>
-                                        {t(
-                                            'templateGovernance.summaryTitle',
-                                        )}
+                                        {t('templateGovernance.summaryTitle')}
                                     </CardTitle>
                                     <CardDescription>
                                         {template.description ??
@@ -947,7 +1503,7 @@ export default function QueryTemplateGovernanceShow({
                                 <p className="text-muted-foreground">
                                     {template.resource_key}
                                 </p>
-                                <code className="break-all text-xs text-muted-foreground">
+                                <code className="text-xs break-all text-muted-foreground">
                                     {template.resource_path}
                                 </code>
                             </div>
@@ -963,7 +1519,9 @@ export default function QueryTemplateGovernanceShow({
                                 </p>
                                 <p className="text-xs text-muted-foreground">
                                     {t(
-                                        'templateGovernance.technicalDefinitionLocked',
+                                        governanceCapabilities.update_technical_definition
+                                            ? 'templateGovernance.technicalDefinitionEditable'
+                                            : 'templateGovernance.technicalDefinitionLocked',
                                     )}
                                 </p>
                             </div>
@@ -973,9 +1531,7 @@ export default function QueryTemplateGovernanceShow({
                                 </p>
                                 <p className="text-muted-foreground">
                                     {template.business_owner?.name ??
-                                        t(
-                                            'templateGovernance.noBusinessOwner',
-                                        )}
+                                        t('templateGovernance.noBusinessOwner')}
                                 </p>
                             </div>
                             <div>
@@ -987,9 +1543,20 @@ export default function QueryTemplateGovernanceShow({
                                         ? formatDate(template.review_due_at, {
                                               dateStyle: 'long',
                                           })
-                                        : t(
-                                              'templateGovernance.noReviewDate',
-                                          )}
+                                        : t('templateGovernance.noReviewDate')}
+                                </p>
+                            </div>
+                            <div>
+                                <p className="font-medium">
+                                    {t(
+                                        'templateGovernance.technicalOwnerLabel',
+                                    )}
+                                </p>
+                                <p className="text-muted-foreground">
+                                    {template.technical_owner?.name ??
+                                        t(
+                                            'templateGovernance.noTechnicalOwner',
+                                        )}
                                 </p>
                             </div>
                         </CardContent>
@@ -1019,9 +1586,7 @@ export default function QueryTemplateGovernanceShow({
                             </div>
                             <div className="flex items-center justify-between gap-3">
                                 <span>
-                                    {t(
-                                        'templateGovernance.openVersionLabel',
-                                    )}
+                                    {t('templateGovernance.openVersionLabel')}
                                 </span>
                                 <span className="flex items-center gap-2">
                                     {template.open_version ? (
@@ -1052,44 +1617,77 @@ export default function QueryTemplateGovernanceShow({
                                     {template.lock_version}
                                 </Badge>
                             </div>
-                            {openVersion?.status === 'draft' && (
-                                <Button
-                                    type="button"
-                                    className="w-full"
-                                    onClick={() => setConfirmation('submit')}
-                                >
-                                    <Send aria-hidden="true" />
-                                    {t(
-                                        'templateGovernance.submitForReview',
-                                    )}
-                                </Button>
-                            )}
-                            {openVersion?.status === 'review' && (
-                                <Button
-                                    type="button"
-                                    className="w-full"
-                                    onClick={() => setConfirmation('publish')}
-                                >
-                                    <CheckCircle2 aria-hidden="true" />
-                                    {t('templateGovernance.publish')}
-                                </Button>
-                            )}
+                            {governanceCapabilities.submit &&
+                                openVersion?.status === 'draft' && (
+                                    <Button
+                                        type="button"
+                                        className="w-full"
+                                        onClick={() =>
+                                            setConfirmation('submit')
+                                        }
+                                    >
+                                        <Send aria-hidden="true" />
+                                        {t(
+                                            'templateGovernance.submitForReview',
+                                        )}
+                                    </Button>
+                                )}
+                            {governanceCapabilities.publish &&
+                                openVersion?.status === 'review' && (
+                                    <Button
+                                        type="button"
+                                        className="w-full"
+                                        onClick={() =>
+                                            setConfirmation('publish')
+                                        }
+                                    >
+                                        <CheckCircle2 aria-hidden="true" />
+                                        {t('templateGovernance.publish')}
+                                    </Button>
+                                )}
                         </CardContent>
                     </Card>
                 </div>
 
-                <TemplateCertificationCard template={template} />
-
-                {openVersion?.status === 'draft' && (
-                    <DraftEditor
-                        key={`${openVersion.id}-${openVersion.lock_version}`}
-                        template={template}
-                        version={openVersion}
-                        categories={categories}
-                        candidates={businessOwnerCandidates}
-                        ownerSearch={ownerSearch}
-                    />
+                {(governanceCapabilities.manage_roles ||
+                    governanceCapabilities.assign_technical_owner) && (
+                    <div className="grid gap-4 lg:grid-cols-2">
+                        {governanceCapabilities.manage_roles && (
+                            <ScopedDelegationsCard
+                                template={template}
+                                candidates={governanceRoleCandidates}
+                            />
+                        )}
+                        {governanceCapabilities.assign_technical_owner && (
+                            <TechnicalOwnerCard
+                                template={template}
+                                candidates={technicalOwnerCandidates}
+                            />
+                        )}
+                    </div>
                 )}
+
+                <TemplateCertificationCard
+                    template={template}
+                    canCertify={governanceCapabilities.certify}
+                    canRevoke={governanceCapabilities.revoke_certification}
+                />
+
+                {governanceCapabilities.update_draft &&
+                    openVersion?.status === 'draft' && (
+                        <DraftEditor
+                            key={`${openVersion.id}-${openVersion.lock_version}`}
+                            template={template}
+                            version={openVersion}
+                            categories={categories}
+                            candidates={businessOwnerCandidates}
+                            ownerSearch={ownerSearch}
+                            oracleResources={oracleResources}
+                            canUpdateTechnicalDefinition={
+                                governanceCapabilities.update_technical_definition
+                            }
+                        />
+                    )}
 
                 {template.open_version && openVersion === null && (
                     <Alert>
@@ -1185,7 +1783,9 @@ export default function QueryTemplateGovernanceShow({
                                                 )}
                                             </div>
                                             <div className="flex flex-wrap items-center gap-2">
-                                                {version.published_at !== null &&
+                                                {governanceCapabilities.restore &&
+                                                    version.published_at !==
+                                                        null &&
                                                     version.status ===
                                                         'superseded' &&
                                                     version.id !==
@@ -1339,8 +1939,8 @@ export default function QueryTemplateGovernanceShow({
                                     <ChevronLeft aria-hidden="true" />
                                 </Button>
                                 <span>
-                                    {t('queries.page')} {versions.current_page} /{' '}
-                                    {versions.last_page}
+                                    {t('queries.page')} {versions.current_page}{' '}
+                                    / {versions.last_page}
                                 </span>
                                 <Button
                                     type="button"
@@ -1383,13 +1983,9 @@ export default function QueryTemplateGovernanceShow({
                             })}
                         </DialogTitle>
                         <DialogDescription>
-                            {t(
-                                'templateGovernance.restoreConfirmDescription',
-                                {
-                                    version:
-                                        restoreSource?.version_number ?? '',
-                                },
-                            )}
+                            {t('templateGovernance.restoreConfirmDescription', {
+                                version: restoreSource?.version_number ?? '',
+                            })}
                         </DialogDescription>
                     </DialogHeader>
                     <form onSubmit={restoreVersion} className="space-y-4">
@@ -1465,9 +2061,7 @@ export default function QueryTemplateGovernanceShow({
                                 disabled={pending === 'restore'}
                             >
                                 {pending === 'restore' && (
-                                    <Spinner
-                                        aria-label={t('common.loading')}
-                                    />
+                                    <Spinner aria-label={t('common.loading')} />
                                 )}
                                 <RotateCcw aria-hidden="true" />
                                 {t('templateGovernance.restoreAsDraft')}
@@ -1526,9 +2120,7 @@ export default function QueryTemplateGovernanceShow({
                                 disabled={pending === 'create'}
                             >
                                 {pending === 'create' && (
-                                    <Spinner
-                                        aria-label={t('common.loading')}
-                                    />
+                                    <Spinner aria-label={t('common.loading')} />
                                 )}
                                 {t('templateGovernance.createDraft')}
                             </Button>

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Enums\QueryTemplateRole;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Translation\HasLocalePreference;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -41,6 +42,8 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property-read Collection<int, Group> $ownedGroups
  * @property-read Collection<int, QueryChangeRequest> $requestedQueryChanges
  * @property-read Collection<int, QueryChangeRequestComment> $queryChangeRequestComments
+ * @property-read Collection<int, Role> $queryTemplateRoles
+ * @property-read Collection<int, QueryTemplate> $technicallyOwnedQueryTemplates
  */
 #[Fillable(['name', 'email', 'password', 'locale', 'timezone'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
@@ -126,6 +129,39 @@ class User extends Authenticatable implements HasLocalePreference, PasskeyUser
         return $this->belongsToMany(Group::class)
             ->withPivot('role')
             ->withTimestamps();
+    }
+
+    /** @return BelongsToMany<Role, $this> */
+    public function queryTemplateRoles(): BelongsToMany
+    {
+        return $this->belongsToMany(Role::class, 'query_template_role_user')
+            ->using(QueryTemplateRoleAssignment::class)
+            ->withPivot(['query_template_id', 'assigned_by_user_id'])
+            ->withTimestamps();
+    }
+
+    /** @return HasMany<QueryTemplate, $this> */
+    public function technicallyOwnedQueryTemplates(): HasMany
+    {
+        return $this->hasMany(QueryTemplate::class, 'technical_owner_user_id');
+    }
+
+    public function hasQueryTemplateRole(QueryTemplate $template, QueryTemplateRole $role): bool
+    {
+        return $this->queryTemplateRoles()
+            ->wherePivot('query_template_id', $template->id)
+            ->where('roles.name', $role->value)
+            ->exists();
+    }
+
+    /** @return list<string> */
+    public function queryTemplateRoleNames(QueryTemplate $template): array
+    {
+        return $this->queryTemplateRoles()
+            ->wherePivot('query_template_id', $template->id)
+            ->orderBy('roles.name')
+            ->pluck('roles.name')
+            ->all();
     }
 
     /**

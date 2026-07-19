@@ -50,6 +50,8 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, QueryUserShare> $userShares
  * @property-read Collection<int, QueryGroupShare> $groupShares
  * @property-read Collection<int, QueryChangeRequest> $changeRequests
+ * @property-read Collection<int, QuerySemanticResource> $semanticResources
+ * @property-read Collection<int, OracleSchemaImpact> $schemaImpacts
  */
 #[Fillable(['name', 'description', 'resource_path', 'tenant_key', 'oracle_tenant_id', 'mode', 'execution_policy', 'parameters', 'access_level', 'category_id', 'query_template_id', 'query_template_version_id'])]
 class Query extends Model
@@ -178,6 +180,18 @@ class Query extends Model
     public function changeRequests(): HasMany
     {
         return $this->hasMany(QueryChangeRequest::class);
+    }
+
+    /** @return HasMany<QuerySemanticResource, $this> */
+    public function semanticResources(): HasMany
+    {
+        return $this->hasMany(QuerySemanticResource::class);
+    }
+
+    /** @return HasMany<OracleSchemaImpact, $this> */
+    public function schemaImpacts(): HasMany
+    {
+        return $this->hasMany(OracleSchemaImpact::class);
     }
 
     /**

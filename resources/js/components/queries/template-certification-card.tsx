@@ -28,28 +28,29 @@ import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { useI18n } from '@/i18n/i18n-context';
+import certifications from '@/routes/query-template-governance/certifications';
 import type { QueryTemplateGovernanceDetail } from '@/types/query-template-governance';
 
 type Props = {
     template: QueryTemplateGovernanceDetail;
+    canCertify: boolean;
+    canRevoke: boolean;
 };
 
 type CertificationAction = 'certify' | 'revoke' | null;
 type Feedback = { type: 'success' | 'error'; message: string } | null;
 
-const certificationsUrl = (slug: string) =>
-    `/settings/query-templates/${encodeURIComponent(slug)}/certifications`;
-const revokeCertificationUrl = (slug: string, certificationId: number) =>
-    `${certificationsUrl(slug)}/${certificationId}/revoke`;
-
 function firstError(errors: Record<string, string>, fallback: string) {
     return Object.values(errors)[0] ?? fallback;
 }
 
-export function TemplateCertificationCard({ template }: Props) {
+export function TemplateCertificationCard({
+    template,
+    canCertify: isCertificationAuthorized,
+    canRevoke,
+}: Props) {
     const { t, formatDate } = useI18n();
-    const [confirmation, setConfirmation] =
-        useState<CertificationAction>(null);
+    const [confirmation, setConfirmation] = useState<CertificationAction>(null);
     const [publicNote, setPublicNote] = useState('');
     const [pending, setPending] = useState(false);
     const [feedback, setFeedback] = useState<Feedback>(null);
@@ -63,11 +64,13 @@ export function TemplateCertificationCard({ template }: Props) {
         template.governance_status === 'published' &&
         template.is_active &&
         publishedVersion !== null;
-    const canCertify =
+    const meetsCertificationPrerequisites =
         certification === null &&
         isPublishedAndActive &&
         hasOwner &&
         hasCurrentReviewDate;
+    const canCertify =
+        isCertificationAuthorized && meetsCertificationPrerequisites;
 
     function submitAction() {
         if (confirmation === null || publishedVersion === null) {
@@ -76,11 +79,19 @@ export function TemplateCertificationCard({ template }: Props) {
 
         const action = confirmation;
         const isCertification = action === 'certify';
+
+        if (
+            (isCertification && !isCertificationAuthorized) ||
+            (!isCertification && !canRevoke)
+        ) {
+            return;
+        }
+
         let route: string;
         let payload: Record<string, number | string | null>;
 
         if (isCertification) {
-            route = certificationsUrl(template.slug);
+            route = certifications.store.url(template.slug);
             payload = {
                 template_lock_version: template.lock_version,
                 published_version_id: publishedVersion.id,
@@ -91,7 +102,10 @@ export function TemplateCertificationCard({ template }: Props) {
                 return;
             }
 
-            route = revokeCertificationUrl(template.slug, certification.id);
+            route = certifications.revoke.url({
+                queryTemplate: template.slug,
+                queryTemplateCertification: certification.id,
+            });
             payload = {
                 template_lock_version: template.lock_version,
                 certification_lock_version: certification.lock_version,
@@ -137,7 +151,9 @@ export function TemplateCertificationCard({ template }: Props) {
                                 {t('templateGovernance.certificationTitle')}
                             </CardTitle>
                             <CardDescription>
-                                {t('templateGovernance.certificationDescription')}
+                                {t(
+                                    'templateGovernance.certificationDescription',
+                                )}
                             </CardDescription>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -213,7 +229,9 @@ export function TemplateCertificationCard({ template }: Props) {
                             <dl className="grid gap-4 text-sm sm:grid-cols-3">
                                 <div>
                                     <dt className="font-medium">
-                                        {t('templateGovernance.certifiedVersion')}
+                                        {t(
+                                            'templateGovernance.certifiedVersion',
+                                        )}
                                     </dt>
                                     <dd className="text-muted-foreground">
                                         v{certification.version_number}
@@ -224,7 +242,8 @@ export function TemplateCertificationCard({ template }: Props) {
                                         {t('templateGovernance.certifiedBy')}
                                     </dt>
                                     <dd className="text-muted-foreground">
-                                        {certification.certified_by?.name ?? '—'}
+                                        {certification.certified_by?.name ??
+                                            '—'}
                                     </dd>
                                 </div>
                                 <div>
@@ -232,19 +251,24 @@ export function TemplateCertificationCard({ template }: Props) {
                                         {t('templateGovernance.certifiedAt')}
                                     </dt>
                                     <dd className="text-muted-foreground">
-                                        {formatDate(certification.certified_at, {
-                                            dateStyle: 'medium',
-                                            timeStyle: 'short',
-                                        })}
+                                        {formatDate(
+                                            certification.certified_at,
+                                            {
+                                                dateStyle: 'medium',
+                                                timeStyle: 'short',
+                                            },
+                                        )}
                                     </dd>
                                 </div>
                             </dl>
                             {certification.public_note && (
                                 <div className="rounded-lg border bg-muted/30 p-4">
                                     <p className="text-sm font-medium">
-                                        {t('templateGovernance.publicNoteLabel')}
+                                        {t(
+                                            'templateGovernance.publicNoteLabel',
+                                        )}
                                     </p>
-                                    <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
+                                    <p className="mt-1 text-sm whitespace-pre-wrap text-muted-foreground">
                                         {certification.public_note}
                                     </p>
                                 </div>
@@ -252,7 +276,9 @@ export function TemplateCertificationCard({ template }: Props) {
                             <Alert>
                                 <AlertTriangle aria-hidden="true" />
                                 <AlertTitle>
-                                    {t('templateGovernance.certificationVersionBound')}
+                                    {t(
+                                        'templateGovernance.certificationVersionBound',
+                                    )}
                                 </AlertTitle>
                                 <AlertDescription>
                                     {t(
@@ -260,20 +286,28 @@ export function TemplateCertificationCard({ template }: Props) {
                                     )}
                                 </AlertDescription>
                             </Alert>
-                            <div className="flex justify-end">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => setConfirmation('revoke')}
-                                >
-                                    {t('templateGovernance.revokeCertification')}
-                                </Button>
-                            </div>
+                            {canRevoke && (
+                                <div className="flex justify-end">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() =>
+                                            setConfirmation('revoke')
+                                        }
+                                    >
+                                        {t(
+                                            'templateGovernance.revokeCertification',
+                                        )}
+                                    </Button>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <div className="space-y-4">
                             <p className="text-sm text-muted-foreground">
-                                {t('templateGovernance.notCertifiedDescription')}
+                                {t(
+                                    'templateGovernance.notCertifiedDescription',
+                                )}
                             </p>
                             <ul className="grid gap-2 text-sm sm:grid-cols-3">
                                 <li className="flex items-center gap-2">
@@ -292,7 +326,9 @@ export function TemplateCertificationCard({ template }: Props) {
                                 </li>
                                 <li className="flex items-center gap-2">
                                     <Badge
-                                        variant={hasOwner ? 'default' : 'outline'}
+                                        variant={
+                                            hasOwner ? 'default' : 'outline'
+                                        }
                                     >
                                         {hasOwner ? '✓' : '—'}
                                     </Badge>
@@ -315,7 +351,7 @@ export function TemplateCertificationCard({ template }: Props) {
                                     )}
                                 </li>
                             </ul>
-                            {!canCertify && (
+                            {!meetsCertificationPrerequisites && (
                                 <Alert>
                                     <CircleHelp aria-hidden="true" />
                                     <AlertTitle>
@@ -330,16 +366,22 @@ export function TemplateCertificationCard({ template }: Props) {
                                     </AlertDescription>
                                 </Alert>
                             )}
-                            <div className="flex justify-end">
-                                <Button
-                                    type="button"
-                                    onClick={() => setConfirmation('certify')}
-                                    disabled={!canCertify}
-                                >
-                                    <ShieldCheck aria-hidden="true" />
-                                    {t('templateGovernance.certifyPublishedVersion')}
-                                </Button>
-                            </div>
+                            {isCertificationAuthorized && (
+                                <div className="flex justify-end">
+                                    <Button
+                                        type="button"
+                                        onClick={() =>
+                                            setConfirmation('certify')
+                                        }
+                                        disabled={!canCertify}
+                                    >
+                                        <ShieldCheck aria-hidden="true" />
+                                        {t(
+                                            'templateGovernance.certifyPublishedVersion',
+                                        )}
+                                    </Button>
+                                </div>
+                            )}
                         </div>
                     )}
                 </CardContent>
@@ -422,7 +464,9 @@ export function TemplateCertificationCard({ template }: Props) {
                                 <Spinner aria-label={t('common.loading')} />
                             )}
                             {confirmation === 'certify'
-                                ? t('templateGovernance.certifyPublishedVersion')
+                                ? t(
+                                      'templateGovernance.certifyPublishedVersion',
+                                  )
                                 : t('templateGovernance.revokeCertification')}
                         </Button>
                     </DialogFooter>

@@ -16,6 +16,49 @@ export type GovernanceUser = {
     email?: string;
 };
 
+export type QueryTemplateGovernanceRole =
+    | 'template_editor'
+    | 'template_publisher';
+
+export type GovernanceRoleCandidate = GovernanceUser & {
+    email: string;
+    roles: QueryTemplateGovernanceRole[];
+};
+
+export type QueryTemplateGovernanceCapabilities = {
+    view: boolean;
+    create_draft: boolean;
+    update_draft: boolean;
+    update_technical_definition: boolean;
+    submit: boolean;
+    publish: boolean;
+    restore: boolean;
+    certify: boolean;
+    revoke_certification: boolean;
+    archive: boolean;
+    manage_roles: boolean;
+    assign_technical_owner: boolean;
+};
+
+export type OracleResourceSuggestion = {
+    key: string;
+    label: string;
+    description: string;
+    domain: string;
+    method: string;
+    path: string;
+    keywords: string[];
+    preview_fields: string[];
+    fields: string[];
+    child_resources: string[];
+    child_fields: Record<string, string[]>;
+    join_keys: Record<
+        string,
+        { local_key: string; remote_key: string; label: string }
+    >;
+    sql: Record<string, unknown> | null;
+};
+
 export type GovernanceVersionReference = {
     id: number;
     version_number: number;
@@ -37,6 +80,7 @@ export type QueryTemplateGovernanceSummary = {
     published_version: GovernanceVersionReference | null;
     open_version: GovernanceOpenVersion | null;
     business_owner: GovernanceUser | null;
+    technical_owner: GovernanceUser | null;
     review_due_at: string | null;
     is_review_overdue: boolean;
     certification: QueryTemplateCertification | null;
@@ -123,18 +167,17 @@ export type QueryTemplateVersionComparison = {
     changes: QueryTemplateVersionComparisonChange[];
 };
 
-export type QueryTemplateGovernanceDetail =
-    QueryTemplateGovernanceSummary & {
-        description: string | null;
-        resource_key: string;
-        resource_path: string;
-        category_id: number | null;
-        parameters: Record<string, unknown>;
-        parameter_definitions: Array<Record<string, unknown>>;
-        translations: Partial<
-            Record<'fr' | 'en' | 'es', QueryTemplateTranslationSnapshot>
-        >;
-    };
+export type QueryTemplateGovernanceDetail = QueryTemplateGovernanceSummary & {
+    description: string | null;
+    resource_key: string;
+    resource_path: string;
+    category_id: number | null;
+    parameters: Record<string, unknown>;
+    parameter_definitions: Array<Record<string, unknown>>;
+    translations: Partial<
+        Record<'fr' | 'en' | 'es', QueryTemplateTranslationSnapshot>
+    >;
+};
 
 export type GovernanceCategory = {
     id: number;
