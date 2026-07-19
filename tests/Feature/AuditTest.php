@@ -40,6 +40,28 @@ test('record() rejects sensitive keys nested in the context', function () {
     ]);
 })->throws(InvalidArgumentException::class);
 
+test('record() rejects compound sensitive context keys', function (string $key) {
+    app(AuditRecorder::class)->record(null, 'tenant.updated', null, [
+        $key => 'leak',
+    ]);
+})->throws(InvalidArgumentException::class)->with([
+    'database_password',
+    'oracle.password',
+    'oracle-username',
+    'request_authorization_header',
+    'client_secret',
+    'access_token',
+    'refresh_token',
+    'api_key',
+    'private_key',
+    'clientSecret',
+    'accessToken',
+    'apiKey',
+    'privateKey',
+    'oracle_api_key_value',
+    'signing.private-key.version',
+]);
+
 test('audit events are immutable', function () {
     $event = AuditEvent::factory()->create();
 

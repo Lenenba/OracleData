@@ -42,8 +42,7 @@ class OracleQueryTool
         string $tenantKey,
         array $query,
         OracleExecutionPolicy $policy = OracleExecutionPolicy::BEST_EFFORT,
-    ): array
-    {
+    ): array {
         $resourceKey = (string) ($query['resource'] ?? '');
         $resource = $this->catalog->find($resourceKey);
 
@@ -123,8 +122,7 @@ class OracleQueryTool
         array $resource,
         array $params,
         OracleExecutionPolicy $policy = OracleExecutionPolicy::BEST_EFFORT,
-    ): array
-    {
+    ): array {
         $attempts = [[
             'path' => $resource['path'],
             'params' => $params,
@@ -364,8 +362,7 @@ class OracleQueryTool
         array $items,
         array &$calls,
         OracleExecutionPolicy $policy = OracleExecutionPolicy::BEST_EFFORT,
-    ): array
-    {
+    ): array {
         $targetResource = $this->catalog->find($target);
 
         if ($targetResource === null) {

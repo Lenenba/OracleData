@@ -22,6 +22,13 @@ export type QueryTemplateSummary = {
     slug: string;
     name: string;
     description: string | null;
+    is_certified: boolean;
+    certification_note: string | null;
+    certification: {
+        public_note: string | null;
+        certified_at: string;
+        version_number: number | null;
+    } | null;
     resource_key: string;
     resource_path: string;
     resource: {

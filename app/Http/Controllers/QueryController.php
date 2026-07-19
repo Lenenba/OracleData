@@ -9,20 +9,24 @@ use App\Models\Category;
 use App\Models\Query;
 use App\Models\SavedQueryView;
 use App\Models\Tag;
+use App\Models\User;
 use App\Services\AuditRecorder;
 use App\Services\FusionManager;
 use App\Services\OracleFieldDiscovery;
 use App\Services\OracleQueryTool;
 use App\Services\OracleResourceCatalog;
 use App\Services\QueryAgent;
+use App\Services\QueryChangeRequestService;
 use App\Services\QueryExecutionRecorder;
 use App\Services\QueryResolver;
+use App\Services\QueryShareLifecycleService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -30,7 +34,6 @@ use Inertia\Inertia;
 use Inertia\Response;
 use InvalidArgumentException;
 use RuntimeException;
-use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class QueryController extends Controller
 {
@@ -42,11 +45,13 @@ class QueryController extends Controller
     private const ALLOWED_PARAMETER_KEYS = ['limit', 'q', 'fields', 'expand', 'joins', 'child_fields', 'orderBy', 'offset'];
 
     /**
-     * List the user's own queries plus every shared query.
+     * List the user's own queries plus every query explicitly accessible to them.
      */
     public function index(Request $request, FusionManager $fusion): Response
     {
-        $userId = $request->user()->id;
+        $user = $request->user();
+        $userId = $user->id;
+        $groupIds = $user->groupIdsForQueryAccess();
         $locale = app()->getLocale();
         $fusion = $fusion->forUser($request->user());
 
@@ -84,10 +89,7 @@ class QueryController extends Controller
             $search = mb_substr($search, 0, 100);
         }
 
-        $accessible = fn (): Builder => Query::query()
-            ->where(fn (Builder $query) => $query
-                ->where('user_id', $userId)
-                ->orWhere('visibility', 'shared'));
+        $accessible = fn (): Builder => Query::query()->accessibleTo($user);
 
         $queryBuilder = Query::query()
             ->select([
@@ -98,21 +100,17 @@ class QueryController extends Controller
                 'resource_path',
                 'tenant_key',
                 'mode',
-                'visibility',
+                'access_level',
                 'category_id',
                 'execution_count',
                 'successful_execution_count',
                 'last_executed_at',
                 'updated_at',
             ])
-            ->when($scope === 'all', fn (Builder $query) => $query
-                ->where(fn (Builder $query) => $query
-                    ->where('user_id', $userId)
-                    ->orWhere('visibility', 'shared')))
+            ->when($scope === 'all', fn (Builder $query) => $query->accessibleTo($user))
             ->when($scope === 'mine', fn (Builder $query) => $query
                 ->where('user_id', $userId))
-            ->when($scope === 'shared', fn (Builder $query) => $query
-                ->where('visibility', 'shared'))
+            ->when($scope === 'shared', fn (Builder $query) => $query->sharedWith($user))
             ->when($search !== '', fn (Builder $query) => $query
                 ->where(fn (Builder $query) => $query
                     ->where('name', 'like', "%{$search}%")
@@ -145,7 +143,15 @@ class QueryController extends Controller
                     ->where('user_id', $userId)
                     ->where('is_pinned', true),
             ])
-            ->with(['user:id,name', 'category.translations', 'tags.translations'])
+            ->with([
+                'user:id,name',
+                'category.translations',
+                'tags.translations',
+                'userShares' => fn ($query) => $query->where('user_id', $userId),
+                'groupShares' => fn ($query) => $query
+                    ->active()
+                    ->whereIn('group_id', $groupIds),
+            ])
             ->orderByDesc('is_pinned');
 
         match ($sort) {
@@ -175,7 +181,7 @@ class QueryController extends Controller
                         ? $fusion->label($query->tenant_key)
                         : null,
                 ],
-                'visibility' => $query->visibility,
+                'access_level' => $query->access_level,
                 'owner' => $query->user->name,
                 'category' => $query->category === null ? null : [
                     'slug' => $query->category->slug,
@@ -198,7 +204,10 @@ class QueryController extends Controller
                 ],
                 'can' => [
                     'update' => $query->user_id === $userId,
-                    'clone' => true,
+                    'execute' => $user->can('execute', $query),
+                    'clone' => $user->can('clone', $query),
+                    'manage_sharing' => $user->can('manageSharing', $query),
+                    'request_change' => $user->can('requestChange', $query),
                 ],
             ]);
 
@@ -220,15 +229,11 @@ class QueryController extends Controller
             'favorite' => $favorite,
             'pinned' => $pinned,
             'categories' => $this->categoryOptions($locale),
-            'tags' => $this->tagOptions($locale, $userId),
+            'tags' => $this->tagOptions($locale, $user),
             'summary' => [
-                'all' => Query::query()
-                    ->where(fn (Builder $query) => $query
-                        ->where('user_id', $userId)
-                        ->orWhere('visibility', 'shared'))
-                    ->count(),
+                'all' => $accessible()->count(),
                 'mine' => Query::query()->where('user_id', $userId)->count(),
-                'shared' => Query::query()->where('visibility', 'shared')->count(),
+                'shared' => Query::query()->sharedWith($user)->count(),
                 'favorites' => $accessible()
                     ->whereHas('preferences', fn (Builder $query) => $query
                         ->where('user_id', $userId)
@@ -283,7 +288,7 @@ class QueryController extends Controller
             'tenants' => $fusion->available(),
             'defaultTenant' => $fusion->defaultKey(),
             'categories' => $this->categoryOptions(app()->getLocale()),
-            'tags' => $this->tagOptions(app()->getLocale(), (int) $request->user()->id),
+            'tags' => $this->tagOptions(app()->getLocale(), $request->user()),
         ]);
     }
 
@@ -313,15 +318,15 @@ class QueryController extends Controller
      *
      * @return list<array{id: int, slug: string, name: string, label: string}>
      */
-    private function tagOptions(string $locale, int $userId): array
+    private function tagOptions(string $locale, User $user): array
     {
         return array_values(Tag::query()
             ->where(fn (Builder $query) => $query
                 ->whereHas('translations')
-                ->orWhereHas('queries', fn (Builder $query) => $query
-                    ->where(fn (Builder $query) => $query
-                        ->where('user_id', $userId)
-                        ->orWhere('visibility', 'shared'))))
+                ->orWhereHas('queries', function (Builder $query) use ($user): void {
+                    /** @var Builder<Query> $query */
+                    $query->accessibleTo($user);
+                }))
             ->with('translations')
             ->orderBy('name')
             ->orderBy('id')
@@ -407,7 +412,7 @@ class QueryController extends Controller
     public function edit(Request $request, Query $query, OracleResourceCatalog $catalog, FusionManager $fusion): Response
     {
         Gate::authorize('update', $query);
-        $query->loadMissing('queryTemplate');
+        $query->loadMissing('queryTemplate.translations');
         $fusion = $fusion->forUser($request->user());
 
         return Inertia::render('queries/edit', [
@@ -421,12 +426,12 @@ class QueryController extends Controller
                     : null,
                 'mode' => $query->mode,
                 'parameters' => (object) ($query->parameters ?? []),
-                'visibility' => $query->visibility,
+                'access_level' => $query->access_level,
                 'category_id' => $query->category_id,
                 'tags' => $query->tags->pluck('name')->values(),
                 'source_template' => $query->queryTemplate === null ? null : [
                     'slug' => $query->queryTemplate->slug,
-                    'name' => $query->queryTemplate->name,
+                    'name' => $query->queryTemplate->nameFor(app()->getLocale()),
                 ],
             ],
             'resourceSuggestions' => $catalog->suggestions(),
@@ -435,7 +440,7 @@ class QueryController extends Controller
                 ? $query->tenant_key
                 : $fusion->defaultKey(),
             'categories' => $this->categoryOptions(app()->getLocale()),
-            'tags' => $this->tagOptions(app()->getLocale(), (int) $request->user()->id),
+            'tags' => $this->tagOptions(app()->getLocale(), $request->user()),
         ]);
     }
 
@@ -448,6 +453,10 @@ class QueryController extends Controller
 
         $data = $request->validated();
         $tags = Arr::pull($data, 'tags');
+        // Existing access grants are governed atomically by the dedicated
+        // sharing workflow (audit, revocation and expiry), never by metadata
+        // edits in the query builder.
+        Arr::forget($data, 'access_level');
         $fusion = $fusion->forUser($request->user());
         $data['oracle_tenant_id'] = $fusion->tenantId($data['tenant_key']);
 
@@ -481,11 +490,41 @@ class QueryController extends Controller
     /**
      * Delete a query owned by the current user.
      */
-    public function destroy(Request $request, Query $query): RedirectResponse
-    {
-        Gate::authorize('update', $query);
+    public function destroy(
+        Request $request,
+        Query $query,
+        QueryShareLifecycleService $lifecycle,
+        QueryChangeRequestService $changeRequests,
+        AuditRecorder $audit,
+    ): RedirectResponse {
+        Gate::authorize('delete', $query);
+        /** @var User $actor */
+        $actor = $request->user();
 
-        $query->delete();
+        DB::transaction(function () use ($actor, $audit, $changeRequests, $lifecycle, $query): void {
+            $lockedQuery = Query::query()->lockForUpdate()->findOrFail($query->id);
+            Gate::forUser($actor)->authorize('delete', $lockedQuery);
+            $revoked = $lifecycle->revokeActiveGrants(
+                $actor,
+                $lockedQuery,
+                $audit,
+                'query_archived',
+            );
+            $cancelledChangeRequests = $changeRequests->cancelForArchivedQuery(
+                $actor,
+                $lockedQuery,
+                $audit,
+            );
+            $audit->record($actor, 'query.archived', $lockedQuery, [
+                'access_level' => $lockedQuery->access_level->value,
+                'revoked_share_count' => $revoked['total'],
+                'revoked_user_share_count' => $revoked['users'],
+                'revoked_group_share_count' => $revoked['groups'],
+                'cancelled_invitation_count' => $revoked['invitations'],
+                'cancelled_change_request_count' => $cancelledChangeRequests,
+            ]);
+            $lockedQuery->delete();
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Requête supprimée.')]);
 
@@ -493,33 +532,11 @@ class QueryController extends Controller
     }
 
     /**
-     * Toggle the visibility of a query (private ↔ shared).
-     */
-    public function updateVisibility(Request $request, Query $query): SymfonyResponse
-    {
-        Gate::authorize('update', $query);
-
-        $validated = $request->validate([
-            'visibility' => ['required', 'in:private,shared'],
-        ]);
-
-        $query->update(['visibility' => $validated['visibility']]);
-
-        if ($request->expectsJson()) {
-            return response()->json(['visibility' => $query->visibility]);
-        }
-
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Visibilité mise à jour.')]);
-
-        return back();
-    }
-
-    /**
      * Copy a visible query into the current user's private library.
      */
     public function duplicate(Request $request, Query $query, FusionManager $fusion): RedirectResponse
     {
-        Gate::authorize('view', $query);
+        Gate::authorize('clone', $query);
         $fusion = $fusion->forUser($request->user());
         $tenantKey = $fusion->defaultKey();
 
@@ -532,10 +549,13 @@ class QueryController extends Controller
             'mode' => $query->mode,
             'execution_policy' => $query->execution_policy ?? OracleExecutionPolicy::BEST_EFFORT,
             'parameters' => $query->parameters,
-            'visibility' => 'private',
+            'access_level' => 'private',
             'category_id' => $query->category_id,
             'query_template_id' => $query->query_template_id,
         ]);
+        $copy->forceFill([
+            'query_template_version_id' => $query->getAttribute('query_template_version_id'),
+        ])->save();
 
         $copy->tags()->sync($query->tags()->pluck('tags.id'));
 
@@ -658,7 +678,15 @@ class QueryController extends Controller
     public function show(Request $request, Query $query, FusionManager $fusion): Response
     {
         Gate::authorize('view', $query);
-        $query->loadMissing(['category.translations', 'tags.translations']);
+        $groupIds = $request->user()->groupIdsForQueryAccess();
+        $query->loadMissing([
+            'category.translations',
+            'tags.translations',
+            'userShares' => fn ($share) => $share->where('user_id', $request->user()->id),
+            'groupShares' => fn ($share) => $share
+                ->active()
+                ->whereIn('group_id', $groupIds),
+        ]);
         $fusion = $fusion->forUser($request->user());
         $locale = app()->getLocale();
         $ownerPreferredTenant = $query->user_id === $request->user()->id
@@ -677,7 +705,7 @@ class QueryController extends Controller
                     : null,
                 'mode' => $query->mode,
                 'parameters' => (object) ($query->parameters ?? []),
-                'visibility' => $query->visibility,
+                'access_level' => $query->access_level,
                 'category' => $query->category === null ? null : [
                     'slug' => $query->category->slug,
                     'name' => $query->category->nameFor($locale),
@@ -691,7 +719,10 @@ class QueryController extends Controller
                     ->values(),
                 'can' => [
                     'update' => $query->user_id === $request->user()->id,
-                    'clone' => true,
+                    'execute' => $request->user()->can('execute', $query),
+                    'clone' => $request->user()->can('clone', $query),
+                    'manage_sharing' => $request->user()->can('manageSharing', $query),
+                    'request_change' => $request->user()->can('requestChange', $query),
                 ],
             ],
             'tenants' => $fusion->available(),
@@ -704,7 +735,7 @@ class QueryController extends Controller
      */
     public function run(RunQueryRequest $request, Query $query, FusionManager $fusion, QueryAgent $agent, OracleQueryTool $tool, AuditRecorder $audit, QueryExecutionRecorder $executions): JsonResponse
     {
-        Gate::authorize('view', $query);
+        Gate::authorize('execute', $query);
         $fusion = $fusion->forUser($request->user());
 
         $ownerPreferredTenant = $query->user_id === $request->user()->id
@@ -723,7 +754,7 @@ class QueryController extends Controller
         $payload = $this->executeQuery($query, $tenant, $fusion, $agent, $tool);
         $durationMs = (int) round((hrtime(true) - $startedAtNs) / 1_000_000);
 
-        $executions->record($request->user(), $query, $tenant, $payload, $startedAt, $durationMs);
+        $executions->recordQueryRun($request->user(), $query, $tenant, $payload, $startedAt, $durationMs);
 
         return response()->json($payload);
     }
@@ -807,8 +838,7 @@ class QueryController extends Controller
         array $query,
         OracleQueryTool $tool,
         OracleExecutionPolicy $policy = OracleExecutionPolicy::BEST_EFFORT,
-    ): array
-    {
+    ): array {
         try {
             $result = $tool->run($tenant, $query, $policy);
         } catch (InvalidArgumentException|RuntimeException $e) {

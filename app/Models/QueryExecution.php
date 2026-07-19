@@ -19,6 +19,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int|null $query_id
  * @property int|null $query_template_id
+ * @property int|null $query_template_version_id
  * @property int $user_id
  * @property int|null $oracle_tenant_id
  * @property int|null $auth_connection_id
@@ -32,6 +33,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon $finished_at
  * @property-read Query|null $executedQuery
  * @property-read QueryTemplate|null $queryTemplate
+ * @property-read QueryTemplateVersion|null $queryTemplateVersion
  * @property-read User $user
  * @property-read OracleTenant|null $oracleTenant
  * @property-read AuthConnection|null $authConnection
@@ -39,6 +41,7 @@ use Illuminate\Support\Carbon;
 #[Fillable([
     'query_id',
     'query_template_id',
+    'query_template_version_id',
     'user_id',
     'oracle_tenant_id',
     'auth_connection_id',
@@ -98,6 +101,16 @@ class QueryExecution extends Model
     public function queryTemplate(): BelongsTo
     {
         return $this->belongsTo(QueryTemplate::class);
+    }
+
+    /**
+     * Exact official version used by a direct template preview or run.
+     *
+     * @return BelongsTo<QueryTemplateVersion, $this>
+     */
+    public function queryTemplateVersion(): BelongsTo
+    {
+        return $this->belongsTo(QueryTemplateVersion::class);
     }
 
     /**

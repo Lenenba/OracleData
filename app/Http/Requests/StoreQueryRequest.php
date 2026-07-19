@@ -27,7 +27,7 @@ class StoreQueryRequest extends FormRequest
     {
         $this->merge([
             'mode' => $this->input('mode', 'single'),
-            'visibility' => $this->input('visibility', 'private'),
+            'access_level' => $this->input('access_level', 'private'),
             'tenant_key' => $this->filled('tenant_key')
                 ? $this->input('tenant_key')
                 : app(FusionManager::class)->defaultKey(),

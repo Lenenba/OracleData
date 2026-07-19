@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\OracleExecutionPolicy;
 use App\Services\OracleQueryTool;
 use Illuminate\Support\Facades\Http;
 
@@ -171,7 +172,58 @@ test('purchase orders can fall back to the LOV endpoint without incompatible RES
         ->and($result['calls'][3]['params'])->not->toHaveKeys(['fields', 'orderBy']);
 });
 
-test('a rejected field projection is retried without fields and projected locally', function () {
+test('filtered fallbacks preserve q and skip compatibility attempts that remove it', function () {
+    $filter = "Status='OPEN'";
+
+    Http::fake(function ($request) {
+        if (str_contains($request->url(), '/purchaseOrdersLOV')) {
+            return Http::response([
+                'items' => [['OrderNumber' => 'PO-400', 'Status' => 'OPEN']],
+                'count' => 1,
+            ]);
+        }
+
+        return Http::response(['items' => [], 'count' => 0]);
+    });
+
+    $result = app(OracleQueryTool::class)->run('client_x', [
+        'resource' => 'purchase_orders',
+        'q' => $filter,
+        'limit' => 25,
+    ]);
+
+    $requests = Http::recorded()->map(fn (array $exchange) => $exchange[0]);
+
+    expect($result['path'])->toBe('/fscmRestApi/resources/11.13.18.05/purchaseOrdersLOV')
+        ->and($result['calls'])->toHaveCount(2)
+        ->and($requests)->toHaveCount(2);
+
+    foreach ($requests as $request) {
+        parse_str(parse_url($request->url(), PHP_URL_QUERY) ?: '', $query);
+
+        expect($query['q'] ?? null)->toBe($filter)
+            ->and($query)->not->toHaveKey('finder');
+    }
+});
+
+test('exact execution returns an empty primary response without trying fallbacks', function () {
+    Http::fake(['*' => Http::response(['items' => [], 'count' => 0, 'hasMore' => false])]);
+
+    $result = app(OracleQueryTool::class)->run('client_x', [
+        'resource' => 'purchase_orders',
+        'limit' => 25,
+    ], OracleExecutionPolicy::EXACT);
+
+    expect($result['count'])->toBe(0)
+        ->and($result['path'])->toBe('/fscmRestApi/resources/11.13.18.05/purchaseOrders')
+        ->and($result['calls'])->toHaveCount(1);
+
+    Http::assertSentCount(1);
+});
+
+test('a rejected field projection is retried without fields while preserving q', function () {
+    $filter = "Status='OPEN'";
+
     Http::fake([
         'https://client-x.fa.oraclecloud.com/fscmRestApi/resources/11.13.18.05/purchaseOrders?*' => Http::sequence()
             ->pushStatus(400)
@@ -190,6 +242,7 @@ test('a rejected field projection is retried without fields and projected locall
     $result = app(OracleQueryTool::class)->run('client_x', [
         'resource' => 'purchase_orders',
         'fields' => ['OrderNumber', 'Supplier', 'Ordered'],
+        'q' => $filter,
         'limit' => 25,
     ]);
 
@@ -199,10 +252,25 @@ test('a rejected field projection is retried without fields and projected locall
         'Ordered' => 1250,
     ])
         ->and($result['params'])->not->toHaveKey('fields')
+        ->and($result['params']['q'])->toBe($filter)
         ->and($result['calls'])->toHaveCount(1)
         ->and($result['calls'][0]['params'])->not->toHaveKey('fields');
 
     Http::assertSentCount(2);
+
+    $requests = Http::recorded()->map(fn (array $exchange) => $exchange[0])->values();
+
+    foreach ($requests as $request) {
+        parse_str(parse_url($request->url(), PHP_URL_QUERY) ?: '', $query);
+
+        expect($query['q'] ?? null)->toBe($filter);
+    }
+
+    parse_str(parse_url($requests[0]->url(), PHP_URL_QUERY) ?: '', $firstQuery);
+    parse_str(parse_url($requests[1]->url(), PHP_URL_QUERY) ?: '', $retryQuery);
+
+    expect($firstQuery)->toHaveKey('fields')
+        ->and($retryQuery)->not->toHaveKey('fields');
 });
 
 test('run() strips Oracle HATEOAS links from items, including nested children', function () {
@@ -275,40 +343,38 @@ test('a join fetches the related resource once and nests matching rows per paren
     });
 });
 
-test('a join falls back to an unfiltered fetch when the remote finder rejects OR', function () {
-    Http::fake([
-        'https://client-x.fa.oraclecloud.com/fscmRestApi/resources/11.13.18.05/suppliers*' => Http::response([
-            'items' => [
-                ['SupplierId' => 11, 'Supplier' => 'Acme'],
-                ['SupplierId' => 22, 'Supplier' => 'Beta'],
-            ],
-            'count' => 2,
-        ]),
-        // purchaseOrders : 500 sur le finder multi-valeurs, puis OK sans filtre.
-        'https://client-x.fa.oraclecloud.com/fscmRestApi/resources/11.13.18.05/purchaseOrders*' => Http::sequence()
-            ->pushStatus(500)
-            ->push([
+test('a join fails closed when the remote resource rejects its q filter', function () {
+    Http::fake(function ($request) {
+        if (str_contains($request->url(), '/suppliers')) {
+            return Http::response([
                 'items' => [
-                    ['SupplierId' => 11, 'OrderNumber' => 'PO-1'],
-                    ['SupplierId' => 33, 'OrderNumber' => 'PO-9'],
+                    ['SupplierId' => 11, 'Supplier' => 'Acme'],
+                    ['SupplierId' => 22, 'Supplier' => 'Beta'],
                 ],
                 'count' => 2,
-            ]),
-    ]);
+            ]);
+        }
 
-    $result = app(OracleQueryTool::class)->run('client_x', [
+        return Http::response([], 400);
+    });
+
+    expect(fn () => app(OracleQueryTool::class)->run('client_x', [
         'resource' => 'suppliers',
         'joins' => ['purchase_orders'],
-    ]);
+    ]))->toThrow(RuntimeException::class);
 
-    // Regroupement local : seul le fournisseur 11 a un PO correspondant.
-    expect($result['items'][0]['purchase_orders'])->toHaveCount(1)
-        ->and($result['items'][0]['purchase_orders'][0]['OrderNumber'])->toBe('PO-1')
-        ->and($result['items'][1]['purchase_orders'])->toBe([])
-        ->and($result['calls'][1]['resource'])->toBe('purchase_orders');
+    $remoteRequests = Http::recorded()
+        ->map(fn (array $exchange) => $exchange[0])
+        ->filter(fn ($request): bool => str_contains($request->url(), '/purchaseOrders'))
+        ->values();
 
-    // Deux tentatives sur purchaseOrders : filtrée (500) puis non filtrée.
-    Http::assertSentCount(3);
+    expect($remoteRequests)->toHaveCount(2);
+
+    foreach ($remoteRequests as $request) {
+        parse_str(parse_url($request->url(), PHP_URL_QUERY) ?: '', $query);
+
+        expect($query['q'] ?? null)->toBe('SupplierId = 11 OR SupplierId = 22');
+    }
 });
 
 test('join fields are validated, fetched with the remote key, and projected', function () {

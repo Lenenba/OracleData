@@ -92,7 +92,7 @@ test('a tag name must produce a non empty slug', function () {
         'name' => 'Requête étiquetée',
         'resource_path' => '/hcmRestApi/resources/11.13.18.05/workers',
         'tenant_key' => 'client_x',
-        'visibility' => 'private',
+        'access_level' => 'private',
         'tags' => ['🔥'],
     ])->assertInvalid(['tags.0']);
 

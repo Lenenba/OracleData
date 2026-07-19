@@ -1,4 +1,9 @@
 export type * from './auth';
+export type * from './change-requests';
+export type * from './groups';
 export type * from './navigation';
+export type * from './notifications';
 export type * from './oracle-connection';
+export type * from './query-sharing';
+export type * from './query-template-governance';
 export type * from './ui';

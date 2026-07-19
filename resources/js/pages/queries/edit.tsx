@@ -12,6 +12,7 @@ import { parseChildFields, parseCsv } from '@/lib/query-spec';
 import type { ResourceSuggestion } from '@/lib/query-spec';
 import queries from '@/routes/queries';
 import queryTemplates from '@/routes/query-templates';
+import type { QueryAccessLevel } from '@/types/query-sharing';
 
 type EditQueryProps = {
     query: {
@@ -22,7 +23,7 @@ type EditQueryProps = {
         tenant_key: string | null;
         mode: 'single' | 'agent';
         parameters: Record<string, unknown>;
-        visibility: 'private' | 'shared';
+        access_level: QueryAccessLevel;
         category_id: number | null;
         tags: string[];
         source_template: { slug: string; name: string } | null;
@@ -49,7 +50,7 @@ export default function EditQuery({
         queryId: query.id,
         name: query.name,
         description: query.description,
-        visibility: query.visibility,
+        accessLevel: query.access_level,
         resourceKey:
             typeof params.resource_key === 'string'
                 ? params.resource_key

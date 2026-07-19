@@ -99,6 +99,16 @@ test('usage stats aggregate only executions launched by the authenticated user t
         'finished_at' => $finishedAt,
     ]);
 
+    QueryExecution::factory()
+        ->forQueryTemplate()
+        ->preview()
+        ->create([
+            'user_id' => $me->id,
+            'duration_ms' => 5000,
+            'started_at' => $finishedAt->copy()->subMilliseconds(5000),
+            'finished_at' => $finishedAt,
+        ]);
+
     $this->actingAs($me)
         ->get(route('dashboard'))
         ->assertInertia(fn (Assert $page) => $page
@@ -166,7 +176,7 @@ test('each recent query row contains the expected keys', function () {
                 fn (array $row) => array_key_exists('id', $row)
                     && array_key_exists('name', $row)
                     && array_key_exists('mode', $row)
-                    && array_key_exists('visibility', $row)
+                    && array_key_exists('access_level', $row)
                     && array_key_exists('can', $row)
             ))
         );
@@ -257,5 +267,6 @@ test('dashboard query count stays bounded with many accessible rows', function (
     $queryCount = count(DB::getQueryLog());
     DB::disableQueryLog();
 
-    expect($queryCount)->toBeLessThanOrEqual(10);
+    // Two bounded queries resolve current group IDs and applicable group grants.
+    expect($queryCount)->toBeLessThanOrEqual(13);
 });

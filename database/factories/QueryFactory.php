@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\QueryAccessLevel;
 use App\Models\Query;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -26,7 +27,8 @@ class QueryFactory extends Factory
             'tenant_key' => 'client_x',
             'mode' => 'single',
             'parameters' => ['limit' => 25],
-            'visibility' => 'private',
+            'access_level' => QueryAccessLevel::PRIVATE,
+            'query_template_version_id' => null,
         ];
     }
 
@@ -48,18 +50,36 @@ class QueryFactory extends Factory
      */
     public function private(): static
     {
-        return $this->state(fn (array $attributes): array => [
-            'visibility' => 'private',
+        return $this->state(fn (): array => [
+            'access_level' => QueryAccessLevel::PRIVATE,
+        ]);
+    }
+
+    /**
+     * Indicate that the query is shared only with selected recipients.
+     */
+    public function restricted(): static
+    {
+        return $this->state(fn (): array => [
+            'access_level' => QueryAccessLevel::RESTRICTED,
         ]);
     }
 
     /**
      * Indicate that the query is shared with all authenticated users.
      */
+    public function organization(): static
+    {
+        return $this->state(fn (): array => [
+            'access_level' => QueryAccessLevel::ORGANIZATION,
+        ]);
+    }
+
+    /**
+     * Backward-compatible factory alias for historical shared-query tests.
+     */
     public function shared(): static
     {
-        return $this->state(fn (array $attributes): array => [
-            'visibility' => 'shared',
-        ]);
+        return $this->organization();
     }
 }

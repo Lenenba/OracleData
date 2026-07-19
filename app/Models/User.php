@@ -7,11 +7,14 @@ use Database\Factories\UserFactory;
 use Illuminate\Contracts\Translation\HasLocalePreference;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Context;
 use Laravel\Fortify\Contracts\PasskeyUser;
 use Laravel\Fortify\PasskeyAuthenticatable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -32,6 +35,12 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property string|null $remember_token
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property-read Collection<int, QueryUserShare> $receivedQueryShares
+ * @property-read Collection<int, QueryUserShare> $grantedQueryShares
+ * @property-read Collection<int, Group> $groups
+ * @property-read Collection<int, Group> $ownedGroups
+ * @property-read Collection<int, QueryChangeRequest> $requestedQueryChanges
+ * @property-read Collection<int, QueryChangeRequestComment> $queryChangeRequestComments
  */
 #[Fillable(['name', 'email', 'password', 'locale', 'timezone'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
@@ -39,6 +48,12 @@ class User extends Authenticatable implements HasLocalePreference, PasskeyUser
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
+
+    /** @var list<int>|null */
+    private ?array $queryAccessGroupIds = null;
+
+    /** Correlation ID of the HTTP request for which group IDs were cached. */
+    private ?string $queryAccessGroupRequestId = null;
 
     /**
      * Get the attributes that should be cast.
@@ -64,6 +79,91 @@ class User extends Authenticatable implements HasLocalePreference, PasskeyUser
     public function queries(): HasMany
     {
         return $this->hasMany(Query::class);
+    }
+
+    /**
+     * Direct query grants received by this user.
+     *
+     * @return HasMany<QueryUserShare, $this>
+     */
+    public function receivedQueryShares(): HasMany
+    {
+        return $this->hasMany(QueryUserShare::class);
+    }
+
+    /**
+     * Direct query grants created by this user on behalf of an owner or
+     * delegated sharing manager. Historical rows survive account deletion.
+     *
+     * @return HasMany<QueryUserShare, $this>
+     */
+    public function grantedQueryShares(): HasMany
+    {
+        return $this->hasMany(QueryUserShare::class, 'shared_by_user_id');
+    }
+
+    /** @return HasMany<QueryChangeRequest, $this> */
+    public function requestedQueryChanges(): HasMany
+    {
+        return $this->hasMany(QueryChangeRequest::class, 'requested_by_user_id');
+    }
+
+    /** @return HasMany<QueryChangeRequestComment, $this> */
+    public function queryChangeRequestComments(): HasMany
+    {
+        return $this->hasMany(QueryChangeRequestComment::class);
+    }
+
+    /** @return HasMany<Group, $this> */
+    public function ownedGroups(): HasMany
+    {
+        return $this->hasMany(Group::class, 'owner_id');
+    }
+
+    /** @return BelongsToMany<Group, $this> */
+    public function groups(): BelongsToMany
+    {
+        return $this->belongsToMany(Group::class)
+            ->withPivot('role')
+            ->withTimestamps();
+    }
+
+    /**
+     * Cache current active group IDs for repeated Policy checks in one request.
+     *
+     * The authenticated User instance can outlive a request in feature tests or
+     * long-running workers. Tying the cache to the Request object prevents a
+     * removed member from retaining access during the next request.
+     *
+     * @return list<int>
+     */
+    public function groupIdsForQueryAccess(): array
+    {
+        $contextRequestId = Context::get('request_id');
+        $requestId = is_string($contextRequestId) && $contextRequestId !== ''
+            ? $contextRequestId
+            : null;
+
+        if (
+            $requestId !== null
+            && $this->queryAccessGroupRequestId === $requestId
+            && $this->queryAccessGroupIds !== null
+        ) {
+            return $this->queryAccessGroupIds;
+        }
+
+        $groupIds = array_values($this->groups()
+            ->pluck('groups.id')
+            ->map(static fn (mixed $id): int => (int) $id)
+            ->values()
+            ->all());
+
+        if ($requestId !== null) {
+            $this->queryAccessGroupIds = $groupIds;
+            $this->queryAccessGroupRequestId = $requestId;
+        }
+
+        return $groupIds;
     }
 
     /**

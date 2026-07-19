@@ -2,6 +2,7 @@
 
 namespace App\Concerns;
 
+use App\Enums\QueryAccessLevel;
 use App\Rules\AllowedResourcePath;
 use App\Services\FusionManager;
 use Closure;
@@ -38,7 +39,7 @@ trait QueryValidationRules
             'parameters.orderBy' => ['nullable', 'string', 'max:500'],
             'parameters.offset' => ['nullable', 'integer', 'min:0'],
             'parameters.resource_key' => ['nullable', 'string'],
-            'visibility' => ['required', 'in:private,shared'],
+            'access_level' => ['required', Rule::enum(QueryAccessLevel::class)],
             'category_id' => ['nullable', 'integer', Rule::exists('categories', 'id')],
             'tags' => ['nullable', 'array', 'max:10'],
             'tags.*' => [

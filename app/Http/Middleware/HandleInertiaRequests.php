@@ -47,6 +47,9 @@ class HandleInertiaRequests extends Middleware
                     'required' => $user !== null && ! $user->hasCompletedOnboarding(),
                 ],
             ],
+            'notificationSummary' => [
+                'unread_count' => $user?->unreadNotifications()->count() ?? 0,
+            ],
             'locale' => app()->getLocale(),
             'locales' => config('app.supported_locales'),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',

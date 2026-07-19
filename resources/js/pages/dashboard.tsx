@@ -12,6 +12,7 @@ import { DataTable, TableAvatar } from '@/components/data-table';
 import type { DataTableColumn } from '@/components/data-table';
 import { EntityChip } from '@/components/entity-chip';
 import Heading from '@/components/heading';
+import { QueryAccessLevelBadge } from '@/components/queries/query-access-level-badge';
 import { StatCard } from '@/components/stat-card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,7 +20,7 @@ import { useI18n } from '@/i18n/i18n-context';
 import { dashboard } from '@/routes';
 import oracleTenants from '@/routes/oracle-tenants';
 import queries from '@/routes/queries';
-import type { OracleTenant } from '@/types';
+import type { OracleTenant, QueryAccessLevel } from '@/types';
 
 type Stats = {
     totalQueries: number;
@@ -42,9 +43,14 @@ type RecentQuery = {
     description: string | null;
     mode: 'single' | 'agent';
     tenant_label: string | null;
-    visibility: 'private' | 'shared';
+    access_level: QueryAccessLevel;
     owner: string;
-    can: { update: boolean };
+    can: {
+        update: boolean;
+        execute: boolean;
+        clone: boolean;
+        manage_sharing: boolean;
+    };
 };
 
 type DashboardProps = {
@@ -231,18 +237,14 @@ function RecentQueriesTable({ rows }: { rows: RecentQuery[] }) {
             cell: (query) => (query.mode === 'agent' ? 'Analyse' : 'Requête'),
         },
         {
-            key: 'visibility',
-            header: 'Visibilité',
+            key: 'access_level',
+            header: t('queries.accessLevel'),
             icon: Eye,
             cell: (query) => (
-                <Badge
-                    variant={
-                        query.visibility === 'shared' ? 'default' : 'secondary'
-                    }
+                <QueryAccessLevelBadge
+                    accessLevel={query.access_level}
                     className="text-xs"
-                >
-                    {query.visibility === 'shared' ? 'Partagée' : 'Privée'}
-                </Badge>
+                />
             ),
         },
         {
@@ -345,7 +347,7 @@ export default function Dashboard({
                         <StatCard
                             label="Requêtes partagées"
                             value={stats.sharedQueries}
-                            caption="Visibles par toute l'équipe"
+                            caption="Partagées avec vous"
                         />
                         <StatCard
                             label={t('connections.title')}

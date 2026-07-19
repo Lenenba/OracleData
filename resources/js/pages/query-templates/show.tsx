@@ -1,5 +1,5 @@
 import { Head, router } from '@inertiajs/react';
-import { Copy, Eye, LockKeyhole, Play } from 'lucide-react';
+import { Copy, Eye, LockKeyhole, Play, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import AlertError from '@/components/alert-error';
 import Heading from '@/components/heading';
@@ -234,8 +234,44 @@ export default function ShowQueryTemplate({
                     </AlertDescription>
                 </Alert>
 
+                {template.is_certified && (
+                    <Alert>
+                        <ShieldCheck aria-hidden="true" />
+                        <AlertTitle>
+                            {t('templates.certificationTrustTitle')}
+                        </AlertTitle>
+                        <AlertDescription className="space-y-1">
+                            <p>
+                                {t(
+                                    'templates.certificationTrustDescription',
+                                )}
+                            </p>
+                            {template.certification_note && (
+                                <p>
+                                    <span className="font-medium">
+                                        {t('templates.certificationPublicNote')}
+                                        {' : '}
+                                    </span>
+                                    <span className="whitespace-pre-wrap">
+                                        {template.certification_note}
+                                    </span>
+                                </p>
+                            )}
+                        </AlertDescription>
+                    </Alert>
+                )}
+
                 <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                     <Badge variant="secondary">{t('templates.badge')}</Badge>
+                    {template.is_certified && (
+                        <Badge>
+                            <ShieldCheck
+                                className="size-3"
+                                aria-hidden="true"
+                            />
+                            {t('templates.certified')}
+                        </Badge>
+                    )}
                     {template.category && (
                         <Badge
                             variant="outline"

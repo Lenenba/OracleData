@@ -14,7 +14,7 @@ class RunQueryRequest extends FormRequest
     /**
      * Determine if the user is authorized to make this request.
      *
-     * View authorization is handled in the controller via the QueryPolicy.
+     * Execute authorization is handled in the controller via the QueryPolicy.
      */
     public function authorize(): bool
     {

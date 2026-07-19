@@ -173,7 +173,7 @@ test('preference values must be boolean and at least one must be present', funct
         ->assertJsonValidationErrors(['is_favorite', 'is_pinned']);
 });
 
-test('preferences cascade when their query or user is deleted', function () {
+test('preferences cascade when their query is purged or their user is deleted', function () {
     $author = User::factory()->create();
     $reader = User::factory()->create();
     $firstQuery = Query::factory()->for($author)->shared()->create();
@@ -187,7 +187,7 @@ test('preferences cascade when their query or user is deleted', function () {
         ]);
     }
 
-    $firstQuery->delete();
+    $firstQuery->forceDelete();
 
     expect(QueryUserPreference::query()->count())->toBe(1);
 

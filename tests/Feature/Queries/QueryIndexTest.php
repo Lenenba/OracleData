@@ -42,7 +42,7 @@ test('can.update is only true for queries the user owns', function () {
                 ->every(fn (array $query) => $query['can']['update'] === ($query['owner'] === $me->name))));
 });
 
-test('shared scope only lists shared queries', function () {
+test('shared scope only lists queries shared with the reader', function () {
     $me = User::factory()->create();
     $other = User::factory()->create();
 
@@ -56,12 +56,12 @@ test('shared scope only lists shared queries', function () {
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('scope', 'shared')
-            ->where('summary.shared', 2)
-            ->has('queries.data', 2)
+            ->where('summary.shared', 1)
+            ->has('queries.data', 1)
             ->where('queries.data', fn (Collection $queries) => $queries
                 ->pluck('name')
-                ->contains('Mine shared')
-                && $queries->pluck('name')->contains('Other shared')
+                ->contains('Other shared')
+                && ! $queries->pluck('name')->contains('Mine shared')
                 && ! $queries->pluck('name')->contains('Mine private')
                 && ! $queries->pluck('name')->contains('Hidden')));
 });

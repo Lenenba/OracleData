@@ -33,7 +33,7 @@ class QuerySeeder extends Seeder
                 'orderBy' => 'CreationDate:desc',
                 'limit' => 25,
             ],
-            'visibility' => 'shared',
+            'access_level' => 'organization',
             'category_slug' => 'achats',
             'tags' => ['mensuel', 'tableau-de-bord'],
         ]);
@@ -54,7 +54,7 @@ class QuerySeeder extends Seeder
                 'q' => "Status='ACTIVE'",
                 'limit' => 50,
             ],
-            'visibility' => 'private',
+            'access_level' => 'private',
             'category_slug' => 'fournisseurs',
             'tags' => ['audit'],
         ]);
@@ -71,7 +71,7 @@ class QuerySeeder extends Seeder
                 'orderBy' => 'CreationDate:desc',
                 'limit' => 25,
             ],
-            'visibility' => 'shared',
+            'access_level' => 'organization',
         ]);
 
         $this->upsertQuery($finance, [
@@ -87,7 +87,7 @@ class QuerySeeder extends Seeder
                 'orderBy' => 'InvoiceDate:desc',
                 'limit' => 25,
             ],
-            'visibility' => 'shared',
+            'access_level' => 'organization',
             'category_slug' => 'finance',
             'tags' => ['mensuel', 'reglementaire'],
         ]);
@@ -99,7 +99,7 @@ class QuerySeeder extends Seeder
             'tenant_key' => 'client_x',
             'mode' => 'agent',
             'parameters' => null,
-            'visibility' => 'shared',
+            'access_level' => 'organization',
         ]);
 
         $this->upsertQuery($analyst, [
@@ -113,7 +113,7 @@ class QuerySeeder extends Seeder
                 'fields' => 'PersonId,PersonNumber,CreationDate',
                 'limit' => 25,
             ],
-            'visibility' => 'private',
+            'access_level' => 'private',
             'category_slug' => 'ressources-humaines',
             'tags' => ['annuel'],
         ]);
