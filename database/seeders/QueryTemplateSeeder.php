@@ -2,7 +2,10 @@
 
 namespace Database\Seeders;
 
+use App\Enums\QueryTemplateGovernanceStatus;
+use App\Enums\QueryTemplateVersionStatus;
 use App\Models\Category;
+use App\Models\QueryTemplateVersion;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
@@ -41,6 +44,7 @@ class QueryTemplateSeeder extends Seeder
                         'min' => 0,
                         'max' => 999999999,
                         'step' => 100,
+                        'audit' => ['mode' => 'masked'],
                         'binding' => [
                             'kind' => 'filter',
                             'field' => 'InvoiceAmount',
@@ -105,6 +109,7 @@ class QueryTemplateSeeder extends Seeder
                         'description' => 'Date maximale incluse de la facture, au format année-mois-jour.',
                         'type' => 'date',
                         'required' => true,
+                        'audit' => ['mode' => 'masked'],
                         'binding' => [
                             'kind' => 'filter',
                             'field' => 'InvoiceDate',
@@ -172,6 +177,7 @@ class QueryTemplateSeeder extends Seeder
                         'min' => 0,
                         'max' => 999999999,
                         'step' => 500,
+                        'audit' => ['mode' => 'masked'],
                         'binding' => [
                             'kind' => 'filter',
                             'field' => 'InvoiceBalanceAmount',
@@ -236,6 +242,7 @@ class QueryTemplateSeeder extends Seeder
                         'type' => 'select',
                         'required' => true,
                         'default' => 'ACTIVE',
+                        'audit' => ['mode' => 'clear'],
                         'options' => [
                             ['value' => 'ACTIVE', 'label' => 'Actif'],
                             ['value' => 'INACTIVE', 'label' => 'Inactif'],
@@ -315,34 +322,27 @@ class QueryTemplateSeeder extends Seeder
             ];
         }, $templates);
 
-        DB::table('query_templates')->upsert(
-            $rows,
-            ['slug'],
-            [
-                'name',
-                'description',
-                'category_id',
-                'resource_key',
-                'resource_path',
-                'parameters',
-                'parameter_definitions',
-                'is_active',
-                'sort_order',
-                'updated_at',
-            ],
-        );
+        // Seeders only bootstrap missing official templates. Once a template
+        // has a published version, changing this class must never bypass the
+        // review workflow or overwrite its live projection.
+        DB::table('query_templates')->insertOrIgnore($rows);
 
-        $templateIds = DB::table('query_templates')
+        $templateRows = DB::table('query_templates')
             ->whereIn('slug', array_column($templates, 'slug'))
-            ->pluck('id', 'slug');
+            ->get(['id', 'slug', 'published_version_id'])
+            ->keyBy('slug');
         $translationRows = [];
 
         foreach ($templates as $template) {
-            $templateId = $templateIds->get($template['slug']);
+            $templateRow = $templateRows->get($template['slug']);
+
+            if ($templateRow === null || $templateRow->published_version_id !== null) {
+                continue;
+            }
 
             foreach ($template['translations'] as $locale => $translation) {
                 $translationRows[] = [
-                    'query_template_id' => $templateId,
+                    'query_template_id' => $templateRow->id,
                     'locale' => $locale,
                     'name' => $translation['name'],
                     'description' => $translation['description'] ?? null,
@@ -355,18 +355,116 @@ class QueryTemplateSeeder extends Seeder
             }
         }
 
-        DB::table('query_template_translations')->upsert(
-            $translationRows,
-            ['query_template_id', 'locale'],
-            [
-                'name',
-                'description',
-                'parameter_labels',
-                'parameter_descriptions',
-                'parameter_options',
-                'updated_at',
-            ],
-        );
+        if ($translationRows !== []) {
+            DB::table('query_template_translations')->upsert(
+                $translationRows,
+                ['query_template_id', 'locale'],
+                [
+                    'name',
+                    'description',
+                    'parameter_labels',
+                    'parameter_descriptions',
+                    'parameter_options',
+                    'updated_at',
+                ],
+            );
+        }
+
+        foreach ($templates as $template) {
+            $templateRow = $templateRows->get($template['slug']);
+
+            if ($templateRow === null || $templateRow->published_version_id !== null) {
+                continue;
+            }
+
+            $definition = [
+                'name' => $template['name'],
+                'description' => $template['description'] ?? null,
+                'category_id' => $template['category_id'] ?? null,
+                'resource_key' => $template['resource_key'],
+                'resource_path' => $template['resource_path'],
+                'parameters' => $template['parameters'],
+                'parameter_definitions' => $template['parameter_definitions'],
+                'sort_order' => $template['sort_order'],
+            ];
+            $translations = [];
+
+            foreach ($template['translations'] as $locale => $translation) {
+                $translations[$locale] = [
+                    'name' => $translation['name'],
+                    'description' => $translation['description'] ?? null,
+                    'parameter_labels' => $translation['parameter_labels'] ?? [],
+                    'parameter_descriptions' => $translation['parameter_descriptions'] ?? [],
+                    'parameter_options' => $translation['parameter_options'] ?? [],
+                ];
+            }
+
+            $contentHash = QueryTemplateVersion::contentHash($definition, $translations);
+
+            DB::transaction(function () use (
+                $contentHash,
+                $definition,
+                $now,
+                $templateRow,
+                $translations,
+            ): void {
+                $lockedTemplate = DB::table('query_templates')
+                    ->where('id', $templateRow->id)
+                    ->lockForUpdate()
+                    ->first(['id', 'slug', 'published_version_id']);
+
+                if ($lockedTemplate === null || $lockedTemplate->published_version_id !== null) {
+                    return;
+                }
+
+                $existingVersion = DB::table('query_template_versions')
+                    ->where('query_template_id', $lockedTemplate->id)
+                    ->where('version_number', 1)
+                    ->lockForUpdate()
+                    ->first(['id', 'status', 'open_slot', 'content_hash', 'published_at']);
+
+                if ($existingVersion !== null) {
+                    if (
+                        $existingVersion->status !== QueryTemplateVersionStatus::PUBLISHED->value
+                        || $existingVersion->open_slot !== null
+                        || ! hash_equals((string) $existingVersion->content_hash, $contentHash)
+                    ) {
+                        throw new \RuntimeException(
+                            "La version initiale orpheline du modèle [{$lockedTemplate->slug}] ne correspond pas au bootstrap attendu.",
+                        );
+                    }
+
+                    $versionId = (int) $existingVersion->id;
+                    $publishedAt = $existingVersion->published_at ?? $now;
+                } else {
+                    $versionId = DB::table('query_template_versions')->insertGetId([
+                        'query_template_id' => $lockedTemplate->id,
+                        'version_number' => 1,
+                        'status' => QueryTemplateVersionStatus::PUBLISHED->value,
+                        'open_slot' => null,
+                        'definition' => json_encode($definition, JSON_THROW_ON_ERROR),
+                        'translations' => json_encode($translations, JSON_THROW_ON_ERROR),
+                        'content_hash' => $contentHash,
+                        'change_summary' => null,
+                        'created_by_user_id' => null,
+                        'submitted_by_user_id' => null,
+                        'published_by_user_id' => null,
+                        'submitted_at' => $now,
+                        'published_at' => $now,
+                        'lock_version' => 1,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]);
+                    $publishedAt = $now;
+                }
+
+                DB::table('query_templates')->where('id', $lockedTemplate->id)->update([
+                    'governance_status' => QueryTemplateGovernanceStatus::PUBLISHED->value,
+                    'published_version_id' => $versionId,
+                    'published_at' => $publishedAt,
+                ]);
+            });
+        }
     }
 
     /**
@@ -424,6 +522,7 @@ class QueryTemplateSeeder extends Seeder
             'default' => $default,
             'min' => 1,
             'max' => 500,
+            'audit' => ['mode' => 'clear'],
             'binding' => [
                 'kind' => 'parameter',
                 'key' => 'limit',

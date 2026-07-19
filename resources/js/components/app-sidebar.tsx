@@ -5,6 +5,7 @@ import {
     LayoutGrid,
     Server,
     Share2,
+    UsersRound,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
@@ -20,6 +21,7 @@ import {
 } from '@/components/ui/sidebar';
 import { useI18n } from '@/i18n/i18n-context';
 import { dashboard } from '@/routes';
+import groupRoutes from '@/routes/groups';
 import oracleTenants from '@/routes/oracle-tenants';
 import queries from '@/routes/queries';
 import queryTemplates from '@/routes/query-templates';
@@ -36,6 +38,11 @@ export function AppSidebar() {
             icon: FileSliders,
         },
         { title: t('nav.sharedQueries'), href: queries.shared(), icon: Share2 },
+        {
+            title: t('nav.groups'),
+            href: groupRoutes.index(),
+            icon: UsersRound,
+        },
         {
             title: t('nav.oracleConnections'),
             href: oracleTenants.index(),

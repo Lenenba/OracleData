@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\QueryAccessLevel;
 use App\Models\Query;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -26,7 +27,7 @@ test('an authenticated user can store a query', function () {
         'resource_path' => '/hcmRestApi/resources/11.13.18.05/workers',
         'tenant_key' => 'client_x',
         'parameters' => ['limit' => 25],
-        'visibility' => 'private',
+        'access_level' => 'private',
     ]);
 
     $response->assertSessionHasNoErrors()->assertRedirect(route('queries.index'));
@@ -38,7 +39,7 @@ test('an authenticated user can store a query', function () {
         ->and($query->tenant_key)->toBe('client_x')
         ->and($query->oracle_tenant_id)->toBe($tenant->id)
         ->and($query->parameters)->toBe(['limit' => 25])
-        ->and($query->visibility)->toBe('private');
+        ->and($query->access_level)->toBe(QueryAccessLevel::PRIVATE);
 });
 
 test('an authenticated user can store a resolved single supplier query', function () {
@@ -55,7 +56,7 @@ test('an authenticated user can store a resolved single supplier query', functio
             'q' => "Status='ACTIVE' AND Supplier LIKE '%Acme%'",
             'fields' => 'Supplier,SupplierNumber',
         ],
-        'visibility' => 'private',
+        'access_level' => 'private',
     ]);
 
     $response->assertSessionHasNoErrors()->assertRedirect(route('queries.index'));
@@ -80,7 +81,7 @@ test('an authenticated user can store an agent analysis query without a resource
         'description' => 'Lier les fournisseurs et les factures et donner le total facturé par fournisseur',
         'mode' => 'agent',
         'tenant_key' => 'client_x',
-        'visibility' => 'shared',
+        'access_level' => 'organization',
     ]);
 
     $response->assertSessionHasNoErrors()->assertRedirect(route('queries.index'));
@@ -90,14 +91,14 @@ test('an authenticated user can store an agent analysis query without a resource
         ->and($query->resource_path)->toBeNull()
         ->and($query->parameters)->toBeNull()
         ->and($query->description)->toContain('factures')
-        ->and($query->visibility)->toBe('shared');
+        ->and($query->access_level)->toBe(QueryAccessLevel::ORGANIZATION);
 });
 
 test('a name is required', function () {
     $this->actingAs(User::factory()->create())
         ->post(route('queries.store'), [
             'resource_path' => '/hcmRestApi/resources/11.13.18.05/workers',
-            'visibility' => 'private',
+            'access_level' => 'private',
         ])
         ->assertInvalid('name');
 
@@ -109,7 +110,7 @@ test('resource_path must start with an allowed Fusion prefix', function () {
         ->post(route('queries.store'), [
             'name' => 'Malicious',
             'resource_path' => 'https://evil.example.com/data',
-            'visibility' => 'private',
+            'access_level' => 'private',
         ])
         ->assertInvalid('resource_path');
 
@@ -121,19 +122,19 @@ test('a path not starting with a slash is rejected', function () {
         ->post(route('queries.store'), [
             'name' => 'Bad path',
             'resource_path' => 'hcmRestApi/resources/workers',
-            'visibility' => 'private',
+            'access_level' => 'private',
         ])
         ->assertInvalid('resource_path');
 });
 
-test('visibility must be private or shared', function () {
+test('access level must be private restricted or organization', function () {
     $this->actingAs(User::factory()->create())
         ->post(route('queries.store'), [
-            'name' => 'Bad visibility',
+            'name' => 'Bad access level',
             'resource_path' => '/fscmRestApi/resources/11.13.18.05/invoices',
-            'visibility' => 'public',
+            'access_level' => 'public',
         ])
-        ->assertInvalid('visibility');
+        ->assertInvalid('access_level');
 });
 
 test('tenant_key must be configured', function () {
@@ -142,7 +143,7 @@ test('tenant_key must be configured', function () {
             'name' => 'Bad tenant',
             'resource_path' => '/fscmRestApi/resources/11.13.18.05/invoices',
             'tenant_key' => 'unknown',
-            'visibility' => 'private',
+            'access_level' => 'private',
         ])
         ->assertInvalid('tenant_key');
 });
@@ -162,7 +163,7 @@ test('joins and child_fields from the wizard are persisted', function () {
             'child_fields' => ['invoices' => ['InvoiceNumber', 'InvoiceAmount']],
             'resource_key' => 'suppliers',
         ],
-        'visibility' => 'private',
+        'access_level' => 'private',
     ])->assertSessionHasNoErrors();
 
     expect(Query::sole()->parameters)->toBe([
@@ -181,7 +182,7 @@ test('unknown parameter keys are stripped before saving', function () {
         'name' => 'With junk params',
         'resource_path' => '/hcmRestApi/resources/11.13.18.05/workers',
         'parameters' => ['limit' => 10, 'evil' => 'DROP TABLE', 'q' => 'foo'],
-        'visibility' => 'private',
+        'access_level' => 'private',
     ])->assertSessionHasNoErrors();
 
     expect(Query::sole()->parameters)->toBe(['limit' => 10, 'q' => 'foo']);

@@ -14,6 +14,7 @@ import {
     PlayCircle,
     Search,
     Server,
+    Share2,
     Star,
     Tags,
     Trash2,
@@ -26,6 +27,7 @@ import { DataTable, StopClick, TableAvatar } from '@/components/data-table';
 import type { DataTableColumn } from '@/components/data-table';
 import { EntityChip } from '@/components/entity-chip';
 import Heading from '@/components/heading';
+import { QueryAccessLevelBadge } from '@/components/queries/query-access-level-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -52,11 +54,14 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { Spinner } from '@/components/ui/spinner';
 import { useI18n } from '@/i18n/i18n-context';
 import { readCsrfToken } from '@/lib/csrf';
 import queries from '@/routes/queries';
 import savedQueryViews from '@/routes/saved-query-views';
+import type {
+    QueryAccessLevel,
+    QueryCapabilities,
+} from '@/types/query-sharing';
 
 type QueryCategory = {
     slug: string;
@@ -79,7 +84,7 @@ type QueryRow = {
         key: string | null;
         label: string | null;
     };
-    visibility: 'private' | 'shared';
+    access_level: QueryAccessLevel;
     owner: string;
     category: QueryCategory | null;
     tags: QueryTag[];
@@ -89,7 +94,7 @@ type QueryRow = {
         success_rate: number | null;
         last_executed_at: string | null;
     };
-    can: { update: boolean; clone: boolean };
+    can: QueryCapabilities;
 };
 
 type CategoryOption = {
@@ -158,79 +163,6 @@ type PaginatedQueries = {
     next_page_url: string | null;
 };
 
-function VisibilityToggle({
-    query,
-    onToggle,
-}: {
-    query: QueryRow;
-    onToggle: (id: number, newVisibility: 'private' | 'shared') => void;
-}) {
-    const [loading, setLoading] = useState(false);
-    const { t } = useI18n();
-
-    async function toggle() {
-        setLoading(true);
-        const next: 'private' | 'shared' =
-            query.visibility === 'shared' ? 'private' : 'shared';
-
-        try {
-            const response = await fetch(queries.visibility.url(query.id), {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Accept: 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-XSRF-TOKEN': readCsrfToken(),
-                },
-                credentials: 'same-origin',
-                body: JSON.stringify({ visibility: next }),
-            });
-
-            if (!response.ok) {
-                throw new Error('Visibility update failed.');
-            }
-
-            onToggle(query.id, next);
-        } catch {
-            toast.error(t('queries.visibilityError'));
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    const badge = (
-        <Badge
-            variant={query.visibility === 'shared' ? 'default' : 'secondary'}
-        >
-            {query.visibility === 'shared'
-                ? t('queries.sharedBadge')
-                : t('queries.privateBadge')}
-        </Badge>
-    );
-
-    if (!query.can.update) {
-        return badge;
-    }
-
-    return (
-        <button
-            type="button"
-            onClick={toggle}
-            disabled={loading}
-            className="inline-flex items-center gap-1"
-            title={t('queries.visibilityHint')}
-        >
-            {loading ? (
-                <Spinner className="size-3" />
-            ) : (
-                <span className="cursor-pointer transition-opacity hover:opacity-80">
-                    {badge}
-                </span>
-            )}
-        </button>
-    );
-}
-
 function QueryActionsMenu({
     query,
     onClone,
@@ -258,8 +190,14 @@ function QueryActionsMenu({
             <DropdownMenuContent align="end" className="w-44">
                 <DropdownMenuItem asChild className="cursor-pointer">
                     <Link href={queries.show(query.id)}>
-                        <PlayCircle className="size-4" />
-                        {t('queries.run')}
+                        {query.can.execute ? (
+                            <PlayCircle className="size-4" />
+                        ) : (
+                            <Eye className="size-4" />
+                        )}
+                        {query.can.execute
+                            ? t('queries.run')
+                            : t('queries.viewDetails')}
                     </Link>
                 </DropdownMenuItem>
 
@@ -276,26 +214,46 @@ function QueryActionsMenu({
                     </DropdownMenuItem>
                 )}
 
-                {query.can.update && (
+                {(query.can.update || query.can.manage_sharing) && (
                     <>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem asChild className="cursor-pointer">
-                            <Link href={queries.edit(query.id)}>
-                                <Pencil className="size-4" />
-                                {t('queries.edit')}
-                            </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            className="cursor-pointer text-destructive focus:text-destructive"
-                            onSelect={(event) => {
-                                event.preventDefault();
-                                onDelete(query.id);
-                            }}
-                        >
-                            <Trash2 className="size-4 text-destructive" />
-                            {t('queries.delete')}
-                        </DropdownMenuItem>
+                        {query.can.update && (
+                            <DropdownMenuItem
+                                asChild
+                                className="cursor-pointer"
+                            >
+                                <Link href={queries.edit(query.id)}>
+                                    <Pencil className="size-4" />
+                                    {t('queries.edit')}
+                                </Link>
+                            </DropdownMenuItem>
+                        )}
+                        {query.can.manage_sharing && (
+                            <DropdownMenuItem
+                                asChild
+                                className="cursor-pointer"
+                            >
+                                <Link href={queries.shares.index(query.id)}>
+                                    <Share2 className="size-4" />
+                                    {t('queries.manageSharing')}
+                                </Link>
+                            </DropdownMenuItem>
+                        )}
+                        {query.can.update && (
+                            <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                    className="cursor-pointer text-destructive focus:text-destructive"
+                                    onSelect={(event) => {
+                                        event.preventDefault();
+                                        onDelete(query.id);
+                                    }}
+                                >
+                                    <Trash2 className="size-4 text-destructive" />
+                                    {t('queries.delete')}
+                                </DropdownMenuItem>
+                            </>
+                        )}
                     </>
                 )}
             </DropdownMenuContent>
@@ -441,9 +399,6 @@ export default function QueriesIndex({
     savedViews?: SavedView[];
 }) {
     const { t, formatDate, formatNumber } = useI18n();
-    const [visibilityOverrides, setVisibilityOverrides] = useState<
-        Record<number, 'private' | 'shared'>
-    >({});
     const [preferenceOverrides, setPreferenceOverrides] = useState<
         Record<number, QueryRow['preference']>
     >({});
@@ -461,13 +416,10 @@ export default function QueriesIndex({
         favorite,
         pinned,
     };
-    const rows = queryPage.data
-        .map((query) => ({
-            ...query,
-            visibility: visibilityOverrides[query.id] ?? query.visibility,
-            preference: preferenceOverrides[query.id] ?? query.preference,
-        }))
-        .filter((query) => scope !== 'shared' || query.visibility === 'shared');
+    const rows = queryPage.data.map((query) => ({
+        ...query,
+        preference: preferenceOverrides[query.id] ?? query.preference,
+    }));
     const hasActiveLibraryFilters =
         scope !== 'all' ||
         initialSearch.trim() !== '' ||
@@ -578,16 +530,6 @@ export default function QueriesIndex({
             href: filterUrl({ scope: 'shared' }),
         },
     ];
-
-    function handleVisibilityToggle(
-        id: number,
-        newVisibility: 'private' | 'shared',
-    ) {
-        setVisibilityOverrides((current) => ({
-            ...current,
-            [id]: newVisibility,
-        }));
-    }
 
     function cloneQuery(id: number) {
         router.post(queries.clone(id));
@@ -880,23 +822,14 @@ export default function QueriesIndex({
                 </div>
             ),
         },
-        ...(scope === 'shared'
-            ? []
-            : [
-                  {
-                      key: 'visibility',
-                      header: t('queries.visibility'),
-                      icon: Eye,
-                      cell: (query: QueryRow) => (
-                          <StopClick>
-                              <VisibilityToggle
-                                  query={query}
-                                  onToggle={handleVisibilityToggle}
-                              />
-                          </StopClick>
-                      ),
-                  },
-              ]),
+        {
+            key: 'access_level',
+            header: t('queries.accessLevel'),
+            icon: Eye,
+            cell: (query) => (
+                <QueryAccessLevelBadge accessLevel={query.access_level} />
+            ),
+        },
         {
             key: 'owner',
             header: t('queries.owner'),

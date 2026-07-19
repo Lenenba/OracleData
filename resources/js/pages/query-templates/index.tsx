@@ -1,5 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
-import { ArrowRight, FileSliders, Search } from 'lucide-react';
+import { ArrowRight, FileSliders, Search, ShieldCheck } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import Heading from '@/components/heading';
 import { Badge } from '@/components/ui/badge';
@@ -119,6 +119,15 @@ export default function QueryTemplateIndex({
                                             <FileSliders className="size-3" />
                                             {t('templates.badge')}
                                         </Badge>
+                                        {template.is_certified && (
+                                            <Badge>
+                                                <ShieldCheck
+                                                    className="size-3"
+                                                    aria-hidden="true"
+                                                />
+                                                {t('templates.certified')}
+                                            </Badge>
+                                        )}
                                         {template.category && (
                                             <Badge
                                                 variant="outline"

@@ -1,9 +1,11 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { Copy, Pencil } from 'lucide-react';
+import { Copy, Eye, MessageSquareText, Pencil, Share2 } from 'lucide-react';
 import { useState } from 'react';
 import Heading from '@/components/heading';
+import { QueryAccessLevelBadge } from '@/components/queries/query-access-level-badge';
 import { QueryResultView } from '@/components/queries/query-result';
 import type { QueryResult } from '@/components/queries/query-result';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -19,6 +21,10 @@ import { Spinner } from '@/components/ui/spinner';
 import { useI18n } from '@/i18n/i18n-context';
 import { readCsrfToken } from '@/lib/csrf';
 import queries from '@/routes/queries';
+import type {
+    QueryAccessLevel,
+    QueryCapabilities,
+} from '@/types/query-sharing';
 
 type QueryDetail = {
     id: number;
@@ -28,10 +34,10 @@ type QueryDetail = {
     tenant_key: string | null;
     mode: 'single' | 'agent';
     parameters: Record<string, unknown>;
-    visibility: 'private' | 'shared';
+    access_level: QueryAccessLevel;
     category: { slug: string; name: string; color: string | null } | null;
     tags: Array<{ slug: string; name: string }>;
-    can: { update: boolean; clone: boolean };
+    can: QueryCapabilities;
 };
 
 type ShowProps = {
@@ -59,12 +65,17 @@ export default function ShowQuery({
     const [fetchError, setFetchError] = useState<string | null>(null);
 
     const tenantLabel = tenants[result?.tenant ?? tenant] ?? tenant;
+    const changeRequestsUrl = `/queries/${query.id}/change-requests`;
 
     function cloneQuery() {
         router.post(queries.clone(query.id));
     }
 
     async function run() {
+        if (!query.can.execute) {
+            return;
+        }
+
         setStatus('loading');
         setFetchError(null);
         setResult(null);
@@ -114,6 +125,12 @@ export default function ShowQuery({
                     description={query.description ?? undefined}
                     actions={
                         <div className="flex flex-wrap gap-2">
+                            <Button asChild variant="outline" size="sm">
+                                <Link href={changeRequestsUrl}>
+                                    <MessageSquareText className="size-3.5" />
+                                    {t('changeRequests.openCollaboration')}
+                                </Link>
+                            </Button>
                             {query.can.clone && (
                                 <Button
                                     type="button"
@@ -135,23 +152,23 @@ export default function ShowQuery({
                                     </Link>
                                 </Button>
                             )}
+                            {query.can.manage_sharing && (
+                                <Button asChild variant="outline" size="sm">
+                                    <Link href={queries.shares.index(query.id)}>
+                                        <Share2 className="size-3.5" />
+                                        {t('queries.manageSharing')}
+                                    </Link>
+                                </Button>
+                            )}
                         </div>
                     }
                 />
 
                 <div className="space-y-6">
                     <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                        <Badge
-                            variant={
-                                query.visibility === 'shared'
-                                    ? 'default'
-                                    : 'secondary'
-                            }
-                        >
-                            {query.visibility === 'shared'
-                                ? t('queries.sharedBadge')
-                                : t('queries.privateBadge')}
-                        </Badge>
+                        <QueryAccessLevelBadge
+                            accessLevel={query.access_level}
+                        />
                         <Badge variant="outline">
                             {query.mode === 'agent'
                                 ? t('queries.analysis')
@@ -189,37 +206,52 @@ export default function ShowQuery({
                         )}
                     </div>
 
-                    <div className="flex flex-wrap items-end gap-3 rounded-xl border p-4">
-                        <div className="grid gap-2">
-                            <Label htmlFor="tenant">
-                                {t('queries.environment')}
-                            </Label>
-                            <Select value={tenant} onValueChange={setTenant}>
-                                <SelectTrigger id="tenant" className="w-64">
-                                    <SelectValue
-                                        placeholder={t(
-                                            'queries.chooseEnvironment',
-                                        )}
-                                    />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {tenantKeys.map((key) => (
-                                        <SelectItem key={key} value={key}>
-                                            {tenants[key]}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
+                    {query.can.execute ? (
+                        <div className="flex flex-wrap items-end gap-3 rounded-xl border p-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="tenant">
+                                    {t('queries.environment')}
+                                </Label>
+                                <Select
+                                    value={tenant}
+                                    onValueChange={setTenant}
+                                >
+                                    <SelectTrigger id="tenant" className="w-64">
+                                        <SelectValue
+                                            placeholder={t(
+                                                'queries.chooseEnvironment',
+                                            )}
+                                        />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {tenantKeys.map((key) => (
+                                            <SelectItem key={key} value={key}>
+                                                {tenants[key]}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
 
-                        <Button
-                            onClick={run}
-                            disabled={status === 'loading' || tenant === ''}
-                        >
-                            {status === 'loading' && <Spinner />}
-                            {t('queries.run')}
-                        </Button>
-                    </div>
+                            <Button
+                                onClick={run}
+                                disabled={status === 'loading' || tenant === ''}
+                            >
+                                {status === 'loading' && <Spinner />}
+                                {t('queries.run')}
+                            </Button>
+                        </div>
+                    ) : (
+                        <Alert>
+                            <Eye />
+                            <AlertTitle>
+                                {t('sharing.viewOnlyTitle')}
+                            </AlertTitle>
+                            <AlertDescription>
+                                {t('sharing.viewOnlyDescription')}
+                            </AlertDescription>
+                        </Alert>
+                    )}
 
                     {status === 'loading' && (
                         <div className="space-y-2">

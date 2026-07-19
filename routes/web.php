@@ -1,11 +1,19 @@
 <?php
 
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\GroupController;
+use App\Http\Controllers\GroupMemberController;
 use App\Http\Controllers\LocaleController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\OracleTenantController;
+use App\Http\Controllers\QueryChangeRequestCommentController;
+use App\Http\Controllers\QueryChangeRequestController;
 use App\Http\Controllers\QueryController;
+use App\Http\Controllers\QueryGroupShareController;
 use App\Http\Controllers\QueryPreferenceController;
+use App\Http\Controllers\QueryShareController;
+use App\Http\Controllers\QueryShareInvitationController;
 use App\Http\Controllers\QueryTemplateController;
 use App\Http\Controllers\SavedQueryViewController;
 use App\Http\Middleware\EnsureOnboardingCompleted;
@@ -28,6 +36,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware(EnsureOnboardingCompleted::class)->group(function () {
         Route::get('dashboard', DashboardController::class)->name('dashboard');
 
+        Route::get('notifications', [NotificationController::class, 'index'])
+            ->name('notifications.index');
+        Route::patch('notifications/read-all', [NotificationController::class, 'readAll'])
+            ->name('notifications.read-all');
+        Route::patch('notifications/{notification}/read', [NotificationController::class, 'read'])
+            ->name('notifications.read');
+        Route::post('query-share-invitations/{queryUserShare}/accept', [QueryShareInvitationController::class, 'accept'])
+            ->middleware('throttle:20,1,query-share-invitation-response')
+            ->name('query-share-invitations.accept');
+        Route::post('query-share-invitations/{queryUserShare}/decline', [QueryShareInvitationController::class, 'decline'])
+            ->middleware('throttle:20,1,query-share-invitation-response')
+            ->name('query-share-invitations.decline');
+
         Route::get('oracle-tenants', [OracleTenantController::class, 'index'])->name('oracle-tenants.index');
         Route::post('oracle-tenants', [OracleTenantController::class, 'store'])
             ->middleware('throttle:6,1')
@@ -37,6 +58,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->middleware('throttle:6,1')
             ->name('oracle-tenants.update');
         Route::delete('oracle-tenants/{tenant}', [OracleTenantController::class, 'destroy'])->name('oracle-tenants.destroy');
+
+        Route::get('groups', [GroupController::class, 'index'])->name('groups.index');
+        Route::post('groups', [GroupController::class, 'store'])->name('groups.store');
+        Route::patch('groups/{group}', [GroupController::class, 'update'])->name('groups.update');
+        Route::delete('groups/{group}', [GroupController::class, 'destroy'])->name('groups.destroy');
+        Route::post('groups/{group}/members', [GroupMemberController::class, 'store'])->name('groups.members.store');
+        Route::patch('groups/{group}/members/{user}', [GroupMemberController::class, 'update'])->name('groups.members.update');
+        Route::delete('groups/{group}/members/{user}', [GroupMemberController::class, 'destroy'])->name('groups.members.destroy');
 
         Route::get('queries', [QueryController::class, 'index'])->name('queries.index');
         Route::get('queries/shared', [QueryController::class, 'shared'])->name('queries.shared');
@@ -55,7 +84,30 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::get('queries/{query}/edit', [QueryController::class, 'edit'])->name('queries.edit');
         Route::put('queries/{query}', [QueryController::class, 'update'])->name('queries.update');
-        Route::patch('queries/{query}/visibility', [QueryController::class, 'updateVisibility'])->name('queries.visibility');
+        Route::get('queries/{query}/sharing', [QueryShareController::class, 'index'])->name('queries.shares.index');
+        Route::get('queries/{query}/change-requests', [QueryChangeRequestController::class, 'index'])
+            ->name('queries.change-requests.index');
+        Route::post('queries/{query}/change-requests', [QueryChangeRequestController::class, 'store'])
+            ->middleware('throttle:10,1,query-change-request')
+            ->name('queries.change-requests.store');
+        Route::get('queries/{query}/change-requests/{queryChangeRequest}', [QueryChangeRequestController::class, 'show'])
+            ->name('queries.change-requests.show');
+        Route::patch('queries/{query}/change-requests/{queryChangeRequest}', [QueryChangeRequestController::class, 'update'])
+            ->middleware('throttle:20,1,query-change-request-status')
+            ->name('queries.change-requests.update');
+        Route::post('queries/{query}/change-requests/{queryChangeRequest}/comments', [QueryChangeRequestCommentController::class, 'store'])
+            ->middleware('throttle:30,1,query-change-request-comment')
+            ->name('queries.change-requests.comments.store');
+        Route::post('queries/{query}/shares', [QueryShareController::class, 'store'])->name('queries.shares.store');
+        Route::post('queries/{query}/share-invitations', [QueryShareInvitationController::class, 'store'])
+            ->middleware('throttle:30,1,query-share-invitation')
+            ->name('queries.invitations.store');
+        Route::patch('queries/{query}/shares/{queryUserShare}', [QueryShareController::class, 'update'])->name('queries.shares.update');
+        Route::delete('queries/{query}/shares/{queryUserShare}', [QueryShareController::class, 'destroy'])->name('queries.shares.destroy');
+        Route::post('queries/{query}/group-shares', [QueryGroupShareController::class, 'store'])->name('queries.group-shares.store');
+        Route::patch('queries/{query}/group-shares/{queryGroupShare}', [QueryGroupShareController::class, 'update'])->name('queries.group-shares.update');
+        Route::delete('queries/{query}/group-shares/{queryGroupShare}', [QueryGroupShareController::class, 'destroy'])->name('queries.group-shares.destroy');
+        Route::patch('queries/{query}/access-level', [QueryShareController::class, 'updateAccessLevel'])->name('queries.access-level');
         Route::patch('queries/{query}/preference', [QueryPreferenceController::class, 'update'])->name('queries.preference');
         Route::post('queries/{query}/clone', [QueryController::class, 'duplicate'])->name('queries.clone');
         Route::delete('queries/{query}', [QueryController::class, 'destroy'])->name('queries.destroy');

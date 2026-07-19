@@ -25,6 +25,7 @@ class QueryExecutionFactory extends Factory
         return [
             'query_id' => Query::factory(),
             'query_template_id' => null,
+            'query_template_version_id' => null,
             'user_id' => User::factory(),
             'oracle_tenant_id' => null,
             'auth_connection_id' => null,
@@ -50,11 +51,16 @@ class QueryExecutionFactory extends Factory
 
     public function forQueryTemplate(?QueryTemplate $template = null): static
     {
-        return $this->state(fn (): array => [
-            'query_id' => null,
-            'query_template_id' => $template?->id ?? QueryTemplate::factory(),
-            'source_type' => QueryExecution::SOURCE_QUERY_TEMPLATE,
-        ]);
+        return $this->state(function () use ($template): array {
+            $resolvedTemplate = $template ?? QueryTemplate::factory()->create();
+
+            return [
+                'query_id' => null,
+                'query_template_id' => $resolvedTemplate->id,
+                'query_template_version_id' => $resolvedTemplate->published_version_id,
+                'source_type' => QueryExecution::SOURCE_QUERY_TEMPLATE,
+            ];
+        });
     }
 
     public function preview(): static

@@ -19,7 +19,8 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
     const { t } = useI18n();
     const isWideSettingsPage =
         component.startsWith('oracle-tenants/') ||
-        component === 'settings/categories';
+        component === 'settings/categories' ||
+        component.startsWith('settings/query-templates/');
     const sidebarNavItems: NavItem[] = [
         { title: t('settings.profile'), href: edit(), icon: null },
         { title: t('settings.security'), href: editSecurity(), icon: null },
@@ -34,6 +35,11 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                   {
                       title: t('settings.taxonomy'),
                       href: categories.index(),
+                      icon: null,
+                  },
+                  {
+                      title: t('settings.templateGovernance'),
+                      href: '/settings/query-templates',
                       icon: null,
                   },
               ]

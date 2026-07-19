@@ -29,7 +29,7 @@ class QueryTemplateParameterBinder
      */
     public function bind(QueryTemplate $template, array $input): array
     {
-        $definitions = $template->parameter_definitions ?? [];
+        $definitions = $template->parameterDefinitionsFor(app()->getLocale());
         $definitionKeys = array_map(
             fn (array $definition): string => (string) ($definition['key'] ?? ''),
             $definitions,

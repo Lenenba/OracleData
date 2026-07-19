@@ -20,13 +20,12 @@ class DashboardController extends Controller
      */
     public function __invoke(Request $request, FusionManager $fusion, OracleResourceCatalog $catalog): Response
     {
-        $userId = $request->user()->id;
-        $fusion = $fusion->forUser($request->user());
+        $user = $request->user();
+        $userId = $user->id;
+        $groupIds = $user->groupIdsForQueryAccess();
+        $fusion = $fusion->forUser($user);
 
-        $accessible = fn (): Builder => Query::query()
-            ->where(fn (Builder $q) => $q
-                ->where('user_id', $userId)
-                ->orWhere('visibility', 'shared'));
+        $accessible = fn (): Builder => Query::query()->accessibleTo($user);
 
         $overview = $this->queryOverview($accessible(), $userId);
         $usageStats = $this->usageStats($userId);
@@ -39,10 +38,16 @@ class DashboardController extends Controller
                 'description',
                 'mode',
                 'tenant_key',
-                'visibility',
+                'access_level',
                 'created_at',
             ])
-            ->with('user:id,name')
+            ->with([
+                'user:id,name',
+                'userShares' => fn ($share) => $share->where('user_id', $userId),
+                'groupShares' => fn ($share) => $share
+                    ->active()
+                    ->whereIn('group_id', $groupIds),
+            ])
             ->latest()
             ->limit(5)
             ->get()
@@ -54,9 +59,14 @@ class DashboardController extends Controller
                 'tenant_label' => $query->user_id === $userId
                     ? $fusion->label($query->tenant_key)
                     : null,
-                'visibility' => $query->visibility,
+                'access_level' => $query->access_level,
                 'owner' => $query->user->name,
-                'can' => ['update' => $query->user_id === $userId],
+                'can' => [
+                    'update' => $query->user_id === $userId,
+                    'execute' => $user->can('execute', $query),
+                    'clone' => $user->can('clone', $query),
+                    'manage_sharing' => $user->can('manageSharing', $query),
+                ],
             ]);
 
         $tenantDetails = $fusion->details();
@@ -94,9 +104,9 @@ class DashboardController extends Controller
         $selects = [
             'COUNT(*) AS total_queries',
             'COALESCE(SUM(CASE WHEN user_id = ? THEN 1 ELSE 0 END), 0) AS my_queries',
-            'COALESCE(SUM(CASE WHEN visibility = ? THEN 1 ELSE 0 END), 0) AS shared_queries',
+            'COALESCE(SUM(CASE WHEN user_id <> ? THEN 1 ELSE 0 END), 0) AS shared_queries',
         ];
-        $bindings = [$userId, 'shared'];
+        $bindings = [$userId, $userId];
         $currentWeekStart = now()->startOfWeek();
 
         for ($index = 0; $index < 8; $index++) {

@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\QueryAccessLevel;
 use App\Models\Query;
 
 test('owner can visit the edit page', function () {
@@ -46,7 +47,7 @@ test('owner can update a query', function () {
             'mode' => 'single',
             'resource_path' => '/fscmRestApi/resources/11.13.18.05/suppliers',
             'tenant_key' => 'client_x',
-            'visibility' => 'shared',
+            'access_level' => 'organization',
             'parameters' => [
                 'limit' => 50,
                 'resource_key' => 'suppliers',
@@ -56,7 +57,7 @@ test('owner can update a query', function () {
 
     expect($query->fresh()->name)->toBe('Updated name');
     expect($query->fresh()->description)->toBe('Updated description');
-    expect($query->fresh()->visibility)->toBe('shared');
+    expect($query->fresh()->access_level)->toBe(QueryAccessLevel::PRIVATE);
     expect($query->fresh()->parameters['resource_key'])->toBe('suppliers');
     expect($query->fresh()->oracle_tenant_id)->toBe($tenant->id);
 });
@@ -72,7 +73,7 @@ test('non-owner cannot update a query', function () {
             'mode' => 'single',
             'resource_path' => '/fscmRestApi/resources/11.13.18.05/suppliers',
             'tenant_key' => 'client_x',
-            'visibility' => 'private',
+            'access_level' => 'private',
         ])
         ->assertForbidden();
 });
@@ -87,7 +88,7 @@ test('update validation rejects invalid tenant', function () {
             'mode' => 'single',
             'resource_path' => '/fscmRestApi/resources/11.13.18.05/suppliers',
             'tenant_key' => 'unknown_tenant',
-            'visibility' => 'private',
+            'access_level' => 'private',
         ])
         ->assertUnprocessable();
 });
@@ -100,6 +101,6 @@ test('guests cannot update a query', function () {
         'mode' => 'single',
         'resource_path' => '/fscmRestApi/resources/11.13.18.05/suppliers',
         'tenant_key' => 'client_x',
-        'visibility' => 'private',
+        'access_level' => 'private',
     ])->assertUnauthorized();
 });

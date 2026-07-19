@@ -1,9 +1,13 @@
 <?php
 
+use App\Enums\OracleExecutionPolicy;
+use App\Enums\QueryAccessLevel;
 use App\Models\AuditEvent;
 use App\Models\Category;
 use App\Models\Query;
+use App\Models\QueryExecution;
 use App\Models\QueryTemplate;
+use App\Models\QueryTemplateTranslation;
 use App\Services\QueryTemplateParameterBinder;
 use Database\Seeders\CategorySeeder;
 use Database\Seeders\QueryTemplateSeeder;
@@ -206,9 +210,19 @@ test('preview binds the chosen amount, caps the result size, and leaves the temp
     });
 
     expect($template->fresh()->parameters)->toBe($originalParameters);
-    $this->assertDatabaseMissing('audit_events', [
-        'action' => 'query_template.executed',
-    ]);
+
+    $execution = QueryExecution::query()->sole();
+
+    expect($execution->query_id)->toBeNull()
+        ->and($execution->query_template_id)->toBe($template->id)
+        ->and($execution->query_template_version_id)->toBe($template->published_version_id)
+        ->and($execution->user_id)->toBe($this->user->id)
+        ->and($execution->source_type)->toBe(QueryExecution::SOURCE_QUERY_TEMPLATE)
+        ->and($execution->purpose)->toBe(QueryExecution::PURPOSE_PREVIEW)
+        ->and($execution->status)->toBe(QueryExecution::STATUS_SUCCEEDED)
+        ->and($execution->rows_count)->toBe(1)
+        ->and($execution->error_code)->toBeNull()
+        ->and(AuditEvent::query()->doesntExist())->toBeTrue();
 });
 
 test('run uses the full runtime limit and records a safe audit event', function () {
@@ -222,6 +236,7 @@ test('run uses the full runtime limit and records a safe audit event', function 
                 'required' => true,
                 'default' => 1000,
                 'min' => 0,
+                'audit' => ['mode' => 'masked'],
                 'binding' => [
                     'kind' => 'filter',
                     'field' => 'InvoiceAmount',
@@ -236,6 +251,7 @@ test('run uses the full runtime limit and records a safe audit event', function 
                 'default' => 50,
                 'min' => 1,
                 'max' => 500,
+                'audit' => ['mode' => 'masked'],
                 'binding' => ['kind' => 'parameter', 'key' => 'limit'],
             ],
         ],
@@ -254,25 +270,82 @@ test('run uses the full runtime limit and records a safe audit event', function 
         ->assertJsonPath('parameters.limit', 80)
         ->assertJsonPath('error', null);
 
+    $execution = QueryExecution::query()->sole();
     $event = AuditEvent::query()
         ->where('action', 'query_template.executed')
         ->sole();
+    $encodedAuditContext = json_encode($event->context, JSON_THROW_ON_ERROR);
 
-    expect($event->user_id)->toBe($this->user->id)
+    expect($execution->query_id)->toBeNull()
+        ->and($execution->query_template_id)->toBe($template->id)
+        ->and($execution->query_template_version_id)->toBe($template->published_version_id)
+        ->and($execution->user_id)->toBe($this->user->id)
+        ->and($execution->source_type)->toBe(QueryExecution::SOURCE_QUERY_TEMPLATE)
+        ->and($execution->purpose)->toBe(QueryExecution::PURPOSE_RUN)
+        ->and($execution->status)->toBe(QueryExecution::STATUS_SUCCEEDED)
+        ->and($execution->rows_count)->toBe(0)
+        ->and($execution->error_code)->toBeNull()
+        ->and($event->user_id)->toBe($this->user->id)
         ->and($event->subject_id)->toBe($template->id)
         ->and($event->context)->toMatchArray([
             'tenant_key' => 'client_x',
-            'parameter_values' => [
-                'minimum_amount' => 4000,
-                'result_limit' => 80,
+            'query_execution_id' => $execution->id,
+            'status' => QueryExecution::STATUS_SUCCEEDED,
+            'execution_policy' => OracleExecutionPolicy::EXACT->value,
+            'audited_parameters' => [
+                'minimum_amount' => '[masked]',
+                'result_limit' => '[masked]',
             ],
-        ]);
+        ])
+        ->and($event->context)->not->toHaveKey('parameter_values')
+        ->and($encodedAuditContext)->not->toContain('4000')
+        ->and($encodedAuditContext)->not->toContain('80');
 
     Http::assertSent(function ($request): bool {
         parse_str(parse_url($request->url(), PHP_URL_QUERY) ?: '', $query);
 
         return $query['limit'] === '80';
     });
+});
+
+test('a failed template run is recorded and linked to its safe audit event', function () {
+    Http::fake(['*' => Http::response(['error' => 'boom'], 500)]);
+    $parameterDefinitions = QueryTemplate::factory()->make()->parameter_definitions;
+    $parameterDefinitions[0]['audit'] = ['mode' => 'masked'];
+    $template = QueryTemplate::factory()->create([
+        'parameter_definitions' => $parameterDefinitions,
+    ]);
+
+    $response = $this->actingAs($this->user)
+        ->postJson(route('query-templates.run', $template), [
+            'tenant' => 'client_x',
+            'parameter_values' => ['minimum_amount' => 987654],
+        ])
+        ->assertOk();
+
+    expect($response->json('error'))->toBeString();
+
+    $execution = QueryExecution::query()->sole();
+    $event = AuditEvent::query()
+        ->where('action', 'query_template.executed')
+        ->sole();
+
+    expect($execution->query_id)->toBeNull()
+        ->and($execution->query_template_id)->toBe($template->id)
+        ->and($execution->query_template_version_id)->toBe($template->published_version_id)
+        ->and($execution->source_type)->toBe(QueryExecution::SOURCE_QUERY_TEMPLATE)
+        ->and($execution->purpose)->toBe(QueryExecution::PURPOSE_RUN)
+        ->and($execution->status)->toBe(QueryExecution::STATUS_FAILED)
+        ->and($execution->error_code)->toBe('oracle_error')
+        ->and($execution->rows_count)->toBe(0)
+        ->and($event->context)->toMatchArray([
+            'query_execution_id' => $execution->id,
+            'status' => QueryExecution::STATUS_FAILED,
+            'execution_policy' => OracleExecutionPolicy::EXACT->value,
+            'audited_parameters' => ['minimum_amount' => '[masked]'],
+        ])
+        ->and($event->context)->not->toHaveKey('parameter_values')
+        ->and(json_encode($event->context, JSON_THROW_ON_ERROR))->not->toContain('987654');
 });
 
 test('invalid runtime values are rejected before any Oracle request', function () {
@@ -292,9 +365,12 @@ test('invalid runtime values are rejected before any Oracle request', function (
 
 test('cloning materialises parameters in an editable private query without altering the template', function () {
     $category = Category::factory()->create();
+    $parameterDefinitions = QueryTemplate::factory()->make()->parameter_definitions;
+    $parameterDefinitions[0]['audit'] = ['mode' => 'masked'];
     $template = QueryTemplate::factory()->create([
         'name' => 'Factures importantes',
         'category_id' => $category->id,
+        'parameter_definitions' => $parameterDefinitions,
     ]);
     $original = $template->only([
         'slug',
@@ -319,13 +395,30 @@ test('cloning materialises parameters in an editable private query without alter
 
     $response->assertRedirect(route('queries.edit', $copy));
     expect($copy->name)->toBe('Copie de Factures importantes')
-        ->and($copy->visibility)->toBe('private')
+        ->and($copy->access_level)->toBe(QueryAccessLevel::PRIVATE)
         ->and($copy->query_template_id)->toBe($template->id)
+        ->and($copy->getAttribute('query_template_version_id'))->toBe($template->published_version_id)
         ->and($copy->category_id)->toBe($category->id)
         ->and($copy->tenant_key)->toBe('client_x')
+        ->and($copy->execution_policy)->toBe(OracleExecutionPolicy::EXACT)
         ->and($copy->parameters['q'])->toBe('InvoiceAmount > 7500');
 
     expect($template->fresh()->only(array_keys($original)))->toBe($original);
+
+    $event = AuditEvent::query()
+        ->where('action', 'query_template.cloned')
+        ->sole();
+
+    expect($event->user_id)->toBe($this->user->id)
+        ->and($event->subject_id)->toBe($template->id)
+        ->and($event->context)->toMatchArray([
+            'query_id' => $copy->id,
+            'tenant_key' => 'client_x',
+            'execution_policy' => OracleExecutionPolicy::EXACT->value,
+            'audited_parameters' => ['minimum_amount' => '[masked]'],
+        ])
+        ->and($event->context)->not->toHaveKey('parameter_values')
+        ->and(json_encode($event->context, JSON_THROW_ON_ERROR))->not->toContain('7500');
 
     $this->actingAs($this->user)
         ->get(route('queries.edit', $copy))
@@ -349,11 +442,45 @@ test('the template seeder is user independent and idempotent', function () {
     $this->seed(CategorySeeder::class);
     $this->seed(QueryTemplateSeeder::class);
     $ids = QueryTemplate::query()->orderBy('slug')->pluck('id', 'slug')->all();
+    $translationIds = QueryTemplateTranslation::query()
+        ->orderBy('query_template_id')
+        ->orderBy('locale')
+        ->pluck('id')
+        ->all();
 
     $this->seed(QueryTemplateSeeder::class);
 
+    $templates = QueryTemplate::query()
+        ->with('translations')
+        ->orderBy('slug')
+        ->get();
+    $allDefinitionsHaveAuditPolicy = $templates->every(
+        fn (QueryTemplate $template): bool => collect($template->parameter_definitions)
+            ->every(fn (array $definition): bool => in_array(
+                data_get($definition, 'audit.mode'),
+                ['clear', 'masked', 'hmac', 'omit'],
+                true,
+            )),
+    );
+    $supplierInvoices = $templates->firstWhere('slug', 'supplier-invoices-above-amount');
+    $supplierInvoiceDefinitions = collect($supplierInvoices?->parameter_definitions)->keyBy('key');
+
     expect(QueryTemplate::query()->count())->toBe(4)
         ->and(QueryTemplate::query()->orderBy('slug')->pluck('id', 'slug')->all())->toBe($ids)
+        ->and(QueryTemplateTranslation::query()->count())->toBe(12)
+        ->and(QueryTemplateTranslation::query()
+            ->orderBy('query_template_id')
+            ->orderBy('locale')
+            ->pluck('id')
+            ->all())->toBe($translationIds)
+        ->and($templates->every(fn (QueryTemplate $template): bool => $template->translations
+            ->pluck('locale')
+            ->sort()
+            ->values()
+            ->all() === ['en', 'es', 'fr']))->toBeTrue()
+        ->and($allDefinitionsHaveAuditPolicy)->toBeTrue()
+        ->and(data_get($supplierInvoiceDefinitions->get('minimum_amount'), 'audit.mode'))->toBe('masked')
+        ->and(data_get($supplierInvoiceDefinitions->get('result_limit'), 'audit.mode'))->toBe('clear')
         ->and(QueryTemplate::query()->where('slug', 'customer-invoices-above-balance')->exists())->toBeTrue()
         ->and(QueryTemplate::query()->where('slug', 'open-purchase-orders-above-amount')->exists())->toBeFalse()
         ->and(QueryTemplate::query()->where('slug', 'supplier-invoices-above-amount')->value('parameter_definitions'))

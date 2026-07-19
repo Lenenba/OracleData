@@ -9,11 +9,14 @@ import {
     RotateCw,
     Save,
     Server,
+    Share2,
     Tag,
+    Users,
     X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import AlertError from '@/components/alert-error';
+import { QueryAccessLevelBadge } from '@/components/queries/query-access-level-badge';
 import { QueryConfigPanel } from '@/components/queries/query-config-panel';
 import { QueryResultView } from '@/components/queries/query-result';
 import { ResourcePicker } from '@/components/queries/resource-picker';
@@ -48,6 +51,7 @@ import type {
 } from '@/lib/query-spec';
 import oracleTenants from '@/routes/oracle-tenants';
 import queries from '@/routes/queries';
+import type { QueryAccessLevel } from '@/types/query-sharing';
 
 type BuilderMode = 'create' | 'edit';
 
@@ -55,7 +59,7 @@ type BuilderInitialState = {
     queryId?: number;
     name?: string;
     description?: string | null;
-    visibility?: 'private' | 'shared';
+    accessLevel?: QueryAccessLevel;
     resourceKey?: string;
     tenantKey?: string;
     fields?: string[];
@@ -155,9 +159,14 @@ export function QueryBuilder({
     const [queryDescription, setQueryDescription] = useState(
         initialState?.description ?? '',
     );
-    const [visibility, setVisibility] = useState<'private' | 'shared'>(
-        initialState?.visibility ?? 'private',
+    const [accessLevel, setAccessLevel] = useState<QueryAccessLevel>(
+        initialState?.accessLevel ?? 'private',
     );
+    const accessLevelDescriptions: Record<QueryAccessLevel, string> = {
+        private: t('queries.accessLevelPrivateDescription'),
+        restricted: t('queries.accessLevelRestrictedDescription'),
+        organization: t('queries.accessLevelOrganizationDescription'),
+    };
     const [categoryId, setCategoryId] = useState(
         initialState?.categoryId ? String(initialState.categoryId) : '',
     );
@@ -323,7 +332,7 @@ export function QueryBuilder({
             mode: 'single',
             resource_path: live.result.resource?.path ?? '',
             tenant_key: tenant,
-            visibility,
+            ...(mode === 'create' ? { access_level: accessLevel } : {}),
             category_id: categoryId === '' ? null : Number(categoryId),
             tags,
             parameters,
@@ -598,35 +607,85 @@ export function QueryBuilder({
                         </div>
                         <div className="flex flex-col gap-1.5">
                             <Label className="text-xs font-medium">
-                                Visibilité
+                                {t('queries.accessLevel')}
                             </Label>
-                            <div className="flex gap-2">
-                                {(['private', 'shared'] as const).map((v) => (
-                                    <button
-                                        key={v}
-                                        type="button"
-                                        onClick={() => setVisibility(v)}
-                                        className={[
-                                            'flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm transition-colors',
-                                            visibility === v
-                                                ? 'border-primary bg-primary/5 font-medium text-primary'
-                                                : 'border-border text-muted-foreground hover:border-primary/40',
-                                        ].join(' ')}
-                                    >
-                                        {v === 'private' ? (
-                                            <>
-                                                <Lock className="size-3.5" />{' '}
-                                                Privée
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Globe className="size-3.5" />{' '}
-                                                Partagée
-                                            </>
-                                        )}
-                                    </button>
-                                ))}
-                            </div>
+                            {mode === 'create' ? (
+                                <div className="flex flex-wrap gap-2">
+                                    {(
+                                        [
+                                            {
+                                                value: 'private',
+                                                label: t(
+                                                    'queries.accessLevelPrivate',
+                                                ),
+                                                icon: Lock,
+                                            },
+                                            {
+                                                value: 'restricted',
+                                                label: t(
+                                                    'queries.accessLevelRestricted',
+                                                ),
+                                                icon: Users,
+                                            },
+                                            {
+                                                value: 'organization',
+                                                label: t(
+                                                    'queries.accessLevelOrganization',
+                                                ),
+                                                icon: Globe,
+                                            },
+                                        ] satisfies Array<{
+                                            value: QueryAccessLevel;
+                                            label: string;
+                                            icon: typeof Lock;
+                                        }>
+                                    ).map(({ value, label, icon: Icon }) => (
+                                        <button
+                                            key={value}
+                                            type="button"
+                                            onClick={() =>
+                                                setAccessLevel(value)
+                                            }
+                                            aria-pressed={accessLevel === value}
+                                            className={[
+                                                'flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm transition-colors',
+                                                accessLevel === value
+                                                    ? 'border-primary bg-primary/5 font-medium text-primary'
+                                                    : 'border-border text-muted-foreground hover:border-primary/40',
+                                            ].join(' ')}
+                                        >
+                                            <Icon className="size-3.5" />
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <QueryAccessLevelBadge
+                                        accessLevel={accessLevel}
+                                    />
+                                    {initialState?.queryId !== undefined && (
+                                        <Button
+                                            asChild
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                        >
+                                            <Link
+                                                href={queries.shares.index(
+                                                    initialState.queryId,
+                                                )}
+                                            >
+                                                <Share2 className="size-3.5" />
+                                                {t('queries.manageSharing')}
+                                            </Link>
+                                        </Button>
+                                    )}
+                                </div>
+                            )}
+                            <p className="text-xs text-muted-foreground">
+                                {accessLevelDescriptions[accessLevel]}
+                            </p>
                         </div>
                     </div>
 

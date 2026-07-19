@@ -1,5 +1,7 @@
 <?php
 
+use App\Enums\OracleExecutionPolicy;
+use App\Enums\QueryAccessLevel;
 use App\Models\Category;
 use App\Models\Query;
 use App\Models\Tag;
@@ -43,7 +45,7 @@ test('a user clones a shared query onto their own default connection', function 
         ->and($copy->oracle_tenant_id)->toBe($readerTenant->id)
         ->and($copy->mode)->toBe($source->mode)
         ->and($copy->parameters)->toBe($source->parameters)
-        ->and($copy->visibility)->toBe('private')
+        ->and($copy->access_level)->toBe(QueryAccessLevel::PRIVATE)
         ->and($copy->category_id)->toBe($category->id)
         ->and($copy->tags()->pluck('tags.id')->all())->toBe([$tag->id]);
 });
@@ -60,6 +62,26 @@ test('a user can clone their own private query', function () {
         ->assertRedirect();
 
     expect(Query::query()->where('user_id', $user->id)->count())->toBe(2);
+});
+
+test('a cloned query preserves its execution policy', function () {
+    $user = createConnectedUser([], ['key' => 'client_x']);
+    $source = Query::factory()->for($user)->private()->create([
+        'name' => 'Requête exacte',
+        'oracle_tenant_id' => $user->oracleTenants()->sole()->id,
+        'execution_policy' => OracleExecutionPolicy::EXACT,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('queries.clone', $source))
+        ->assertRedirect();
+
+    $copy = Query::query()
+        ->where('user_id', $user->id)
+        ->whereKeyNot($source->id)
+        ->sole();
+
+    expect($copy->execution_policy)->toBe(OracleExecutionPolicy::EXACT);
 });
 
 test('a user cannot clone another users private query', function () {

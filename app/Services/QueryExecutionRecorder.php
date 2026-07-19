@@ -35,16 +35,21 @@ class QueryExecutionRecorder
         $finishedAt = now();
 
         return DB::transaction(function () use ($user, $query, $tenantKey, $succeeded, $durationMs, $payload, $startedAt, $finishedAt): QueryExecution {
-            $recordedQueryId = Query::query()
+            // A run that started before a concurrent soft archive still
+            // belongs to that historical query and must keep its provenance.
+            $recordedQuery = Query::withTrashed()
+                ->select(['id', 'query_template_version_id'])
                 ->whereKey($query->id)
                 ->lockForUpdate()
-                ->value('id');
-            $queryId = $recordedQueryId === null ? null : (int) $recordedQueryId;
+                ->first();
+            $queryId = $recordedQuery?->id;
+            $queryTemplateVersionId = $recordedQuery?->getAttribute('query_template_version_id');
             $tenant = $this->resolveTenant($user, $tenantKey);
 
             $execution = QueryExecution::query()->create([
                 'query_id' => $queryId,
                 'query_template_id' => null,
+                'query_template_version_id' => $queryTemplateVersionId,
                 'user_id' => $user->id,
                 'oracle_tenant_id' => $tenant?->id,
                 'auth_connection_id' => $tenant === null ? null : $this->primaryConnectionId($tenant),
@@ -87,6 +92,7 @@ class QueryExecutionRecorder
     public function recordTemplateAction(
         User $user,
         QueryTemplate $template,
+        int $templateVersionId,
         string $tenantKey,
         array $payload,
         CarbonInterface $startedAt,
@@ -100,12 +106,13 @@ class QueryExecutionRecorder
         $succeeded = ($payload['error'] ?? null) === null;
         $finishedAt = now();
 
-        return DB::transaction(function () use ($user, $template, $tenantKey, $payload, $startedAt, $durationMs, $purpose, $succeeded, $finishedAt): QueryExecution {
+        return DB::transaction(function () use ($user, $template, $templateVersionId, $tenantKey, $payload, $startedAt, $durationMs, $purpose, $succeeded, $finishedAt): QueryExecution {
             $tenant = $this->resolveTenant($user, $tenantKey);
 
             return QueryExecution::query()->create([
                 'query_id' => null,
                 'query_template_id' => $template->id,
+                'query_template_version_id' => $templateVersionId,
                 'user_id' => $user->id,
                 'oracle_tenant_id' => $tenant?->id,
                 'auth_connection_id' => $tenant === null ? null : $this->primaryConnectionId($tenant),

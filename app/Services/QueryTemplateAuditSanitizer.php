@@ -44,6 +44,7 @@ class QueryTemplateAuditSanitizer
                 'clear' => $value,
                 'masked' => '[masked]',
                 'hmac' => $this->fingerprint($template, $key, $value),
+                default => throw new LogicException('La politique d’audit du paramètre est invalide.'),
             };
         }
 
@@ -59,8 +60,10 @@ class QueryTemplateAuditSanitizer
             $policy = $policy['mode'] ?? null;
         }
 
+        // Une définition sans politique explicite ne doit jamais hériter d'un
+        // réglage global plus permissif : l'omission est le seul défaut sûr.
         if ($policy === null || $policy === '') {
-            $policy = config('audit.query_template_parameters.default_mode', 'omit');
+            return 'omit';
         }
 
         $mode = mb_strtolower(trim((string) $policy));
@@ -78,7 +81,21 @@ class QueryTemplateAuditSanitizer
         }
 
         if ($key === '') {
-            throw new LogicException('La clé HMAC dédiée aux paramètres d’audit est absente.');
+            $appKey = (string) config('app.key', '');
+
+            if ($appKey === '') {
+                throw new LogicException('La clé HMAC dédiée aux paramètres d’audit est absente.');
+            }
+
+            // Repli de compatibilité dérivé et séparé par domaine. La clé
+            // applicative brute n'est jamais utilisée directement comme clé
+            // d'empreinte et une clé dédiée reste recommandée en production.
+            $key = hash_hmac(
+                'sha256',
+                'oracle-data/query-template-parameter-audit-key',
+                $appKey,
+                true,
+            );
         }
 
         $payload = implode("\0", [

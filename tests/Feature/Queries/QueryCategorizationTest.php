@@ -14,7 +14,7 @@ test('a query can be stored with a category and free tags', function () {
         'resource_path' => '/fscmRestApi/resources/11.13.18.05/invoices',
         'tenant_key' => 'client_x',
         'parameters' => ['limit' => 25],
-        'visibility' => 'private',
+        'access_level' => 'private',
         'category_id' => $category->id,
         'tags' => ['Comptes Fournisseurs', 'mensuel'],
     ])->assertSessionHasNoErrors()->assertRedirect(route('queries.index'));
@@ -34,7 +34,7 @@ test('tags are reused by normalised slug instead of duplicated', function () {
         'name' => 'Rapport mensuel',
         'resource_path' => '/hcmRestApi/resources/11.13.18.05/workers',
         'tenant_key' => 'client_x',
-        'visibility' => 'private',
+        'access_level' => 'private',
         'tags' => ['MENSUEL'],
     ])->assertSessionHasNoErrors();
 
@@ -55,7 +55,7 @@ test('updating a query syncs its category and tags', function () {
         'name' => $query->name,
         'resource_path' => $query->resource_path,
         'tenant_key' => 'client_x',
-        'visibility' => 'private',
+        'access_level' => 'private',
         'category_id' => $category->id,
         'tags' => ['actif'],
     ])->assertSessionHasNoErrors();
@@ -73,7 +73,7 @@ test('an unknown category is rejected', function () {
         'name' => 'Requête',
         'resource_path' => '/hcmRestApi/resources/11.13.18.05/workers',
         'tenant_key' => 'client_x',
-        'visibility' => 'private',
+        'access_level' => 'private',
         'category_id' => 999,
     ])->assertInvalid(['category_id']);
 });

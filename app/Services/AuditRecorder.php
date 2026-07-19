@@ -29,6 +29,11 @@ class AuditRecorder
         'username',
         'token',
         'authorization',
+        'api_key',
+        'private_key',
+        'client_secret',
+        'access_token',
+        'refresh_token',
     ];
 
     /**
@@ -54,7 +59,18 @@ class AuditRecorder
     private function assertSafeContext(array $context): void
     {
         foreach ($context as $key => $value) {
-            if (in_array(mb_strtolower((string) $key), self::FORBIDDEN_CONTEXT_KEYS, true)) {
+            $segmentedKey = preg_replace(
+                '/(?<=[a-z0-9])(?=[A-Z])/',
+                '_',
+                (string) $key,
+            ) ?? (string) $key;
+            $normalizedKey = mb_strtolower($segmentedKey);
+            $containsForbiddenSegment = preg_match(
+                '/(?:^|[_.-])(password|secret|token|authorization|username|identifier|api[_.-]key|private[_.-]key)(?:$|[_.-])/',
+                $normalizedKey,
+            ) === 1;
+
+            if (in_array($normalizedKey, self::FORBIDDEN_CONTEXT_KEYS, true) || $containsForbiddenSegment) {
                 throw new InvalidArgumentException(
                     "Le contexte d'audit ne doit pas contenir la clé [{$key}].",
                 );

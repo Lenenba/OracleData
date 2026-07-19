@@ -90,7 +90,7 @@ La définition d'une requête est partageable ; les accès Oracle ne le sont pas
 3. Le `oracle_tenant_id` du propriétaire de la requête n'est jamais utilisé pour le lecteur et ne lui donne aucun accès à l'URL ou aux secrets du propriétaire.
 4. À terme, une préférence personnelle par requête pourra mémoriser le tenant choisi par le lecteur, à condition qu'elle référence l'un de ses propres tenants.
 5. Le backend autorise d'abord l'accès à la définition de requête, puis résout séparément la connexion du lecteur et vérifie qu'elle est active et vérifiée.
-6. Le futur journal d'exécution devra enregistrer l'utilisateur exécutant, le tenant et la connexion réellement utilisés, et non la cible préférée de l'auteur.
+6. Le journal d'exécution enregistre l'utilisateur exécutant, le tenant et la connexion réellement utilisés, et non la cible préférée de l'auteur.
 7. Si aucune connexion personnelle compatible n'est disponible, l'exécution est bloquée avec une invitation à en configurer une ; aucun fallback implicite n'est tenté.
 
 Le clonage d'une requête partagée l'associe au tenant par défaut du nouveau propriétaire ; celui-ci peut ensuite choisir une autre connexion qui lui appartient.
@@ -150,8 +150,8 @@ Dernière mise à jour : 18 juillet 2026.
 | 2 | Fondation multilingue FR/EN/ES | **En cours — 17 juillet 2026** |
 | 3 | Tenants personnels, onboarding et contrôle d'accès | **En cours — fondation livrée le 17 juillet 2026** |
 | 4 | Bibliothèque organisée | **Fait — 17 juillet 2026** |
-| 5 | Partage ciblé et collaboration | À faire |
-| 6 | Gouvernance et templates officiels | **En cours — socle des modèles prédéfinis livré le 18 juillet 2026** |
+| 5 | Partage ciblé et collaboration | **Implémentation terminée — partage, invitations, réponses internes, demandes, commentaires et mentions livrés le 18 juillet 2026 ; validation PHP finale à relancer** |
+| 6 | Gouvernance et templates officiels | **En cours — lots 6A et 6B implémentés le 18 juillet 2026 : publication versionnée, comparaison, restauration et certification ; rôles éditoriaux spécialisés et édition Oracle contrôlée restent à livrer, validations PHP/Node et migrations locales `168000`/`169000` à relancer** |
 | 7 | Couche sémantique Oracle | À faire — catalogue technique et découverte des champs déjà partiels |
 | 8 | Fiabilité et tests de données | À faire |
 | 9 | Exécution asynchrone et automatisation | À faire |
@@ -177,15 +177,16 @@ Résultat de l'étape 1 :
 - entrée « Connexions Oracle » disponible dans les paramètres utilisateur après l'onboarding ;
 - résolution des tenants mémoïsée par utilisateur et invalidée après mutation ;
 - bibliothèque paginée à 25 éléments avec recherche serveur différée ;
-- index composites sur propriétaire/visibilité et date de mise à jour ;
+- index composites sur propriétaire/niveau d'accès et date de mise à jour ;
 - colonne « Visibilité » retirée de la page exclusivement partagée ;
 - timeouts Oracle configurables, retries bornés et messages sans fuite technique ;
 - identifiant de corrélation et mesure `Server-Timing` sur chaque réponse ;
 - journalisation structurée des appels Oracle et requêtes HTTP lentes ;
 - migrations de stabilisation locales appliquées et `test@example.com` promu super-administrateur ;
 - migration multi-tenant prête, avec arrêt sécurisé si les tenants historiques n'ont pas de propriétaire non ambigu ;
-- validation cumulative actuelle : 355 tests et 1 690 assertions réussis au 18 juillet 2026 ;
-- PHPStan, ESLint, TypeScript et build de production validés.
+- dernière validation cumulative exécutée avant les lots `167000` et `168000` : 433 tests et 2 595 assertions réussis au 18 juillet 2026 ;
+- lot d'invitations différées et centre de notifications interne livré et validé, avec migration locale `166000` appliquée en batch 13 ;
+- Pint, PHPStan, ESLint, Prettier, TypeScript et build Vite de production validés jusqu'au lot `166000` ; après les lots `167000` à `169000`, la parité et la validité des catalogues JSON ainsi que les contrôles statiques ciblés sont confirmés, mais la validation finale PHP et Node reste à relancer.
 
 Chantier parallèle restant : **Étape 2 — finaliser la fondation multilingue FR/EN/ES**.
 
@@ -227,10 +228,68 @@ Résultat de l'étape 4 :
 - catégorie et tags conservés lors du clonage, localisés dans la bibliothèque et la page de détail, et modifiables dans le query builder ;
 - favoris et épingles isolés par utilisateur, y compris pour une requête partagée, sans élargir les droits sur sa définition ;
 - filtres conservés dans l'URL et vues enregistrées cloisonnées par propriétaire avec refus IDOR en `404` ;
-- statistiques de bibliothèque fondées sur les agrégats atomiques et statistiques du dashboard fondées sur l'utilisateur qui a réellement exécuté la requête ; le test anti-N+1 maintient le chargement du dashboard à dix requêtes SQL au plus avec cinquante requêtes accessibles ;
+- statistiques de bibliothèque fondées sur les agrégats atomiques et statistiques du dashboard fondées sur l'utilisateur qui a réellement exécuté la requête ; le test anti-N+1 maintient le chargement du dashboard à treize requêtes SQL au plus avec cinquante requêtes accessibles, dont deux requêtes bornées pour les groupes et leurs grants applicables et une pour le compteur de notifications non lues ;
 - 318 tests et 1 510 assertions réussis à la clôture initiale de l'étape 4 ; Pint, PHPStan, ESLint, Prettier, TypeScript et build Vite de production validés.
 
-Progression de l'étape 6 — **socle livré de manière anticipée le 18 juillet 2026** :
+Progression de l'étape 5 — **périmètre collaboratif interne implémenté le 18 juillet 2026** :
+
+- [x] remplacer le partage binaire par les niveaux `private`, `restricted` et `organization` ;
+- [x] permettre le partage direct avec un utilisateur, avec acceptation immédiate dans ce premier lot ;
+- [x] appliquer les permissions cumulatives `view`, `execute`, `clone` et `manage` dans les Policies et les scopes d'accès ;
+- [x] gérer la date d'expiration, la révocation et l'historique des partages directs ;
+- [x] journaliser les créations, changements de permission, révocations et changements de niveau d'accès sans exposer de secret ;
+- [x] centraliser les règles d'accès utilisées par la bibliothèque, le dashboard, le détail, l'exécution et le clonage ;
+- [x] garantir qu'une requête partagée s'exécute uniquement avec une connexion Oracle active appartenant au lecteur ;
+- [x] ajouter les groupes et le partage d'équipe, avec gestion des membres et des rôles `owner`, `manager` et `member` ;
+- [x] archiver logiquement une requête supprimée, révoquer atomiquement ses grants actifs et conserver les cycles de partage et d'exécution ;
+- [x] ajouter les invitations nominatives avec acceptation différée et le centre de notifications interne ;
+- [x] notifier une seule fois l'émetteur lors de l'acceptation ou du refus réel d'une invitation, sans dupliquer l'événement lors d'un rejeu ;
+- [x] ajouter les demandes de modification avec états gouvernés, commentaires immuables et mentions structurées limitées aux lecteurs actuels ;
+- [x] conserver les contenus des messages hors de l'audit et des notifications techniques ; une mention n'accorde jamais un accès ;
+- [ ] relancer les tests PHP et appliquer la migration locale `167000` dès que le runner Herd redevient disponible.
+
+Résultat courant de l'étape 5 :
+
+- `private` limite la requête à son propriétaire, `restricted` l'ouvre uniquement aux personnes ou groupes disposant d'un grant actif et `organization` la rend accessible aux utilisateurs autorisés de la plateforme ;
+- les droits sont cumulatifs : `execute` inclut `view`, `clone` inclut `execute` et `view`, et `manage` permet en plus d'administrer les accès ordinaires sans transférer la propriété de la définition ; les grants de groupe sont volontairement plafonnés à `clone`, donc `manage` reste exclusivement nominatif ;
+- seul le propriétaire peut déléguer `manage` ou changer la portée globale ; un gestionnaire délégué ne peut ni modifier son propre grant, ni administrer un autre grant `manage`, ni accorder une expiration postérieure à la sienne ;
+- le propriétaire, ou un délégataire disposant de `manage` dans ces limites, peut partager avec une personne ou un groupe, modifier une permission, fixer une expiration ou révoquer un accès depuis « Gérer le partage » ;
+- l'écran « Groupes » (`/groups`) permet de créer et décrire une équipe, d'en gérer les membres selon le rôle courant, de la renommer ou de l'archiver lorsque l'utilisateur en est propriétaire ;
+- le sélecteur de « Gérer le partage » bascule entre « Personne » et « Groupe » et présente dans la même interface les grants actifs, l'expiration, la révocation et l'historique de chaque type de destinataire ;
+- l'appartenance courante au groupe détermine l'accès hérité : retirer un membre lui retire immédiatement cet accès, sans modifier le grant du groupe pour les autres membres ;
+- l'archivage logique d'un groupe révoque ses grants actifs dans la même transaction, tout en conservant les cycles historiques et le nom du groupe figé dans chaque partage ;
+- la suppression d'une requête par son propriétaire est désormais un archivage logique : ses grants directs et de groupe actifs sont révoqués et audités dans la transaction, tandis que les cycles de partage et les exécutions restent conservés ; une restauration technique ne réactive aucun grant ;
+- le passage à `private` ferme à la fois les accès directs et les accès de groupe actifs, tandis que les partages expirés ou révoqués restent consultables dans l'historique ;
+- pour une personne inscrite, « Gérer le partage » crée désormais par défaut une invitation `pending` avec permission, expiration éventuelle du futur accès et date limite de réponse ; cette ligne ne donne aucun droit et une requête `private` reste privée tant que le destinataire n'a pas accepté ;
+- l'acceptation transforme la même ligne `query_user_shares` en grant `accepted` et place atomiquement une requête encore privée en `restricted` ; le refus conserve le cycle en `declined`, tandis qu'une annulation par le gestionnaire le conserve en `cancelled` ;
+- l'expiration d'une invitation est calculée à partir de `respond_by` et de l'expiration éventuelle du futur accès, sans inventer un sixième statut persistant ; une invitation expirée ne peut ni être acceptée ni ouvrir un accès ;
+- l'autorité du délégataire qui a émis l'invitation est recalculée au moment de l'acceptation ; si son grant `manage` a disparu, a expiré ou ne couvre plus la permission et la durée proposées, l'invitation est annulée sans ouvrir la requête ;
+- le retour à `private` et l'archivage logique d'une requête annulent dans leur transaction toutes ses invitations encore valides, en plus de révoquer les grants actifs ;
+- les groupes conservent leur parcours immédiat : l'acceptation différée concerne uniquement un destinataire utilisateur déjà inscrit sur la plateforme ;
+- le centre `/notifications` est paginé, filtrable sur les éléments non lus et permet de marquer un élément ou toute la boîte comme lus ; un compteur non lu alimente la cloche de navigation et le destinataire peut accepter ou refuser depuis le centre ;
+- la notification interne est écrite de façon synchrone dans la même transaction que l'invitation et ne conserve que des identifiants techniques ; les noms affichés sont résolus côté serveur à partir des relations autorisées ;
+- les événements `query.share_invited`, `query.share_invitation_accepted`, `query.share_invitation_declined` et `query.share_invitation_cancelled` conservent uniquement les identifiants, permissions, échéances et motifs techniques autorisés par `AuditRecorder` ;
+- « Partagées avec moi » exclut les requêtes du lecteur lui-même et reflète les mêmes règles que le détail, l'exécution et le clonage ;
+- partager la définition ne partage jamais le tenant, la connexion ni les identifiants Oracle du propriétaire ;
+- l'émetteur reçoit maintenant une notification interne normalisée lors d'une acceptation ou d'un refus effectif ; les rejeux idempotents ne créent ni nouvel audit ni nouvelle notification ;
+- tout lecteur actuel non propriétaire peut ouvrir une demande de modification ; le propriétaire décide des passages `pending -> accepted|rejected`, puis `accepted -> completed|cancelled`, tandis que le demandeur peut annuler sa demande encore en attente ;
+- chaque demande possède un fil borné de commentaires immuables ; les lecteurs actuels peuvent le suivre tant que la requête reste accessible et les états terminaux ferment les nouveaux commentaires ;
+- les mentions sont structurées par identifiants, limitées à dix personnes par message, validées contre la Policy de lecture courante et dédupliquées des notifications ordinaires ; elles ne créent aucun grant ;
+- le centre interne distingue création, commentaire, mention et changement d'état, résout les noms depuis les relations encore autorisées et ne persiste jamais le titre, le message ou le commentaire dans la notification ;
+- les notifications e-mail restent planifiées avec la queue à l'étape 9 et les connecteurs externes à l'étape 12 ; ils ne font plus partie du critère de clôture de la collaboration interne synchrone ;
+- la migration `162000` introduit les niveaux d'accès et les partages directs en lot local 10 ; la migration de compatibilité `163000`, appliquée en lot local 11, remplace sans perte la contrainte unique historique par l'index `(query_id, user_id, status)` afin de conserver chaque cycle de partage ;
+- la migration `164000` introduit `groups`, `group_user` et `query_group_shares`, avec suppression logique des groupes, appartenance unique, snapshots de nom et index de résolution du cycle de vie ; elle est appliquée localement en batch 12 ;
+- la migration `165000`, également appliquée localement en batch 12, ajoute la suppression logique aux requêtes afin qu'une suppression fonctionnelle ne déclenche plus les cascades physiques sur leurs historiques ;
+- la migration `166000` étend `query_user_shares` avec les états et dates du parcours différé, ajoute ses index de résolution et crée la table Laravel `notifications` ; elle est appliquée localement en batch 13 et son schéma a été contrôlé ;
+- la migration `167000` crée `query_change_requests`, le fil `query_change_request_comments` et la table de mentions ; elle est prête mais son application locale reste à exécuter, le runner PHP externe ayant été refusé par l'environnement de travail ;
+- 14 scénarios dédiés au partage direct couvrent notamment les permissions HTTP, l'IDOR, l'expiration, la révocation, le repartage durable, le passage en privé, les limites d'un gestionnaire délégué et l'absence de données sensibles dans l'audit ;
+- 16 scénarios dédiés aux groupes et au partage d'équipe couvrent la gouvernance des rôles, l'isolation IDOR, la résolution du droit le plus fort, l'expiration, le retrait immédiat d'un membre, l'archivage, le repartage durable, la révocation globale lors du passage en privé et l'audit sans données sensibles ;
+- l'archivage des requêtes est couvert par la conservation des cycles, la révocation atomique, l'audit sans contenu sensible, le refus d'un délégataire `manage` et l'absence de réactivation après restauration technique ;
+- les suites dédiées `QueryShareInvitationTest` et `NotificationCenterTest` couvrent l'absence d'accès avant consentement, l'acceptation et le refus idempotents, l'expiration calculée, l'IDOR, la perte d'autorité de l'émetteur, l'annulation lors du retour à `private` ou de l'archivage, l'isolation des notifications et leur payload technique ;
+- neuf nouveaux scénarios `QueryChangeRequestTest` couvrent création autorisée, IDOR, retrait d'accès, commentaires immuables, mentions autorisées, déduplication, transitions, rejeux idempotents, archivage atomique, masquage après perte d'accès, audit sans contenu et présentation normalisée dans le centre interne ;
+- dernière validation cumulative effectivement exécutée avant ces lots : 433 tests et 2 595 assertions réussis ; TypeScript, ESLint et Prettier ciblés du frontend collaboratif sont réussis. Pour les consoles 6A/6B, la validité et la parité des catalogues JSON FR/EN/ES ainsi que la revue statique ciblée sont confirmées, mais les contrôles Node complets, Pint, PHPStan et les tests PHP restent à relancer sans contournement lorsque les runners seront disponibles.
+
+Progression de l'étape 6 — **socle et lots de gouvernance 6A/6B implémentés le 18 juillet 2026** :
 
 - [x] créer une table système `query_templates` distincte des requêtes personnelles afin que l'original ne puisse jamais être altéré par un utilisateur ;
 - [x] exposer une bibliothèque dédiée de modèles actifs avec recherche, catégorie, description et ressource Oracle ;
@@ -240,24 +299,45 @@ Progression de l'étape 6 — **socle livré de manière anticipée le 18 juille
 - [x] garantir l'immutabilité applicative du modèle original et vérifier que l'aperçu, l'exécution et le clonage ne le modifient pas ;
 - [x] fournir quatre modèles initiaux par seeder idempotent, dont les factures fournisseurs supérieures à un montant choisi ;
 - [x] journaliser l'exécution et le clonage sans élargir l'accès aux connexions Oracle d'un autre utilisateur ;
-- [ ] traduire les noms, descriptions, options et aides des contenus officiels en FR/EN/ES ; l'interface de la bibliothèque est déjà traduite, mais le contenu seedé reste principalement en français ;
-- [ ] enregistrer les exécutions de modèles dans un journal statistique avec durée, statut, nombre de lignes, tenant et connexion, en plus de l'événement d'audit actuel ;
-- [ ] définir pour chaque paramètre une politique d'audit (`clair`, `masqué`, `empreinte` ou `omis`) avant d'introduire des valeurs potentiellement sensibles comme un fournisseur ou un texte libre ;
-- [ ] faire échouer l'exécution d'un modèle de manière fermée lorsqu'un fallback de compatibilité Oracle devrait retirer un filtre `q`, au lieu d'accepter silencieusement un résultat plus large ;
-- [ ] ajouter une console de gouvernance avec brouillon, revue, publication, archivage, propriétaire métier et date de révision ;
-- [ ] ajouter l'historique des versions, la comparaison, la restauration et la certification.
+- [x] traduire les noms, descriptions, options et aides des contenus officiels en FR/EN/ES — 12 traductions seedées pour les quatre modèles, avec repli champ par champ `locale -> fr -> contenu source` sans modifier les valeurs techniques ;
+- [x] enregistrer les aperçus et exécutions de modèles dans `query_executions` avec source, finalité, durée, statut, nombre de lignes, tenant et connexion ; le dashboard exclut explicitement les aperçus ;
+- [x] définir pour chaque paramètre une politique d'audit (`clear`, `masked`, `hmac` versionné ou `omit`) — toute politique absente ou inconnue échoue de manière fermée vers `omit` et aucune valeur brute masquée, empreintée ou omise n'est conservée ;
+- [x] faire échouer l'exécution de manière fermée lorsqu'un fallback Oracle retirerait ou modifierait un filtre `q` — l'invariant s'applique à toutes les tentatives, aux retries sans projection et aux jointures ; les modèles et leurs clones utilisent en plus la politique `exact` ;
+- [x] ajouter une console super-administrateur avec brouillon, revue, publication, archivage, propriétaire métier et date de révision ;
+- [x] créer un historique immuable des versions officielles, publier atomiquement une projection et marquer la version précédente comme remplacée ;
+- [x] ajouter un verrouillage optimiste du modèle et de la version, ainsi qu'une contrainte empêchant deux cycles éditoriaux ouverts en parallèle ;
+- [x] rattacher chaque clone, aperçu et exécution à la version officielle exacte capturée avant tout appel Oracle ;
+- [x] empêcher le seeder de réécrire une projection déjà gouvernée ; il initialise uniquement les modèles officiels encore absents ;
+- [x] ajouter la comparaison visuelle de deux versions exactes, la restauration sous forme d'une nouvelle version et la certification post-publication ;
+- [ ] ouvrir, dans un lot ultérieur, l'édition contrôlée de la définition Oracle technique et la création de nouveaux modèles officiels.
 
-Résultat partiel de l'étape 6 :
+Résultat courant de l'étape 6 :
 
 - les modèles globaux sont indépendants de tout propriétaire utilisateur et seuls les modèles actifs sont visibles ;
 - l'aperçu est borné à 25 lignes, tandis que l'exécution respecte la limite validée du modèle ;
 - les paramètres inconnus, valeurs hors domaine, structures de requête injectées et tenants non accessibles sont refusés avant l'appel Oracle ;
 - le clone reçoit sa propre description éditable, sa catégorie, ses paramètres résolus et sa visibilité privée sans modifier le modèle source ;
-- les exécutions sont auditées, mais ne contribuent pas encore à `query_executions` ni aux statistiques d'usage, et les valeurs de paramètres nécessitent une stratégie de masquage avant l'ajout de paramètres sensibles ;
-- 11 scénarios fonctionnels dédiés couvrent visibilité, isolation des tenants, liaison typée, échappement, limites, audit, clonage, immutabilité et idempotence du seeder ;
-- validation cumulative : 355 tests et 1 690 assertions, TypeScript, ESLint, Prettier et build Vite de production réussis.
+- chaque aperçu ou exécution directe possède une ligne statistique reliée au modèle, sans incrémenter les agrégats d'une requête personnelle ; seuls les `purpose=run` alimentent les statistiques mensuelles du dashboard ;
+- les événements d'exécution et de clonage ne contiennent que les paramètres autorisés par leur politique d'audit ; les clés sensibles simples, composées ou en `camelCase` restent refusées par le point d'entrée global d'audit ;
+- les modèles existants reçoivent une version 1 publiée contenant leur définition et leurs traductions ; le catalogue public continue d'utiliser uniquement le pointeur `published_version_id` et reste inchangé pendant un brouillon ou une revue ;
+- une publication fait passer la version revue à `published`, l'ancienne à `superseded`, puis projette dans la même transaction le contenu validé et les traductions FR/EN/ES ; une version soumise ne peut plus être modifiée ni supprimée ;
+- l'archivage retire le modèle de la bibliothèque sans supprimer ses versions et ferme proprement tout cycle encore ouvert ;
+- la comparaison charge explicitement deux versions du même modèle, y compris hors de la page d'historique courante, puis produit un diff canonique réparti entre métadonnées, traductions et définition technique ; cette lecture n'écrit ni audit ni état serveur et refuse tout identifiant appartenant à un autre modèle ;
+- la restauration ne remplace jamais la projection publique : elle copie un ancien snapshot réellement publié et désormais `superseded` dans un nouveau brouillon numéroté, conserve `restored_from_version_id`, revalide son empreinte et le catalogue actuel, puis impose le workflow normal avant toute publication ;
+- la certification est une attestation distincte du statut « Template officiel » et intervient après publication : elle référence la version publiée exacte et son empreinte, exige un propriétaire métier ainsi qu'une date de révision non dépassée, et peut exposer une note publique facultative limitée à 500 caractères ;
+- une seule certification peut être active par modèle ; elle reste dans l'historique mais cesse d'être effective publiquement dès que le pointeur publié, l'empreinte, le propriétaire ou la date de révision ne correspondent plus, et toute nouvelle publication ou tout archivage la révoque atomiquement ; une révocation manuelle motivée reste également possible ;
+- la bibliothèque et le détail publics affichent un badge « Certifiée » distinct et la note publique uniquement lorsque l'attestation reste effective ; la console conserve l'attestation devenue non effective pour permettre sa compréhension et sa révocation ;
+- les champs `business_owner_user_id`, `review_due_at`, `published_at/by`, `archived_at/by` et les verrous optimistes rendent la responsabilité et les échéances explicites ; une échéance n'est en retard qu'à partir du lendemain ;
+- la provenance `query_template_version_id` est conservée sur les copies personnelles et leurs exécutions ultérieures, ainsi que sur les aperçus et exécutions directes ;
+- les opérations publiques capturent sous un verrou court le snapshot publié puis libèrent le verrou avant l'appel Oracle ; définition, traductions et numéro de version ne peuvent donc pas provenir de deux publications concurrentes différentes ;
+- la console 6A/6B permet de gouverner les métadonnées et contenus trilingues, l'historique, la restauration et la certification ; la structure Oracle et les liaisons de paramètres restent en lecture seule afin de ne pas contourner la validation technique ;
+- les migrations de traductions, de métriques de modèles et de politique d'exécution sont appliquées localement en batch 9 ; la base contient quatre modèles et douze traductions officielles ;
+- 19 scénarios dédiés aux modèles couvrent notamment visibilité, localisation, repli de langue, isolation des tenants, liaison typée, échappement, limites, métriques, audit, clonage, immutabilité et idempotence du seeder ; ils sont complétés par les tests de sécurité du moteur Oracle ;
+- dix nouveaux scénarios de gouvernance couvrent la Policy super-administrateur, la publication atomique, le cycle unique, les conflits Inertia actionnables, les verrous obsolètes, l'IDOR de version, la validation de snapshot, l'immutabilité, l'archivage, le seeder, la reprise d'un bootstrap interrompu, la cohérence définition/traductions en concurrence et la provenance des exécutions clonées ;
+- neuf scénarios supplémentaires de gouvernance 6B couvrent la restauration et sa provenance, les verrous obsolètes, le cycle ouvert, les versions jamais publiées, les snapshots altérés, la comparaison exacte et sans écriture, l'IDOR, les prérequis de certification, les conflits imbriqués, la révocation manuelle ou automatique et l'expiration publique liée à la date de révision ; ces scénarios sont écrits mais n'ont pas encore été exécutés ;
+- les migrations `168000` et `169000` sont prêtes mais ne sont pas encore appliquées localement ; `169000` ajoute la provenance des restaurations et l'historique immuable des certifications. Les 709 clés de chacun des catalogues frontend FR/EN/ES, leurs paramètres et les catalogues backend sont valides et paritaires, et `git diff --check` réussit ; Pint, PHPStan, les tests PHP, TypeScript, ESLint, Prettier et le build Vite finaux restent à relancer dès disponibilité des runners.
 
-Clôture technique du lot actuel : ajouter la politique de confidentialité des paramètres d'audit, relier les exécutions de modèles aux métriques d'usage et compléter les traductions officielles. Le prochain chantier stratégique reste ensuite l'**étape 5 — partage ciblé et collaboration**. La suite éditoriale de l'étape 6 ne doit pas être déclarée terminée avant la livraison du versionnement, du workflow de publication et de la certification.
+La collaboration interne de l'**étape 5** est maintenant complète dans le code : partage direct et par groupes, invitations différées, réponses vers l'émetteur, demandes de modification, commentaires et mentions convergent dans le même centre interne sans partager les connexions Oracle. Les canaux e-mail et connecteurs sont volontairement rattachés aux étapes 9 et 12. L'**étape 6** possède désormais une publication versionnée réelle, une comparaison exacte, une restauration non destructive et une certification post-publication ; elle reste en cours uniquement pour les rôles éditoriaux spécialisés et l'édition contrôlée de la définition Oracle. Les migrations locales et les validations finales PHP et Node des lots `167000` à `169000` doivent être exécutées dès que les runners sont de nouveau autorisés.
 
 Périmètre analysé par ce document, qu'il soit déjà livré ou encore planifié :
 
@@ -410,9 +490,9 @@ Le chunk Wayfinder doit être analysé : vérifier le tree-shaking, limiter les 
 - la bibliothèque des modèles charge actuellement tous les modèles actifs et applique recherche et catégorie dans le navigateur ; ajouter pagination et recherche serveur avant une croissance importante du catalogue ;
 - plusieurs textes du query builder, des breadcrumbs et de l'affichage des résultats restent codés en français malgré la fondation i18n ;
 - le générateur SQL actuel produit du SQL pour BI Publisher à partir d'une configuration déjà structurée ; il ne constitue pas le futur traducteur de SQL standard vers un plan d'appels API ;
-- la console de publication, le versionnement, les rôles éditoriaux, la certification, le propriétaire métier et la date de révision des modèles restent à livrer ;
-- l'exécution d'un modèle produit un événement d'audit, mais pas encore une ligne `query_executions` complète ; les valeurs runtime actuellement auditées devront être masquées ou omises selon leur sensibilité ;
-- avant d'ajouter un modèle sur une ressource utilisant un fallback de compatibilité, notamment les bons de commande, interdire explicitement tout fallback qui supprimerait le filtre validé du modèle ;
+- les lots de console 6A/6B, le versionnement, la comparaison, la restauration non destructive, la certification, le propriétaire métier et la date de révision sont implémentés ; des rôles éditoriaux plus fins que `super_admin` et l'édition Oracle contrôlée restent à livrer ;
+- la durée de rétention et la purge contrôlée de `query_executions` et `audit_events` restent à formaliser avant une volumétrie de production importante ;
+- l'observabilité devra distinguer les incompatibilités Oracle bloquées par la politique `exact` des erreurs réseau, sans journaliser le filtre ni ses valeurs ;
 - le chunk Wayfinder reste le principal poste frontend à analyser.
 
 ## 4. Tags et catégories
@@ -613,35 +693,52 @@ Ne pas conserver les résultats Oracle complets par défaut. Stocker un code d'e
 
 La livraison synchrone utilise les statuts `succeeded` et `failed`; les états de queue restent réservés à l'étape 9. Chaque exécution enregistre l'utilisateur, son tenant, sa connexion, la durée, le nombre de lignes et un code d'erreur normalisé. Les agrégats atomiques sont affichés dans la bibliothèque avec tri par utilisation ou dernière exécution. Le dashboard expose, pour le mois courant et pour le seul utilisateur exécutant, le nombre d'exécutions, le taux de succès et la durée moyenne.
 
+Extension livrée le 18 juillet 2026 pour les modèles prédéfinis : `query_executions.source_type` distingue une requête enregistrée d'un modèle, `query_template_id` conserve la source directe et `purpose` distingue `preview` de `run`. Le lot 6A ajoute `query_template_version_id`, capturé avant l'appel Oracle, afin qu'un aperçu, une exécution directe ou l'exécution ultérieure d'un clone reste attribuable à la version officielle exacte. Un aperçu est observable sans être compté comme une exécution métier dans le dashboard. L'exécution directe d'un modèle ne modifie jamais les agrégats d'une requête personnelle ; une copie exécutée ultérieurement suit le parcours normal de sa propre requête tout en conservant cette provenance.
+
 ## 8. Demandes de modification
 
-### Modèle recommandé
+### Modèle retenu et implémenté le 18 juillet 2026
 
 ```text
 query_change_requests
 - id
 - query_id
-- requested_by
-- message
-- status
-- owner_response
-- resolved_by
-- resolved_at
+- requested_by_user_id nullable
+- title
+- status: pending | accepted | rejected | completed | cancelled
+- status_changed_by_user_id nullable
+- status_changed_at nullable
 - timestamps
+
+query_change_request_comments
+- id
+- query_change_request_id
+- user_id nullable
+- body
+- timestamps
+
+query_change_request_comment_mentions
+- query_change_request_comment_id
+- user_id
+- timestamps
+- primary (query_change_request_comment_id, user_id)
 ```
 
-États : `pending`, `accepted`, `rejected`, `completed`.
+Le titre reste sur la demande, tandis que le message initial, les précisions et la réponse du propriétaire utilisent le même fil immuable. Cette séparation évite des champs spéciaux `owner_response` et conserve une chronologie unique.
 
 ### Parcours
 
 1. Un utilisateur clique sur « Demander une modification ».
 2. Il décrit le changement souhaité.
-3. Le propriétaire reçoit une notification.
-4. Il accepte, refuse ou demande une précision.
-5. Une fois le changement appliqué, la demande passe à `completed`.
-6. La nouvelle version peut référencer la demande d'origine.
+3. Le propriétaire reçoit une notification technique interne ; les personnes explicitement mentionnées reçoivent un événement distinct et dédupliqué.
+4. Les lecteurs actuels peuvent demander une précision dans le fil tant que l'état est `pending` ou `accepted`.
+5. Le propriétaire accepte ou refuse une demande en attente, puis marque une demande acceptée comme terminée ou annulée ; le demandeur peut annuler sa demande encore en attente.
+6. Un rejeu vers l'état courant est sans effet et ne duplique ni commentaire, ni audit, ni notification.
+7. Une future version de requête personnelle pourra référencer la demande d'origine lorsque ce versionnement sera livré.
 
-Les e-mails et intégrations externes doivent être envoyés via la queue.
+Les mentions sont limitées à dix utilisateurs et vérifiées contre l'accès courant à la requête ; elles ne modifient jamais les grants. Les commentaires ne peuvent être ni modifiés ni supprimés. L'audit et les notifications conservent uniquement des identifiants et des états, jamais le titre ou le corps des messages.
+
+Les e-mails devront être envoyés via la queue à l'étape 9 et les intégrations externes via les connecteurs de l'étape 12.
 
 ## 9. Templates officiels verrouillés
 
@@ -661,16 +758,69 @@ query_templates
   parameters JSON
   parameter_definitions JSON
   is_active
+  governance_status
+  published_version_id nullable -> query_template_versions.id
+  business_owner_user_id nullable -> users.id
+  review_due_at nullable
+  published_at, published_by_user_id nullable
+  archived_at, archived_by_user_id nullable
+  lock_version
   sort_order
   timestamps
 
+query_template_versions
+  query_template_id -> query_templates.id
+  restored_from_version_id nullable -> query_template_versions.id
+  version_number
+  status: draft | review | published | superseded
+  open_slot nullable, unique avec query_template_id
+  definition JSON
+  translations JSON
+  content_hash
+  change_summary nullable
+  created_by_user_id, submitted_by_user_id, published_by_user_id nullable
+  submitted_at, published_at nullable
+  lock_version
+  timestamps
+
+query_template_certifications
+  query_template_id -> query_templates.id
+  query_template_version_id -> query_template_versions.id
+  version_content_hash
+  active_slot nullable, unique avec query_template_id
+  certified_by_user_id nullable -> users.id
+  certified_at
+  public_note nullable, 500 caractères maximum
+  revoked_by_user_id nullable -> users.id
+  revoked_at, revocation_reason nullable
+  lock_version
+  timestamps
+
+query_template_translations
+  query_template_id -> query_templates.id
+  locale
+  name
+  description nullable
+  parameter_labels JSON nullable
+  parameter_descriptions JSON nullable
+  parameter_options JSON nullable
+  unique (query_template_id, locale)
+
 queries
   query_template_id nullable -> query_templates.id
+  query_template_version_id nullable -> query_template_versions.id
+  execution_policy: best_effort | exact
+
+query_executions
+  source_type: saved_query | query_template
+  purpose: run | preview
+  query_template_id nullable -> query_templates.id
+  query_template_version_id nullable -> query_template_versions.id
 ```
 
-`query_templates` porte la définition immuable et les paramètres autorisés. `queries.query_template_id` conserve uniquement la provenance d'une copie personnelle ; la copie possède ensuite son propre nom, sa description, sa visibilité, son tenant et ses paramètres matérialisés.
+`query_template_versions` porte le snapshot immuable de la définition et des traductions. `restored_from_version_id` conserve la lignée d'une restauration sans réécrire l'historique. `query_templates` reste la projection publique de la seule version publiée. Les traductions ne remplacent que la présentation — nom, description, aides et libellés d'options — tandis que clés, valeurs, types, bornes et liaisons techniques restent issus de la définition source. `queries.query_template_id` et `query_template_version_id` conservent la provenance exacte d'une copie personnelle ; la copie possède ensuite son propre nom, sa description, sa visibilité, son tenant et ses paramètres matérialisés.
 
-La prochaine évolution de gouvernance ajoutera des statuts `draft`, `review`, `published` et `archived`, ainsi que `published_at`, `published_by`, le propriétaire métier et la date de révision. Ces champs ne doivent pas être simulés avec `is_active` : celui-ci représente seulement la disponibilité opérationnelle actuelle.
+Le lot 6A ajoute les statuts de gouvernance et de version `draft`, `review`, `published`, `superseded` et `archived`, ainsi que `published_at`, `published_by`, le propriétaire métier et la date de révision. Ces champs ne sont pas simulés avec `is_active` : celui-ci représente seulement la disponibilité opérationnelle de la projection publiée. Le lot 6B ajoute la lignée des restaurations et des attestations de certification immuables, liées à la version exacte et à son empreinte plutôt qu'au seul état mutable du modèle.
 
 ### Règles
 
@@ -678,30 +828,43 @@ La prochaine évolution de gouvernance ajoutera des statuts `draft`, `review`, `
 - un utilisateur standard ne peut ni le modifier, ni le supprimer, ni changer sa visibilité ;
 - chaque utilisateur l'exécute uniquement avec l'une de ses propres connexions Oracle ;
 - les valeurs personnalisées sont validées et liées côté serveur à une structure placée sur liste blanche ;
+- un filtre `q` validé ne peut être ni supprimé ni modifié par un fallback, un retry ou une jointure ; les exécutions de modèles utilisent la politique `exact` ;
+- chaque définition de paramètre déclare ce que l'audit peut conserver, avec omission par défaut en cas d'absence ou d'erreur de configuration ;
 - tous les utilisateurs autorisés peuvent le prévisualiser, l'exécuter ou le cloner ;
 - le clone devient une requête utilisateur privée et modifiable ;
 - le clone conserve un lien de provenance, mais sa modification n'altère jamais le modèle ;
-- les mises à jour système passent actuellement par un seeder idempotent contrôlé ;
-- lorsque la console éditoriale sera livrée, toute modification officielle créera une version et seuls les administrateurs autorisés pourront publier ou archiver.
+- le seeder initialise uniquement un modèle absent et ne réécrit jamais une projection déjà gouvernée ;
+- toute modification officielle depuis la console crée une version distincte et seuls les super-administrateurs peuvent soumettre, publier ou archiver ;
+- un brouillon ou une revue n'altère jamais le modèle visible par les utilisateurs ; seule une publication projette atomiquement le snapshot validé ;
+- la comparaison est une lecture déterministe de deux versions appartenant au même modèle et ne produit aucun audit ni effet de bord ;
+- restaurer une ancienne publication crée toujours un nouveau brouillon avec sa provenance ; la projection courante et l'ancienne version restent intactes ;
+- une version jamais publiée, la version publique courante, un snapshot dont l'empreinte a été altérée ou un modèle possédant déjà un cycle ouvert ne peuvent pas être restaurés ;
+- la certification est une attestation post-publication distincte du workflow éditorial : elle exige la version publique exacte, son empreinte valide, un propriétaire métier et une date de révision non dépassée ;
+- une seule certification est active à la fois ; sa publication publique échoue de manière fermée si le modèle, la version, l'empreinte ou l'échéance ne correspondent plus, sans effacer l'historique ;
+- une nouvelle publication ou l'archivage révoque atomiquement l'attestation active ; un super-administrateur peut aussi la révoquer manuellement avec un verrou optimiste.
 
-L'autorité actuelle repose sur les middlewares d'authentification, de vérification et d'onboarding, sur `ensureActive()`, sur l'absence de route utilisateur de mutation et sur les protections du modèle Eloquent. Une future console éditoriale devra introduire une Policy ou un Gate explicite ; masquer un bouton dans React ne suffira pas.
+L'autorité publique repose sur les middlewares d'authentification, de vérification et d'onboarding, sur `ensureActive()` et sur les protections du modèle Eloquent. La console éditoriale possède maintenant une `QueryTemplatePolicy` explicite réservée au `super_admin`, vérifie l'appartenance des versions imbriquées et applique ses règles côté service transactionnel ; masquer un bouton React n'est jamais considéré comme une autorisation.
 
 ### Interface
 
 - badge « Template officiel » ;
 - icône de verrouillage ;
-- version publiée — future ;
+- version publiée et cycle éditorial courant ;
 - boutons « Prévisualiser », « Exécuter » et « Créer ma version » ;
 - recherche et filtre par catégorie dans une section dédiée ;
 - formulaire de paramètres typés avec valeurs par défaut, contraintes et aide ;
 - choix limité aux environnements Oracle du lecteur ;
-- rappel visible que l'original est immuable.
+- rappel visible que l'original est immuable ;
+- sélecteurs permettant de comparer deux versions exactes, avec sections métadonnées, traductions et technique ;
+- action de restauration uniquement sur une ancienne version publiée et remplacée, avec confirmation et résumé facultatif ;
+- carte de certification présentant les prérequis, la note publique, l'état effectif et la révocation ;
+- badge « Certifiée » distinct du badge « Template officiel » dans la bibliothèque et le détail publics.
 
 ### État livré le 18 juillet 2026
 
-La bibliothèque dédiée, les quatre modèles initiaux, la liaison typée et contrôlée de leurs paramètres, l'aperçu, l'exécution auditée et le clonage privé sont opérationnels. Le modèle original est protégé contre les mises à jour et suppressions applicatives. Les copies personnelles peuvent être modifiées et leur description peut être adaptée sans toucher à l'original. L'ajout de nouveaux modèles restera conditionné à une exécution qui échoue de manière fermée plutôt que de retirer silencieusement un filtre pour contourner une incompatibilité Oracle.
+La bibliothèque dédiée, les quatre modèles initiaux et leurs contenus FR/EN/ES, la liaison typée et contrôlée des paramètres, l'aperçu, l'exécution mesurée et auditée ainsi que le clonage privé sont opérationnels. Le modèle original est protégé contre les mises à jour et suppressions applicatives. Les copies personnelles sont créées en politique `exact`, peuvent être modifiées et conservent une description adaptée à la langue active sans toucher à l'original. La console permet également de comparer l'historique complet, de restaurer une publication remplacée sous forme d'un nouveau brouillon et de certifier la publication exacte sans confondre confiance métier et caractère officiel. L'ajout de nouveaux modèles reste conditionné à une politique d'audit explicite et à une exécution qui échoue de manière fermée plutôt que de retirer silencieusement un filtre pour contourner une incompatibilité Oracle.
 
-Le périmètre restant de cette section est la gouvernance éditoriale : version publiée, workflow de revue, certification, traduction du contenu officiel, comparaison et restauration.
+Le périmètre restant de cette section est la délégation éditoriale : rôles spécialisés plus fins que `super_admin`, responsable technique et édition contrôlée de la définition Oracle.
 
 ## 10. Architecture cible
 
@@ -716,8 +879,15 @@ users
 
 query_templates
   ├── category
+  ├── translations FR/EN/ES
+  ├── query_template_versions immuables
+  │     └── lignée de restauration entre versions
+  ├── pointeur vers la version publiée
+  ├── historique des certifications lié aux versions et empreintes exactes
+  ├── propriétaire métier et date de révision
   ├── paramètres et définitions placés sur liste blanche
-  └── copies personnelles via queries.query_template_id
+  ├── query_executions directes
+  └── copies personnelles via queries.query_template_id + query_template_version_id
 
 oracle_tenants
   ├── user propriétaire
@@ -731,6 +901,7 @@ queries
   ├── query_versions
   ├── query_executions
   ├── query_change_requests
+  │     └── comments + mentions
   └── query_user_preferences
 ```
 
@@ -799,7 +970,9 @@ Ces valeurs devront être adaptées à l'infrastructure réelle.
 - limiter durée et coût des agents ;
 - définir la rétention des exécutions et notifications ;
 - tester les accès entre propriétaire, utilisateur et administrateur ;
-- envisager la suppression logique si l'historique doit être conservé.
+- appliquer la suppression logique livrée aux requêtes et aux groupes ; réserver toute purge physique future à une politique de rétention explicite.
+- considérer une invitation `pending` comme un message sans droit d'accès, revalider son émetteur lors de l'acceptation et borner toute réponse au destinataire authentifié ;
+- limiter les notifications persistées aux identifiants techniques, isoler leur lecture par propriétaire et définir leur durée de rétention avant la production.
 
 ## 14. Feuille de route
 
@@ -834,7 +1007,7 @@ Cette feuille de route initiale est conservée comme historique de l'audit. La s
 ### Phase 4 — Collaboration
 
 1. Créer les demandes de modification.
-2. Ajouter les notifications internes.
+2. Ajouter les notifications internes — centre paginé, compteur non lu et réponse du destinataire depuis le centre livrés et validés.
 3. Envoyer les notifications externes via la queue.
 4. Lier les demandes acceptées aux versions produites.
 
@@ -859,6 +1032,11 @@ Cette section mélange les régressions déjà automatisées et le backlog resta
 - onboarding impossible sans connexion Basic testée, active, vérifiée et par défaut ;
 - refus de désactiver ou supprimer la dernière connexion active ;
 - exécution d'une requête partagée avec la connexion du lecteur uniquement ;
+- gouvernance des groupes, isolation des routes, rôles des membres et retrait immédiat des accès hérités ;
+- cycle de vie des grants de groupe, droit effectif cumulatif, archivage logique et passage global à `private` ;
+- archivage transactionnel d'une requête, révocation des grants, conservation des cycles et absence de réactivation après restauration technique ;
+- invitations utilisateur sans accès avant consentement, acceptation et refus idempotents, expiration calculée, revalidation du délégataire et annulation transactionnelle lors du retour à `private` ou de l'archivage ;
+- isolation `404` des réponses aux invitations et des notifications, lecture unitaire ou globale et payload interne limité aux identifiants techniques ;
 - jobs résolus dans le périmètre explicite de leur utilisateur ;
 - favoris propres à chaque utilisateur ;
 - ordre des épingles ;
@@ -885,6 +1063,10 @@ Cette section mélange les régressions déjà automatisées et le backlog resta
 - payload de création et de mise à jour incluant la description personnalisée ;
 - recherche, configuration, aperçu, exécution et clonage d'un modèle prédéfini ;
 - affichage des erreurs de paramètres et de clonage ;
+- gestion des groupes, membres et rôles depuis `/groups` ;
+- bascule « Personne »/« Groupe », pagination, expiration, révocation et historique dans « Gérer le partage » ;
+- invitations nominatives en attente avec date limite de réponse et annulation depuis « Gérer le partage » ;
+- centre de notifications paginé avec filtre non lu, compteur dans la navigation, acceptation, refus et marquage comme lu ;
 - cache, déduplication, timeout et retry de la découverte des champs ;
 - sérialisation canonique des champs, expansions, jointures et `child_fields` ;
 - parcours clavier et accessibilité du formulaire de paramètres ;
@@ -931,23 +1113,23 @@ La priorité est la pagination, les index, la mémoïsation des tenants et l'obs
 
 L'existence d'un menu « Requêtes partagées » ne supprime pas le besoin d'un état d'accès. Le backend doit toujours déterminer qui peut consulter, exécuter, cloner ou administrer une requête. En revanche, afficher une colonne « Visibilité » sur toutes les pages est souvent redondant.
 
-Décision recommandée :
+Décision appliquée dans les lots de partage et de collaboration de l'étape 5 :
 
 - conserver l'information d'accès dans le modèle et les Policies ;
 - retirer la colonne de la page dédiée « Requêtes partagées » ;
 - afficher un badge compact dans les vues mixtes et « Mes requêtes » ;
-- afficher le détail des destinataires sur la page de détail ;
+- afficher les actions réellement autorisées sur la page de détail et les destinataires dans « Gérer le partage » ;
 - déplacer le changement d'accès dans une action explicite « Gérer le partage » ;
 - éviter qu'un simple clic sur un badge change accidentellement les droits.
 
-### Remplacer le binaire `private/shared`
+### Remplacement livré du binaire `private/shared`
 
-Le champ actuel ne permet pas le partage ciblé. Le modèle cible devrait utiliser :
+La migration remplace le champ historique par :
 
 ```text
 access_level
 - private       propriétaire uniquement
-- restricted    utilisateurs ou groupes explicitement autorisés
+- restricted    personnes et groupes explicitement autorisés
 - organization  tous les utilisateurs autorisés de la plateforme
 ```
 
@@ -960,81 +1142,163 @@ Les templates officiels utilisent en complément leur statut de publication et l
 | Mes requêtes | Badge Privée, Restreinte ou Organisation et action « Gérer le partage » |
 | Requêtes partagées | Pas de colonne de visibilité ; propriétaire et origine du partage |
 | Toutes les requêtes | Badge compact pour comprendre l'origine de l'accès |
-| Détail | Résumé complet des droits, destinataires et actions autorisées |
+| Détail | Niveau d'accès, droits effectifs et actions autorisées |
+| Gérer le partage | Destinataires actifs, permission, expiration, révocation et historique |
 | Administration | Niveau d'accès, propriétaire, destinataires et historique |
 
-## 19. Partage ciblé et envoi à des utilisateurs
+## 19. Partage ciblé avec des utilisateurs et des groupes
 
 ### Objectif
 
-Permettre de partager une requête avec une personne, plusieurs personnes, une équipe ou toute l'organisation, sans la rendre automatiquement accessible à tous.
+Les lots de partage permettent de partager une requête avec une ou plusieurs personnes, avec un ou plusieurs groupes, ou avec toute l'organisation. Une personne déjà inscrite peut recevoir une invitation et choisir de l'accepter ou de la refuser depuis son centre de notifications ; les groupes restent partagés immédiatement. Le lot collaboratif ajoute ensuite demandes de modification, commentaires et mentions sans élargir les droits. Tous les parcours conservent une frontière stricte entre la définition partagée et les tenants ou connexions Oracle, qui restent personnels au lecteur.
 
-### Modèle recommandé
+### Modèle livré pour les utilisateurs
 
 ```text
-query_shares
+query_user_shares
 - id
 - query_id
-- shared_by
-- recipient_type: user | group
-- recipient_id
+- shared_by_user_id
+- user_id
 - permission: view | execute | clone | manage
-- status: pending | accepted | declined | revoked
+- status: pending | accepted | declined | cancelled | revoked
 - expires_at nullable
+- respond_by nullable
 - accepted_at nullable
+- declined_at nullable
+- cancelled_at nullable
+- revoked_at nullable
 - timestamps
 
-Contrainte unique :
-(query_id, recipient_type, recipient_id)
+Index de résolution et de cycle de vie :
+(query_id, user_id, status)
+(user_id, status, respond_by)
+(query_id, status, respond_by)
 ```
 
-Pour bénéficier de clés étrangères strictes, deux tables séparées `query_user_shares` et `query_group_shares` constituent une alternative plus robuste à la relation polymorphique.
+La même ligne porte l'invitation puis, après consentement, le grant : `pending` ne participe à aucun scope d'accès ; `accepted` l'active sans perdre son origine. Un refus ou une annulation clôt la ligne en `declined` ou `cancelled`, tandis qu'une révocation ultérieure d'un accès accepté produit `revoked`. L'expiration de l'invitation est calculée lorsque `respond_by` ou `expires_at` est dépassé et n'ajoute donc pas de statut persistant. Chaque nouveau cycle crée une nouvelle ligne afin de préserver l'historique ; le verrou de la requête sérialise la création et empêche un grant actif et une invitation valide concurrents pour le même destinataire. Le partage de groupe applique le même principe historique dans une table dédiée, sans invitation ni relation polymorphique.
+
+La route de partage direct immédiat est conservée pour la compatibilité applicative, mais le parcours utilisateur « Personne » crée une invitation différée. Les candidats sont exclusivement des comptes déjà inscrits : ce lot ne crée ni invitation par adresse libre, ni jeton public, ni e-mail d'invitation.
+
+### Notifications internes implémentées dans le troisième lot
+
+```text
+notifications
+- id UUID
+- type
+- notifiable_type
+- notifiable_id
+- data: share_id, query_id, invited_by_user_id uniquement
+- read_at nullable
+- timestamps
+```
+
+La notification Laravel utilise uniquement le canal `database` et est écrite de manière synchrone dans la transaction qui crée l'invitation. Le navigateur ne reçoit pas de nom ou d'adresse stockés dans `notifications.data` : le contrôleur résout en lot la requête, l'émetteur et l'état courant depuis la ligne de partage autorisée. Le centre `/notifications` est paginé, accepte les filtres `all` et `unread`, autorise la lecture unitaire ou globale et expose un compteur non lu borné dans les props Inertia communes. Une réponse marque la notification correspondante comme lue.
+
+L'émetteur reçoit maintenant une notification interne idempotente lors de l'acceptation ou du refus réel ; un rejeu de la même réponse ne crée aucun doublon. Les e-mails, Teams, Slack, webhooks et autres canaux externes restent futurs et devront être envoyés après commit via la queue.
+
+`queries.deleted_at` transforme la suppression fonctionnelle en archivage. Le propriétaire est le seul à pouvoir l'effectuer ; la requête est verrouillée, tous ses grants actifs sont révoqués, toutes ses invitations encore valides sont annulées et ces mutations sont auditées avant l'archivage dans la même transaction. Les lignes directes, les lignes de groupe et les exécutions ne sont donc plus effacées par cascade. Une éventuelle restauration technique ne réactive ni grant ni invitation ; une future purge physique devra suivre une politique de rétention explicite.
 
 ### Groupes et équipes
 
 ```text
 groups
 - id
+- owner_id
 - name
 - description
-- owner_id
 - timestamps
+- deleted_at nullable
 
 group_user
 - group_id
 - user_id
 - role: owner | manager | member
+- timestamps
+
+Contrainte d'appartenance :
+unique(group_id, user_id)
+
+query_group_shares
+- id
+- query_id
+- group_id
+- group_name: snapshot du libellé au moment du cycle
+- shared_by_user_id nullable
+- permission: view | execute | clone
+- status: accepted | revoked
+- expires_at nullable
+- accepted_at nullable
+- revoked_at nullable
+- timestamps
+
+Index de résolution et de cycle de vie :
+(query_id, group_id, status)
+(group_id, status, expires_at)
+(query_id, status)
+(shared_by_user_id, status)
 ```
 
-Un groupe permet de gérer les droits d'une équipe une seule fois. Le retrait d'un utilisateur doit retirer immédiatement ses accès hérités.
+Le créateur devient propriétaire et possède aussi une appartenance `owner`. Le propriétaire peut renommer, décrire et archiver le groupe, nommer ou rétrograder un gestionnaire et gérer tous les membres. Un `manager` peut ajouter ou retirer un membre ordinaire, mais ne peut ni nommer un autre gestionnaire, ni modifier un rôle, ni retirer le propriétaire, un autre gestionnaire ou sa propre appartenance. Un `member` consulte simplement le groupe et bénéficie de ses grants actifs.
 
-### Permissions recommandées
+Les droits hérités sont calculés à partir des appartenances courantes. Le retrait d'un membre ferme donc immédiatement son accès par ce groupe, alors que le grant reste actif pour les autres membres. L'archivage est une suppression logique : il révoque d'abord tous les grants actifs du groupe dans la même transaction, conserve les lignes de partage pour l'historique et s'appuie sur `group_name` pour préserver le libellé propre à chaque cycle, même après un renommage.
+
+Comme pour une personne, chaque révocation ou expiration clôt un cycle et un repartage crée une nouvelle ligne. Il n'existe pas de contrainte unique permanente qui obligerait à écraser l'historique.
+
+### Permissions livrées et cumulatives
 
 - `view` : consulter les informations ;
 - `execute` : exécuter la définition avec l'une des connexions actives appartenant au lecteur ;
 - `clone` : créer une copie personnelle ;
-- `manage` : gérer le partage, pour le propriétaire ou un délégataire explicite.
+- `manage` : gérer le partage, pour le propriétaire ou un délégataire nominatif explicite.
 
-La modification directe de la source ne devrait pas être accordée par défaut. « Demander une modification » protège mieux la gouvernance et l'historique.
+Chaque niveau inclut les précédents : `execute` inclut `view`, `clone` inclut `execute` et `view`, et `manage` inclut les trois. Le droit effectif est le plus fort parmi la propriété, un grant direct, les groupes courants et la portée `organization`. Un grant de groupe est plafonné à `view`, `execute` ou `clone` : `manage` n'est jamais hérité d'un groupe et reste un grant nominatif. Le rôle `manager` d'un groupe autorise la gestion encadrée de ses membres, mais ne confère pas à lui seul la gestion du partage d'une requête.
 
-### Parcours « Envoyer à »
+Même avec `manage`, la modification directe de la définition reste réservée à son propriétaire. Seul le propriétaire peut attribuer `manage` ou changer `access_level`. Un gestionnaire délégué peut administrer les grants `view` à `clone`, directs ou de groupe, sauf son propre grant direct, et ne peut leur donner une durée supérieure à celle de sa propre délégation. Le parcours livré « Demander une modification » protège cette gouvernance sans élargir le droit : tout lecteur peut proposer et commenter, mais seul le propriétaire décide de l'état de la demande.
 
-1. Le propriétaire choisit « Partager » ou « Envoyer à ».
-2. Il recherche des utilisateurs ou groupes dans un sélecteur serveur paginé.
-3. Il choisit les permissions et éventuellement une date d'expiration.
-4. Les destinataires reçoivent une notification et voient la requête dans « Partagées avec moi ».
-5. Une invitation peut exiger une acceptation avant activation.
-6. Le propriétaire peut révoquer l'accès à tout moment.
+### Parcours « Gérer le partage » livré
+
+1. Le propriétaire, ou un délégataire nominatif disposant de `manage`, ouvre « Gérer le partage ».
+2. Il choisit le type de destinataire « Personne » ou « Groupe », puis recherche un candidat dans le sélecteur serveur paginé correspondant.
+3. Il choisit une permission et éventuellement une date d'expiration ; le groupe ne propose jamais `manage`.
+4. Pour un groupe, le grant est accepté immédiatement. Pour une personne, l'émetteur fixe aussi une date limite de réponse, bornée par défaut à sept jours et jamais postérieure à l'expiration proposée ; une notification interne est créée sans ouvrir la requête.
+5. Le destinataire ouvre `/notifications`, puis accepte ou refuse. Le serveur limite la sélection à ses propres invitations en `404`, verrouille la requête puis la ligne, vérifie qu'elle est encore répondable et revalide l'autorité actuelle de l'émetteur.
+6. Une acceptation fait passer la même ligne à `accepted`. Si la requête était encore `private`, elle devient `restricted` dans cette transaction ; elle apparaît alors seulement dans « Partagées avec moi ». Un refus passe la ligne à `declined` sans avoir jamais accordé de droit.
+7. L'émetteur peut annuler une invitation encore en attente depuis « Gérer le partage ». Il peut ensuite modifier ou révoquer un grant accepté dans les limites de sa délégation ; son propre grant direct et les autres grants `manage` restent sous le contrôle du propriétaire.
+8. Les invitations en attente, les grants actifs et les cycles refusés, annulés, révoqués ou expirés sont présentés séparément sans écraser l'historique ; les groupes conservent leur snapshot de nom.
+
+La page `/groups` fournit en complément le CRUD des groupes accessibles, la liste paginée des membres et candidats, ainsi que les actions autorisées par le rôle courant.
 
 ### Sécurité et performance
 
 - appliquer les droits dans la Policy, jamais uniquement dans React ;
-- indexer `(recipient_type, recipient_id, status)` et `(query_id, status)` ;
-- ne pas charger toute la liste des utilisateurs dans le navigateur ;
-- journaliser partage, acceptation, changement de permission et révocation ;
+- utiliser les mêmes scopes et Policies pour la bibliothèque, le dashboard, le détail, l'exécution et le clonage ;
+- indexer la résolution des grants par `(user_id, status, expires_at)` et `(query_id, status)`, ainsi que les invitations par destinataire ou requête avec `status` et `respond_by` ;
+- indexer les grants de groupe par groupe, requête, statut et expiration, et borner leur résolution aux groupes courants du lecteur ;
+- ne charger ni toute la liste des utilisateurs ni toute la liste des groupes dans le navigateur ;
+- considérer l'annuaire actuel comme un annuaire d'organisation unique ; avant toute architecture multi-organisation, borner explicitement les candidats et les adresses visibles au périmètre de l'organisation ;
+- masquer en `404` les sélections et grants imbriqués hors du contexte autorisé, puis appliquer les Policies aux mutations de groupe et de membres ;
+- borner en `404` chaque réponse à `query_user_shares.user_id = utilisateur courant` et chaque lecture de notification à la relation `user.notifications()` ;
+- journaliser création, changement de permission, révocation, archivage de groupe ou de requête, changements de membres et changement de niveau d'accès ;
 - interdire qu'un destinataire repartage sans permission `manage` ;
+- réserver au propriétaire le changement de portée globale et l'attribution de `manage` ;
+- interdire `manage` sur tout grant de groupe et distinguer ce droit du rôle `manager` du groupe ;
+- plafonner chaque expiration accordée par un gestionnaire à l'expiration de sa propre délégation ;
+- ne jamais faire participer `pending`, `declined` ou `cancelled` aux scopes d'accès, aux Policies ou à « Partagées avec moi » ;
+- revalider au moment de l'acceptation le grant `manage` de l'émetteur délégué et annuler l'invitation si cette autorité a disparu ou ne couvre plus la durée proposée ;
+- conserver uniquement les identifiants nécessaires dans la notification interne et résoudre les libellés depuis les relations autorisées ;
+- créer un nouveau cycle lors d'un repartage afin de ne pas écraser l'historique révoqué ou expiré ;
+- révoquer atomiquement les grants de groupe lors de l'archivage et les grants directs plus ceux de groupe lors du passage à `private` ;
+- révoquer atomiquement tous les grants actifs avant l'archivage logique d'une requête, sans réactiver ces grants lors d'une restauration technique ;
+- annuler atomiquement les invitations encore valides lors du retour à `private` ou de l'archivage logique, sans les réactiver lors d'une restauration technique ;
+- recalculer l'accès à partir des appartenances courantes afin qu'un retrait de membre soit effectif immédiatement ;
 - autoriser séparément l'accès à la définition puis la connexion choisie par le lecteur ;
-- ne jamais transmettre, réutiliser ou révéler le tenant et les credentials du propriétaire lors du partage.
+- ne jamais transmettre, réutiliser ou révéler le tenant et les credentials du propriétaire lors du partage ;
+- résoudre toute exécution partagée avec un tenant et une connexion active appartenant au lecteur.
+
+Avant une montée en charge publique, ajouter des quotas et un throttling dédiés à la création de groupes, aux mutations de membres et aux cycles de partage. La suppression physique future d'une requête, ou la suppression du compte qui la possède, devra également suivre une politique explicite de rétention, d'anonymisation ou de purge puisqu'elle peut déclencher les cascades de base de données que l'archivage fonctionnel évite désormais.
+
+Le partage direct, le partage de groupe, les invitations différées, les réponses vers l'émetteur, les demandes de modification et le centre de notifications interne sont implémentés avec leurs expirations, révocations, historiques, audits et règles d'isolation. Les commentaires immuables et mentions structurées restent soumis à l'accès courant. Les canaux externes sont reportés aux étapes 9 et 12 ; la migration `167000` et la validation PHP finale doivent encore être exécutées localement.
 
 ## 20. Administrateur général et limites de son périmètre
 
@@ -1193,7 +1457,7 @@ Avant toute prise en charge OAuth Oracle, réaliser une preuve de concept sur un
 
 ### Gouvernance et confiance
 
-- workflow brouillon, revue, certification, publication et archivage ;
+- workflow brouillon, revue, publication, certification post-publication et archivage ;
 - badge « Certifiée » distinct du template officiel ;
 - propriétaire métier et responsable technique ;
 - date de révision et alertes de contenu obsolète ;
@@ -1206,7 +1470,7 @@ Avant toute prise en charge OAuth Oracle, réaliser une preuve de concept sur un
 - commentaires et mentions ;
 - abonnements aux changements ;
 - vues enregistrées et filtres partageables ;
-- centre de notifications ;
+- centre de notifications interne — parcours d'invitations implémenté ; extension aux réponses vers l'émetteur, abonnements et autres événements encore à réaliser ;
 - transfert de propriété au départ d'un utilisateur.
 
 ### Automatisation
@@ -1264,14 +1528,17 @@ queries
 query templates
   ├── définition système immuable
   ├── paramètres typés et liaisons autorisées
-  ├── catégorie et traductions futures
+  ├── catégorie et traductions FR/EN/ES
+  ├── métriques d'aperçu et d'exécution
+  ├── politiques d'audit par paramètre
   └── copies personnelles traçables
 
 platform
   ├── identity providers
   ├── politiques réseau et stratégies d'authentification supportées
   ├── roles et permissions
-  ├── jobs et notifications
+  ├── notifications internes en base et compteur non lu
+  ├── jobs et canaux externes futurs
   └── audit global
 ```
 
@@ -1291,11 +1558,13 @@ Cette extension est conservée pour retracer les décisions d'architecture. Sa n
 
 ### Phase 4 — Collaboration ciblée
 
-1. Remplacer `private/shared` par `private/restricted/organization`.
-2. Créer groupes et partage ciblé.
-3. Ajouter « Partagées avec moi » et « Envoyer à ».
-4. Créer les demandes de modification.
-5. Ajouter notifications et expirations.
+1. [x] Remplacer `private/shared` par `private/restricted/organization`.
+2. [x] Livrer le partage ciblé direct avec un utilisateur, ses permissions cumulatives et son audit.
+3. [x] Ajouter « Partagées avec moi » et « Gérer le partage » avec historique, expiration et révocation.
+4. [x] Créer les groupes et le partage d'équipe avec rôles, cycle de vie, historique et retrait immédiat des accès hérités.
+5. [x] Archiver logiquement les requêtes supprimées en conservant et clôturant leurs cycles de partage.
+6. [x] Créer les demandes de modification avec commentaires immuables, mentions structurées et transitions gouvernées — implémentées ; migration locale et validation PHP finale à relancer.
+7. [x] Ajouter les invitations utilisateur avec acceptation différée et le centre de notifications interne — livrés, migrés et validés ; les réponses internes idempotentes vers l'émetteur sont également implémentées. Les canaux externes restent futurs.
 
 ### Phase 6 — Différenciation produit
 
@@ -1478,6 +1747,8 @@ semantic_resource_translations
 
 Contrainte unique recommandée pour chaque table : `(entité_id, locale)`.
 
+État au 18 juillet 2026 : `query_template_translations` est livré pour le nom, la description, les libellés, les aides et les options des paramètres, avec unicité modèle/locale et repli `locale active -> fr -> contenu source`. `usage_instructions` reste une extension de la future gouvernance éditoriale.
+
 Les requêtes personnelles ne doivent pas être traduites automatiquement. Leur propriétaire peut créer des variantes ou demander une traduction assistée clairement identifiée comme telle.
 
 ### Terminologie contrôlée
@@ -1638,7 +1909,7 @@ Chaque promotion peut exiger tests automatiques, approbation, résumé de change
 
 ### Requêtes paramétrables
 
-**Partiellement livré le 18 juillet 2026 pour les modèles prédéfinis.** Les types nombre, entier, texte, date, liste et booléen sont pris en charge avec valeurs par défaut, obligation, bornes et options autorisées. Les liaisons de filtre et de limite sont construites côté serveur à partir de définitions contrôlées.
+**Partiellement livré le 18 juillet 2026 pour les modèles prédéfinis.** Les types nombre, entier, texte, date, liste et booléen sont pris en charge avec valeurs par défaut, obligation, bornes et options autorisées. Les liaisons de filtre et de limite sont construites côté serveur à partir de définitions contrôlées. Leur présentation officielle est disponible en FR/EN/ES et chaque valeur possède une politique d'audit explicite ; les valeurs techniques des listes ne sont jamais traduites.
 
 La suite ajoutera les paramètres métier comme l'unité opérationnelle, le fournisseur, la devise et les listes de valeurs provenant d'Oracle, avec cache prudent et isolation par tenant.
 
@@ -1721,21 +1992,34 @@ Cette feuille de route remplace l'ordre indicatif des sections précédentes. El
 
 ### Étape 5 — Partage ciblé et collaboration
 
-- niveaux `private`, `restricted`, `organization` ;
-- partage avec utilisateurs et groupes ;
-- permissions, expiration et révocation ;
-- centre de notifications ;
-- demandes de modification, commentaires et mentions.
+**Implémentation interne terminée le 18 juillet 2026. Migration locale et validation PHP finale à relancer. Les canaux externes relèvent des étapes 9 et 12.**
+
+- [x] niveaux `private`, `restricted`, `organization` ;
+- [x] partage direct avec des utilisateurs et gestion paginée des destinataires ;
+- [x] permissions cumulatives `view`, `execute`, `clone`, `manage` ;
+- [x] expiration, révocation, historique et audit ;
+- [x] accès cohérent entre bibliothèque, dashboard, détail, exécution et clonage ;
+- [x] exécution exclusivement avec une connexion Oracle appartenant au lecteur ;
+- [x] partage avec des groupes, gestion `/groups`, rôles `owner/manager/member`, archivage logique et retrait immédiat des accès hérités ;
+- [x] permissions de groupe plafonnées à `view/execute/clone`, cycles d'expiration et révocation conservés avec snapshot du nom ;
+- [x] archivage logique des requêtes, révocation atomique et audit des grants actifs, conservation des cycles et des exécutions ;
+- [x] invitations nominatives `pending` sans accès, acceptation/refus différés, revalidation du délégataire, annulation lors du retour à `private` ou de l'archivage, et centre interne paginé avec états lus/non lus — livrés et validés ;
+- [x] notification interne idempotente de la réponse à l'émetteur ;
+- [x] demandes de modification, commentaires immuables et mentions structurées ;
+- [x] clôture atomique des demandes ouvertes lors de l'archivage et masquage du contexte après perte d'accès ;
+- [ ] e-mails via la queue — étape 9 ; connecteurs externes — étape 12.
 
 ### Étape 6 — Gouvernance et templates officiels
 
-**En cours. Socle des modèles prédéfinis livré et validé le 18 juillet 2026 ; gouvernance éditoriale restante.**
+**En cours. Lots 6A/6B implémentés le 18 juillet 2026 ; validations PHP/Node et migrations locales `168000`/`169000` à relancer. La délégation éditoriale spécialisée et l'édition Oracle contrôlée restent à livrer.**
 
-- historique des versions ;
-- comparaison et restauration ;
-- templates verrouillés — bibliothèque, paramètres, aperçu, exécution et clone privé livrés ;
-- workflow de validation et certification ;
-- propriétaires métier et dates de révision.
+- [x] historique immuable des versions officielles et provenance exacte des clones/exécutions ;
+- [x] comparaison exacte et restauration non destructive sous forme d'un nouveau brouillon ;
+- [x] templates verrouillés — bibliothèque, paramètres, contenu FR/EN/ES, aperçu, exécution exacte mesurée, audit filtré et clone privé livrés ;
+- [x] workflow `draft -> review -> published`, projection atomique et archivage ;
+- [x] certification post-publication liée à la version et à son empreinte, badge public effectif et révocations historisées ;
+- [x] propriétaires métier et dates de révision ;
+- [ ] rôles éditoriaux spécialisés, responsable technique et édition contrôlée de la définition Oracle.
 
 ### Étape 7 — Couche sémantique Oracle
 

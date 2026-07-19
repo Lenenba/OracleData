@@ -39,6 +39,8 @@ test('a successful run records an execution with the runner tenant and connectio
     $execution = QueryExecution::query()->sole();
 
     expect($execution->status)->toBe(QueryExecution::STATUS_SUCCEEDED)
+        ->and($execution->source_type)->toBe(QueryExecution::SOURCE_SAVED_QUERY)
+        ->and($execution->purpose)->toBe(QueryExecution::PURPOSE_RUN)
         ->and($execution->user_id)->toBe($this->runner->id)
         ->and($execution->query_id)->toBe($query->id)
         ->and($execution->oracle_tenant_id)->toBe($this->tenant->id)
@@ -133,7 +135,9 @@ test('deleting a query keeps its execution history', function () {
 
     $execution = QueryExecution::query()->sole();
 
-    expect($execution->query_id)->toBeNull()
+    expect($execution->query_id)->toBe($query->id)
+        ->and(Query::query()->find($query->id))->toBeNull()
+        ->and(Query::withTrashed()->find($query->id))->not->toBeNull()
         ->and($execution->user_id)->toBe($this->runner->id);
 });
 
