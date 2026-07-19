@@ -23,6 +23,7 @@ import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import { TemplateCertificationCard } from '@/components/queries/template-certification-card';
 import { TemplateGovernanceStatusBadge } from '@/components/queries/template-governance-status-badge';
+import { TemplateQualityCard } from '@/components/queries/template-quality-card';
 import { TemplateVersionComparison } from '@/components/queries/template-version-comparison';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -62,6 +63,7 @@ import type {
     QueryTemplateGovernanceRole,
     QueryTemplateGovernanceVersion,
     QueryTemplateGovernanceVersionOption,
+    QueryTemplateQualityOverview,
 } from '@/types/query-template-governance';
 
 type ShowProps = {
@@ -75,6 +77,9 @@ type ShowProps = {
     governanceRoleCandidates: GovernanceRoleCandidate[];
     technicalOwnerCandidates: GovernanceUser[];
     oracleResources: OracleResourceSuggestion[];
+    quality: QueryTemplateQualityOverview;
+    tenants: Record<string, string>;
+    defaultTenant: string | null;
 };
 
 type Feedback = { type: 'success' | 'error'; message: string } | null;
@@ -176,6 +181,9 @@ function DraftEditor({
                 2,
             ),
     );
+    const [qualityRulesJson, setQualityRulesJson] = useState(() =>
+        JSON.stringify(version.quality_rules ?? [], null, 2),
+    );
     const [translations, setTranslations] = useState(
         () =>
             Object.fromEntries(
@@ -249,6 +257,44 @@ function DraftEditor({
         event.preventDefault();
         setErrors({});
         setFeedback(null);
+
+        let parsedQualityRules: unknown;
+
+        try {
+            parsedQualityRules = JSON.parse(qualityRulesJson);
+        } catch {
+            setErrors({
+                quality_rules: t('templateGovernance.qualityRulesJsonInvalid'),
+            });
+            setFeedback({
+                type: 'error',
+                message: t('templateGovernance.qualityRulesJsonError'),
+            });
+
+            return;
+        }
+
+        if (
+            !Array.isArray(parsedQualityRules) ||
+            parsedQualityRules.some(
+                (rule) =>
+                    rule === null ||
+                    typeof rule !== 'object' ||
+                    Array.isArray(rule),
+            )
+        ) {
+            setErrors({
+                quality_rules: t(
+                    'templateGovernance.qualityRulesJsonArrayRequired',
+                ),
+            });
+            setFeedback({
+                type: 'error',
+                message: t('templateGovernance.qualityRulesJsonError'),
+            });
+
+            return;
+        }
 
         let technicalDefinition:
             | {
@@ -347,6 +393,7 @@ function DraftEditor({
             business_owner_user_id:
                 businessOwnerId === 'none' ? null : Number(businessOwnerId),
             review_due_at: reviewDueAt || null,
+            quality_rules: parsedQualityRules as Array<Record<string, unknown>>,
             template_lock_version: template.lock_version,
             version_lock_version: version.lock_version,
             ...(technicalDefinition ?? {}),
@@ -620,6 +667,44 @@ function DraftEditor({
                             </div>
                         </section>
                     )}
+
+                    <section className="space-y-4 rounded-lg border p-4">
+                        <div>
+                            <h3 className="font-semibold">
+                                {t('templateGovernance.qualityRulesTitle')}
+                            </h3>
+                            <p className="text-sm text-muted-foreground">
+                                {t(
+                                    'templateGovernance.qualityRulesDescription',
+                                )}
+                            </p>
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="template-quality-rules">
+                                {t('templateGovernance.qualityRulesJsonLabel')}
+                            </Label>
+                            <Textarea
+                                id="template-quality-rules"
+                                value={qualityRulesJson}
+                                onChange={(event) =>
+                                    setQualityRulesJson(event.target.value)
+                                }
+                                rows={12}
+                                spellCheck={false}
+                                disabled={processing}
+                                className="font-mono text-xs"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                {t('templateGovernance.qualityRulesJsonHelp')}
+                            </p>
+                            <InputError
+                                message={
+                                    errors.quality_rules ??
+                                    errors['definition.quality_rules']
+                                }
+                            />
+                        </div>
+                    </section>
 
                     <section className="space-y-3">
                         <div>
@@ -1174,6 +1259,9 @@ export default function QueryTemplateGovernanceShow({
     governanceRoleCandidates,
     technicalOwnerCandidates,
     oracleResources,
+    quality,
+    tenants,
+    defaultTenant,
 }: ShowProps) {
     const { t, formatDate } = useI18n();
     const [createDraftOpen, setCreateDraftOpen] = useState(false);
@@ -1192,6 +1280,7 @@ export default function QueryTemplateGovernanceShow({
               (version) => version.id === template.open_version?.id,
           ) ?? null)
         : null;
+    const qualityVersion = template.open_version ?? template.published_version;
     const canCreateDraft =
         governanceCapabilities.create_draft &&
         template.governance_status === 'published' &&
@@ -1666,6 +1755,21 @@ export default function QueryTemplateGovernanceShow({
                         )}
                     </div>
                 )}
+
+                <TemplateQualityCard
+                    key={qualityVersion?.id ?? 'no-quality-version'}
+                    templateSlug={template.slug}
+                    version={qualityVersion}
+                    quality={quality}
+                    tenants={tenants}
+                    defaultTenant={defaultTenant}
+                    canRunValidation={
+                        governanceCapabilities.run_quality_validation
+                    }
+                    canCaptureReference={
+                        governanceCapabilities.capture_quality_reference
+                    }
+                />
 
                 <TemplateCertificationCard
                     template={template}

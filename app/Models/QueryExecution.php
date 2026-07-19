@@ -4,9 +4,11 @@ namespace App\Models;
 
 use Database\Factories\QueryExecutionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -40,6 +42,7 @@ use Illuminate\Support\Carbon;
  * @property-read User $user
  * @property-read OracleTenant|null $oracleTenant
  * @property-read AuthConnection|null $authConnection
+ * @property-read Collection<int, QueryTemplateValidationRun> $validationRuns
  */
 #[Fillable([
     'query_id',
@@ -71,6 +74,8 @@ class QueryExecution extends Model
     public const string PURPOSE_RUN = 'run';
 
     public const string PURPOSE_PREVIEW = 'preview';
+
+    public const string PURPOSE_QUALITY_VALIDATION = 'quality_validation';
 
     public const string STATUS_SUCCEEDED = 'succeeded';
 
@@ -147,5 +152,11 @@ class QueryExecution extends Model
     public function authConnection(): BelongsTo
     {
         return $this->belongsTo(AuthConnection::class);
+    }
+
+    /** @return HasMany<QueryTemplateValidationRun, $this> */
+    public function validationRuns(): HasMany
+    {
+        return $this->hasMany(QueryTemplateValidationRun::class);
     }
 }

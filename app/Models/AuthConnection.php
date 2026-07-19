@@ -5,9 +5,11 @@ namespace App\Models;
 use Database\Factories\AuthConnectionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -26,6 +28,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $last_test_succeeded_at
  * @property-read User $user
  * @property-read OracleTenant $oracleTenant
+ * @property-read Collection<int, QueryTemplateReferenceDataset> $queryTemplateReferenceDatasets
+ * @property-read Collection<int, QueryTemplateValidationRun> $queryTemplateValidationRuns
  */
 #[Fillable([
     'user_id',
@@ -77,5 +81,17 @@ class AuthConnection extends Model
     public function oracleTenant(): BelongsTo
     {
         return $this->belongsTo(OracleTenant::class);
+    }
+
+    /** @return HasMany<QueryTemplateReferenceDataset, $this> */
+    public function queryTemplateReferenceDatasets(): HasMany
+    {
+        return $this->hasMany(QueryTemplateReferenceDataset::class);
+    }
+
+    /** @return HasMany<QueryTemplateValidationRun, $this> */
+    public function queryTemplateValidationRuns(): HasMany
+    {
+        return $this->hasMany(QueryTemplateValidationRun::class);
     }
 }

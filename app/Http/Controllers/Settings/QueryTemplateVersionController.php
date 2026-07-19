@@ -63,7 +63,7 @@ class QueryTemplateVersionController extends Controller
             Gate::authorize('updateTechnicalDefinition', [$queryTemplate, $queryTemplateVersion]);
         }
 
-        /** @var array{name: string, description?: string|null, category_id?: int|null, sort_order: int, translations: array<string, array<string, mixed>>, resource_key?: string, parameters?: array<string, mixed>, parameter_definitions?: list<array<string, mixed>>, change_summary?: string|null, business_owner_user_id?: int|null, review_due_at?: string|null, template_lock_version: int, version_lock_version: int} $validated */
+        /** @var array{name: string, description?: string|null, category_id?: int|null, sort_order: int, translations: array<string, array<string, mixed>>, resource_key?: string, parameters?: array<string, mixed>, parameter_definitions?: list<array<string, mixed>>, quality_rules?: list<array<string, mixed>>, change_summary?: string|null, business_owner_user_id?: int|null, review_due_at?: string|null, template_lock_version: int, version_lock_version: int} $validated */
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:5000'],
@@ -88,6 +88,8 @@ class QueryTemplateVersionController extends Controller
             'parameters.child_fields' => ['nullable', 'array'],
             'parameter_definitions' => ['sometimes', 'required', 'array', 'max:100'],
             'parameter_definitions.*' => ['array'],
+            'quality_rules' => ['sometimes', 'array', 'max:50'],
+            'quality_rules.*' => ['array'],
             'change_summary' => ['nullable', 'string', 'max:2000'],
             'business_owner_user_id' => ['nullable', 'integer', 'exists:users,id'],
             'review_due_at' => ['nullable', 'date_format:Y-m-d'],
@@ -133,6 +135,7 @@ class QueryTemplateVersionController extends Controller
                 isset($validated['review_due_at']) ? Carbon::parse($validated['review_due_at']) : null,
                 $validated['template_lock_version'],
                 $validated['version_lock_version'],
+                $validated['quality_rules'] ?? null,
             );
         } catch (ConflictHttpException $exception) {
             return $this->conflictResponse($request, $exception);
