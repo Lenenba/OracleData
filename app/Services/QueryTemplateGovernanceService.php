@@ -3,17 +3,22 @@
 namespace App\Services;
 
 use App\Enums\QueryTemplateGovernanceStatus;
+use App\Enums\QueryTemplateRole;
 use App\Enums\QueryTemplateVersionStatus;
 use App\Models\Category;
 use App\Models\QueryTemplate;
 use App\Models\QueryTemplateCertification;
+use App\Models\QueryTemplateRoleAssignment;
 use App\Models\QueryTemplateVersion;
+use App\Models\Role;
 use App\Models\User;
 use DateTimeInterface;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
+/** @phpstan-import-type OracleResource from OracleResourceCatalog */
 class QueryTemplateGovernanceService
 {
     /** @var list<string> */
@@ -41,9 +46,22 @@ class QueryTemplateGovernanceService
         'offset',
     ];
 
+    /** @var list<string> */
+    private const array PARAMETER_DEFINITION_KEYS = [
+        'key', 'label', 'description', 'type', 'required', 'default', 'min', 'max',
+        'step', 'options', 'audit', 'binding',
+    ];
+
+    /** @var list<string> */
+    private const array PARAMETER_BINDING_KEYS = ['kind', 'field', 'operator', 'key'];
+
+    /** @var list<string> */
+    private const array PARAMETER_AUDIT_KEYS = ['mode', 'key_version'];
+
     public function __construct(
         private readonly AuditRecorder $audit,
         private readonly OracleResourceCatalog $catalog,
+        private readonly SemanticLineageService $lineage,
     ) {}
 
     public function createDraft(
@@ -60,6 +78,8 @@ class QueryTemplateGovernanceService
                 || $lockedTemplate->published_version_id === null) {
                 throw new ConflictHttpException(__('Seul un modèle publié peut recevoir un nouveau brouillon.'));
             }
+
+            Gate::forUser($actor)->authorize('createDraft', $lockedTemplate);
 
             if ($lockedTemplate->versions()->whereNotNull('open_slot')->exists()) {
                 throw new ConflictHttpException(__('Un brouillon ou une revue est déjà ouvert pour ce modèle.'));
@@ -83,6 +103,7 @@ class QueryTemplateGovernanceService
                 'created_by_user_id' => $actor->id,
                 'lock_version' => 1,
             ]);
+            $this->lineage->syncTemplateVersion($version, $definition);
 
             $lockedTemplate->applyGovernanceProjection([
                 'lock_version' => $lockedTemplate->lock_version + 1,
@@ -94,6 +115,95 @@ class QueryTemplateGovernanceService
             ]);
 
             return $version;
+        });
+    }
+
+    /** @param list<string> $roles */
+    public function syncRoles(QueryTemplate $template, User $user, User $actor, array $roles): void
+    {
+        DB::transaction(function () use ($template, $user, $actor, $roles): void {
+            $lockedTemplate = $this->lockTemplate($template);
+            Gate::forUser($actor)->authorize('manageRoles', $lockedTemplate);
+            $roleNames = array_values(array_unique($roles));
+            $allowed = array_map(
+                fn (QueryTemplateRole $role): string => $role->value,
+                QueryTemplateRole::cases(),
+            );
+
+            if (array_diff($roleNames, $allowed) !== []) {
+                throw ValidationException::withMessages(['roles' => __('Un rôle éditorial est invalide.')]);
+            }
+
+            $before = QueryTemplateRoleAssignment::query()
+                ->where('query_template_id', $lockedTemplate->id)
+                ->where('user_id', $user->id)
+                ->with('role:id,name')
+                ->get()
+                ->pluck('role.name')
+                ->sort()
+                ->values()
+                ->all();
+            sort($roleNames);
+
+            if ($before === $roleNames) {
+                return;
+            }
+
+            $roleModels = Role::query()->whereIn('name', $roleNames)->get()->keyBy('name');
+
+            if ($roleModels->count() !== count($roleNames)) {
+                throw ValidationException::withMessages(['roles' => __('Les rôles éditoriaux ne sont pas configurés.')]);
+            }
+
+            QueryTemplateRoleAssignment::query()
+                ->where('query_template_id', $lockedTemplate->id)
+                ->where('user_id', $user->id)
+                ->delete();
+
+            foreach ($roleNames as $roleName) {
+                QueryTemplateRoleAssignment::query()->create([
+                    'query_template_id' => $lockedTemplate->id,
+                    'role_id' => $roleModels->get($roleName)->id,
+                    'user_id' => $user->id,
+                    'assigned_by_user_id' => $actor->id,
+                ]);
+            }
+
+            $this->audit->record($actor, 'query_template.roles_synced', $lockedTemplate, [
+                'target_user_id' => $user->id,
+                'before_roles' => $before,
+                'after_roles' => $roleNames,
+            ]);
+        });
+    }
+
+    public function assignTechnicalOwner(
+        QueryTemplate $template,
+        ?User $technicalOwner,
+        User $actor,
+        int $expectedTemplateLock,
+    ): QueryTemplate {
+        return DB::transaction(function () use ($template, $technicalOwner, $actor, $expectedTemplateLock): QueryTemplate {
+            $lockedTemplate = $this->lockTemplate($template);
+            Gate::forUser($actor)->authorize('assignTechnicalOwner', $lockedTemplate);
+            $this->assertTemplateLock($lockedTemplate, $expectedTemplateLock);
+            $before = $lockedTemplate->technical_owner_user_id;
+            $after = $technicalOwner?->id;
+
+            if ($before === $after) {
+                return $lockedTemplate;
+            }
+
+            $lockedTemplate->applyGovernanceProjection([
+                'technical_owner_user_id' => $after,
+                'lock_version' => $lockedTemplate->lock_version + 1,
+            ]);
+            $this->audit->record($actor, 'query_template.technical_owner_assigned', $lockedTemplate, [
+                'before_user_id' => $before,
+                'after_user_id' => $after,
+            ]);
+
+            return $lockedTemplate->refresh();
         });
     }
 
@@ -133,6 +243,8 @@ class QueryTemplateGovernanceService
                 throw new ConflictHttpException(__('Un brouillon ou une revue est déjà ouvert pour ce modèle.'));
             }
 
+            Gate::forUser($actor)->authorize('restoreVersion', [$lockedTemplate, $lockedSource]);
+
             $this->assertSnapshotHash($lockedSource);
             $this->validateSnapshot($lockedSource->definition, $lockedSource->translations);
             $nextNumber = ((int) $lockedTemplate->versions()->max('version_number')) + 1;
@@ -148,6 +260,7 @@ class QueryTemplateGovernanceService
                 'created_by_user_id' => $actor->id,
                 'lock_version' => 1,
             ]);
+            $this->lineage->syncTemplateVersion($draft, $lockedSource->definition);
 
             $lockedTemplate->applyGovernanceProjection([
                 'lock_version' => $lockedTemplate->lock_version + 1,
@@ -185,6 +298,8 @@ class QueryTemplateGovernanceService
                 || $lockedTemplate->published_version_id !== $expectedPublishedVersionId) {
                 throw new ConflictHttpException(__('La version publiée a changé. Rechargez la page.'));
             }
+
+            Gate::forUser($actor)->authorize('certify', $lockedTemplate);
 
             if ($lockedTemplate->business_owner_user_id === null) {
                 throw ValidationException::withMessages([
@@ -266,6 +381,8 @@ class QueryTemplateGovernanceService
                 abort(404);
             }
 
+            Gate::forUser($actor)->authorize('revokeCertification', [$lockedTemplate, $lockedCertification]);
+
             if ($lockedCertification->lock_version !== $expectedCertificationLock) {
                 throw new ConflictHttpException(__('Cette certification a été modifiée depuis son ouverture. Rechargez la page.'));
             }
@@ -326,6 +443,19 @@ class QueryTemplateGovernanceService
                 throw new ConflictHttpException(__('Seul un brouillon peut être modifié.'));
             }
 
+            Gate::forUser($actor)->authorize('updateDraft', [$lockedTemplate, $lockedVersion]);
+
+            $technicalKeys = ['resource_key', 'resource_path', 'parameters', 'parameter_definitions'];
+            $technicalChanges = array_values(array_filter(
+                $technicalKeys,
+                fn (string $key): bool => ($lockedVersion->definition[$key] ?? null) !== ($definition[$key] ?? null),
+            ));
+
+            if ($technicalChanges !== []) {
+                Gate::forUser($actor)->authorize('updateTechnicalDefinition', [$lockedTemplate, $lockedVersion]);
+            }
+
+            $beforeContentHash = $lockedVersion->content_hash;
             $this->validateSnapshot($definition, $translations);
             $this->assertBusinessOwnerExists($businessOwnerUserId);
             $contentHash = QueryTemplateVersion::contentHash($definition, $translations);
@@ -337,6 +467,7 @@ class QueryTemplateGovernanceService
                 'change_summary' => $this->nullableTrim($changeSummary),
                 'lock_version' => $lockedVersion->lock_version + 1,
             ]);
+            $this->lineage->syncTemplateVersion($lockedVersion, $definition);
             $lockedTemplate->applyGovernanceProjection([
                 'business_owner_user_id' => $businessOwnerUserId,
                 'review_due_at' => $reviewDueAt,
@@ -348,6 +479,16 @@ class QueryTemplateGovernanceService
                 'business_owner_user_id' => $businessOwnerUserId,
                 'review_due_at' => $reviewDueAt?->format('Y-m-d'),
             ]);
+
+            if ($technicalChanges !== []) {
+                $this->audit->record($actor, 'query_template.technical_definition_updated', $lockedTemplate, [
+                    'query_template_version_id' => $lockedVersion->id,
+                    'changed_keys' => $technicalChanges,
+                    'before_content_hash' => $beforeContentHash,
+                    'after_content_hash' => $contentHash,
+                    'resource_key' => (string) ($definition['resource_key'] ?? ''),
+                ]);
+            }
 
             return $lockedVersion->refresh();
         });
@@ -375,6 +516,8 @@ class QueryTemplateGovernanceService
             if ($lockedVersion->status !== QueryTemplateVersionStatus::DRAFT) {
                 throw new ConflictHttpException(__('Seul un brouillon peut être soumis en revue.'));
             }
+
+            Gate::forUser($actor)->authorize('submitForReview', [$lockedTemplate, $lockedVersion]);
 
             $this->validateSnapshot($lockedVersion->definition, $lockedVersion->translations);
             $lockedVersion->update([
@@ -419,6 +562,8 @@ class QueryTemplateGovernanceService
             if ($lockedVersion->status !== QueryTemplateVersionStatus::REVIEW) {
                 throw new ConflictHttpException(__('Seule une version en revue peut être publiée.'));
             }
+
+            Gate::forUser($actor)->authorize('publish', [$lockedTemplate, $lockedVersion]);
 
             $this->validateSnapshot($lockedVersion->definition, $lockedVersion->translations);
             $previousPublishedId = $lockedTemplate->published_version_id;
@@ -476,6 +621,8 @@ class QueryTemplateGovernanceService
             if ($lockedTemplate->governance_status !== QueryTemplateGovernanceStatus::PUBLISHED) {
                 throw new ConflictHttpException(__('Seul un modèle publié peut être archivé.'));
             }
+
+            Gate::forUser($actor)->authorize('archive', $lockedTemplate);
 
             $openVersions = $lockedTemplate->versions()
                 ->whereNotNull('open_slot')
@@ -551,6 +698,8 @@ class QueryTemplateGovernanceService
             }
         }
 
+        $this->validateTechnicalParameters($parameters, $resource, $errors);
+
         if (isset($parameters['limit'])
             && (! is_numeric($parameters['limit']) || (int) $parameters['limit'] < 1 || (int) $parameters['limit'] > 500)) {
             $errors['definition.parameters.limit'] = __('La limite doit être comprise entre 1 et 500.');
@@ -565,12 +714,28 @@ class QueryTemplateGovernanceService
                 continue;
             }
 
+            $unknownDefinitionKeys = array_diff(array_keys($parameterDefinition), self::PARAMETER_DEFINITION_KEYS);
+
+            if ($unknownDefinitionKeys !== []) {
+                $errors["definition.parameter_definitions.{$index}"] = __('La définition contient des propriétés non autorisées.');
+            }
+
             $key = trim((string) ($parameterDefinition['key'] ?? ''));
             $type = (string) ($parameterDefinition['type'] ?? '');
             $binding = is_array($parameterDefinition['binding'] ?? null)
                 ? $parameterDefinition['binding']
                 : [];
             $auditMode = (string) data_get($parameterDefinition, 'audit.mode', '');
+
+            if (array_diff(array_keys($binding), self::PARAMETER_BINDING_KEYS) !== []) {
+                $errors["definition.parameter_definitions.{$index}.binding"] = __('La liaison contient des propriétés non autorisées.');
+            }
+
+            $audit = is_array($parameterDefinition['audit'] ?? null) ? $parameterDefinition['audit'] : [];
+
+            if (array_diff(array_keys($audit), self::PARAMETER_AUDIT_KEYS) !== []) {
+                $errors["definition.parameter_definitions.{$index}.audit"] = __('La politique d’audit contient des propriétés non autorisées.');
+            }
 
             if (preg_match('/^[a-z][a-z0-9_]*$/', $key) !== 1 || in_array($key, $definitionKeys, true)) {
                 $errors["definition.parameter_definitions.{$index}.key"] = __('Les clés de paramètres doivent être uniques et sûres.');
@@ -643,6 +808,140 @@ class QueryTemplateGovernanceService
         if ($errors !== []) {
             throw ValidationException::withMessages($errors);
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $parameters
+     * @param  OracleResource|null  $resource
+     * @param  array<string, array<array-key, mixed>|string>  $errors
+     */
+    private function validateTechnicalParameters(array $parameters, ?array $resource, array &$errors): void
+    {
+        $fields = $this->technicalList($parameters['fields'] ?? null);
+        $expand = $this->technicalList($parameters['expand'] ?? null);
+        $joins = $this->technicalList($parameters['joins'] ?? null);
+
+        foreach (['fields' => $fields, 'expand' => $expand, 'joins' => $joins] as $key => $values) {
+            if ($values === null) {
+                $errors["definition.parameters.{$key}"] = __('Cette sélection Oracle est invalide.');
+            }
+        }
+
+        if ($resource === null || $fields === null || $expand === null || $joins === null) {
+            return;
+        }
+
+        $this->assertAllowedTechnicalValues($fields, $resource['fields'], 'fields', $errors);
+        $this->assertAllowedTechnicalValues($expand, $resource['child_resources'], 'expand', $errors);
+        $this->assertAllowedTechnicalValues($joins, array_keys($resource['join_keys']), 'joins', $errors);
+
+        $childFields = $parameters['child_fields'] ?? [];
+
+        if (! is_array($childFields)) {
+            $errors['definition.parameters.child_fields'] = __('Les champs enfants doivent former une table contrôlée.');
+        } else {
+            foreach ($childFields as $child => $selectedFields) {
+                $child = (string) $child;
+                $normalizedFields = $this->technicalList($selectedFields);
+                $allowedFields = [];
+
+                if (in_array($child, $expand, true)) {
+                    $allowedFields = $resource['child_fields'][$child] ?? [];
+                } elseif (in_array($child, $joins, true)) {
+                    $allowedFields = $this->catalog->find($child)['fields'] ?? [];
+                } else {
+                    $errors["definition.parameters.child_fields.{$child}"] = __('Cette ressource enfant n’est pas sélectionnée.');
+
+                    continue;
+                }
+
+                if ($normalizedFields === null || array_diff($normalizedFields, $allowedFields) !== []) {
+                    $errors["definition.parameters.child_fields.{$child}"] = __('Un champ enfant n’appartient pas au catalogue Oracle.');
+                }
+            }
+        }
+
+        $orderBy = trim((string) ($parameters['orderBy'] ?? ''));
+
+        if ($orderBy !== '') {
+            foreach (explode(',', $orderBy) as $clause) {
+                if (preg_match('/^([A-Za-z_][A-Za-z0-9_]*)(?::(asc|desc))?$/i', trim($clause), $matches) !== 1
+                    || ! in_array($matches[1], $resource['fields'], true)) {
+                    $errors['definition.parameters.orderBy'] = __('Le tri Oracle contient un champ ou une direction non autorisés.');
+                    break;
+                }
+            }
+        }
+
+        $q = trim((string) ($parameters['q'] ?? ''));
+
+        if ($q !== '' && ! $this->isSafeOracleFilter($q, $resource['fields'])) {
+            $errors['definition.parameters.q'] = __('Le filtre Oracle ne respecte pas la grammaire autorisée.');
+        }
+
+        if (isset($parameters['offset'])
+            && (! is_numeric($parameters['offset']) || (int) $parameters['offset'] < 0)) {
+            $errors['definition.parameters.offset'] = __('Le décalage Oracle doit être un entier positif.');
+        }
+    }
+
+    /** @return list<string>|null */
+    private function technicalList(mixed $value): ?array
+    {
+        if ($value === null || $value === '') {
+            return [];
+        }
+
+        $items = is_string($value) ? explode(',', $value) : $value;
+
+        if (! is_array($items)) {
+            return null;
+        }
+
+        $normalized = [];
+
+        foreach ($items as $item) {
+            if (! is_string($item) || preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', trim($item)) !== 1) {
+                return null;
+            }
+
+            $normalized[] = trim($item);
+        }
+
+        return array_values(array_unique($normalized));
+    }
+
+    /**
+     * @param  list<string>  $values
+     * @param  list<string>  $allowed
+     * @param  array<string, array<array-key, mixed>|string>  $errors
+     */
+    private function assertAllowedTechnicalValues(array $values, array $allowed, string $key, array &$errors): void
+    {
+        if (array_diff($values, $allowed) !== []) {
+            $errors["definition.parameters.{$key}"] = __('Une valeur n’appartient pas au catalogue Oracle.');
+        }
+    }
+
+    /** @param list<string> $allowedFields */
+    private function isSafeOracleFilter(string $filter, array $allowedFields): bool
+    {
+        if (preg_match('/[\x00-\x1F\x7F;]/u', $filter) === 1) {
+            return false;
+        }
+
+        $literal = "(?:'(?:[^']|'')*'|-?\\d+(?:\\.\\d+)?|true|false|null)";
+
+        foreach (preg_split('/\s+AND\s+/i', $filter) ?: [] as $clause) {
+            $pattern = '/^([A-Za-z_][A-Za-z0-9_]*)\s*(>=|<=|!=|=|>|<|LIKE)\s*'.$literal.'$/i';
+
+            if (preg_match($pattern, trim($clause), $matches) !== 1
+                || ! in_array($matches[1], $allowedFields, true)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function lockTemplate(QueryTemplate $template): QueryTemplate
@@ -821,7 +1120,6 @@ class QueryTemplateGovernanceService
         return $trimmed === '' ? null : $trimmed;
     }
 
-    /** @param mixed $value */
     private function jsonOrNull(mixed $value): ?string
     {
         if (! is_array($value) || $value === []) {

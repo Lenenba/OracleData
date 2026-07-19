@@ -11,6 +11,7 @@ import {
     Save,
     Server,
     ShieldAlert,
+    TableProperties,
     Trash2,
     User,
 } from 'lucide-react';
@@ -43,6 +44,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { useI18n } from '@/i18n/i18n-context';
+import oracleSchema from '@/routes/oracle-schema';
 import oracleTenants from '@/routes/oracle-tenants';
 import type { OracleTenant } from '@/types';
 
@@ -78,6 +80,12 @@ function TenantActionsMenu({
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem asChild className="cursor-pointer">
+                    <Link href={oracleSchema.page(tenant.id)}>
+                        <TableProperties className="size-4" />
+                        {t('connections.schema')}
+                    </Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem asChild className="cursor-pointer">
                     <Link href={oracleTenants.edit(tenant.id)}>
                         <Pencil className="size-4" />

@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\QueryTemplateVersionStatus;
 use Database\Factories\QueryTemplateVersionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -38,7 +39,9 @@ use LogicException;
  * @property-read User|null $createdBy
  * @property-read User|null $submittedBy
  * @property-read User|null $publishedBy
- * @property-read \Illuminate\Database\Eloquent\Collection<int, QueryTemplateCertification> $certifications
+ * @property-read Collection<int, QueryTemplateCertification> $certifications
+ * @property-read Collection<int, QueryTemplateVersionSemanticResource> $semanticResources
+ * @property-read Collection<int, OracleSchemaImpact> $schemaImpacts
  */
 #[Fillable([
     'query_template_id',
@@ -123,6 +126,18 @@ class QueryTemplateVersion extends Model
     public function certifications(): HasMany
     {
         return $this->hasMany(QueryTemplateCertification::class);
+    }
+
+    /** @return HasMany<QueryTemplateVersionSemanticResource, $this> */
+    public function semanticResources(): HasMany
+    {
+        return $this->hasMany(QueryTemplateVersionSemanticResource::class);
+    }
+
+    /** @return HasMany<OracleSchemaImpact, $this> */
+    public function schemaImpacts(): HasMany
+    {
+        return $this->hasMany(OracleSchemaImpact::class);
     }
 
     /** @return BelongsTo<User, $this> */

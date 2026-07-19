@@ -20,6 +20,8 @@ use App\Services\QueryChangeRequestService;
 use App\Services\QueryExecutionRecorder;
 use App\Services\QueryResolver;
 use App\Services\QueryShareLifecycleService;
+use App\Services\SemanticCatalogReader;
+use App\Services\SemanticLineageService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -279,17 +281,33 @@ class QueryController extends Controller
     /**
      * Show the form to create a new query.
      */
-    public function create(Request $request, OracleResourceCatalog $catalog, FusionManager $fusion): Response
-    {
+    public function create(
+        Request $request,
+        OracleResourceCatalog $catalog,
+        SemanticCatalogReader $semanticCatalog,
+        FusionManager $fusion,
+    ): Response {
         $fusion = $fusion->forUser($request->user());
 
         return Inertia::render('queries/create', [
-            'resourceSuggestions' => $catalog->suggestions(),
+            'resourceSuggestions' => $this->semanticSuggestions($semanticCatalog, $catalog),
             'tenants' => $fusion->available(),
             'defaultTenant' => $fusion->defaultKey(),
             'categories' => $this->categoryOptions(app()->getLocale()),
             'tags' => $this->tagOptions(app()->getLocale(), $request->user()),
         ]);
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function semanticSuggestions(
+        SemanticCatalogReader $semanticCatalog,
+        OracleResourceCatalog $fallback,
+    ): array {
+        if ($semanticCatalog->currentVersion() === null) {
+            return $fallback->suggestions();
+        }
+
+        return $semanticCatalog->suggestions(app()->getLocale());
     }
 
     /**
@@ -346,8 +364,11 @@ class QueryController extends Controller
     /**
      * Persist a new query owned by the current user.
      */
-    public function store(StoreQueryRequest $request, FusionManager $fusion): RedirectResponse
-    {
+    public function store(
+        StoreQueryRequest $request,
+        FusionManager $fusion,
+        SemanticLineageService $lineage,
+    ): RedirectResponse {
         $data = $request->validated();
         $tags = Arr::pull($data, 'tags');
         $fusion = $fusion->forUser($request->user());
@@ -371,6 +392,7 @@ class QueryController extends Controller
         }
 
         $query = $request->user()->queries()->create($data);
+        $lineage->syncQuery($query, (array) ($query->parameters ?? []));
 
         if (is_array($tags)) {
             $this->syncTags($query, $this->normaliseTags($tags));
@@ -409,8 +431,13 @@ class QueryController extends Controller
     /**
      * Show the wizard pre-filled for editing an existing query.
      */
-    public function edit(Request $request, Query $query, OracleResourceCatalog $catalog, FusionManager $fusion): Response
-    {
+    public function edit(
+        Request $request,
+        Query $query,
+        OracleResourceCatalog $catalog,
+        SemanticCatalogReader $semanticCatalog,
+        FusionManager $fusion,
+    ): Response {
         Gate::authorize('update', $query);
         $query->loadMissing('queryTemplate.translations');
         $fusion = $fusion->forUser($request->user());
@@ -434,7 +461,7 @@ class QueryController extends Controller
                     'name' => $query->queryTemplate->nameFor(app()->getLocale()),
                 ],
             ],
-            'resourceSuggestions' => $catalog->suggestions(),
+            'resourceSuggestions' => $this->semanticSuggestions($semanticCatalog, $catalog),
             'tenants' => $fusion->available(),
             'defaultTenant' => $fusion->has($query->tenant_key)
                 ? $query->tenant_key
@@ -447,8 +474,12 @@ class QueryController extends Controller
     /**
      * Update an existing query owned by the current user.
      */
-    public function update(StoreQueryRequest $request, Query $query, FusionManager $fusion): RedirectResponse
-    {
+    public function update(
+        StoreQueryRequest $request,
+        Query $query,
+        FusionManager $fusion,
+        SemanticLineageService $lineage,
+    ): RedirectResponse {
         Gate::authorize('update', $query);
 
         $data = $request->validated();
@@ -477,6 +508,7 @@ class QueryController extends Controller
         }
 
         $query->update($data);
+        $lineage->syncQuery($query, (array) ($query->parameters ?? []));
 
         if (is_array($tags)) {
             $this->syncTags($query, $this->normaliseTags($tags));

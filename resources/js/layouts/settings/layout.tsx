@@ -10,7 +10,9 @@ import { edit as editAppearance } from '@/routes/appearance';
 import categories from '@/routes/categories';
 import oracleTenants from '@/routes/oracle-tenants';
 import { edit } from '@/routes/profile';
+import queryTemplateGovernance from '@/routes/query-template-governance';
 import { edit as editSecurity } from '@/routes/security';
+import semanticCatalog from '@/routes/semantic-catalog';
 import type { NavItem } from '@/types';
 
 export default function SettingsLayout({ children }: PropsWithChildren) {
@@ -20,6 +22,7 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
     const isWideSettingsPage =
         component.startsWith('oracle-tenants/') ||
         component === 'settings/categories' ||
+        component.startsWith('settings/semantic-catalog') ||
         component.startsWith('settings/query-templates/');
     const sidebarNavItems: NavItem[] = [
         { title: t('settings.profile'), href: edit(), icon: null },
@@ -38,8 +41,17 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                       icon: null,
                   },
                   {
+                      title: t('settings.semanticCatalog'),
+                      href: semanticCatalog.index(),
+                      icon: null,
+                  },
+              ]
+            : []),
+        ...(props.auth.can_view_query_template_governance
+            ? [
+                  {
                       title: t('settings.templateGovernance'),
-                      href: '/settings/query-templates',
+                      href: queryTemplateGovernance.index(),
                       icon: null,
                   },
               ]

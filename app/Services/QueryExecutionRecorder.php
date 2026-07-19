@@ -6,6 +6,7 @@ use App\Models\OracleTenant;
 use App\Models\Query;
 use App\Models\QueryExecution;
 use App\Models\QueryTemplate;
+use App\Models\QueryTemplateVersion;
 use App\Models\User;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +21,8 @@ use InvalidArgumentException;
  */
 class QueryExecutionRecorder
 {
+    public function __construct(private readonly SemanticLineageService $lineage) {}
+
     /**
      * @param  array<string, mixed>  $payload  Réponse normalisée de run() : `error` null = succès.
      */
@@ -45,11 +48,14 @@ class QueryExecutionRecorder
             $queryId = $recordedQuery?->id;
             $queryTemplateVersionId = $recordedQuery?->getAttribute('query_template_version_id');
             $tenant = $this->resolveTenant($user, $tenantKey);
+            $semantic = $this->lineage->executionSnapshot($recordedQuery, null, $payload);
 
             $execution = QueryExecution::query()->create([
                 'query_id' => $queryId,
                 'query_template_id' => null,
                 'query_template_version_id' => $queryTemplateVersionId,
+                'semantic_catalog_version_id' => $semantic['catalog_version_id'],
+                'semantic_lineage' => $semantic['lineage'] === [] ? null : $semantic['lineage'],
                 'user_id' => $user->id,
                 'oracle_tenant_id' => $tenant?->id,
                 'auth_connection_id' => $tenant === null ? null : $this->primaryConnectionId($tenant),
@@ -108,11 +114,15 @@ class QueryExecutionRecorder
 
         return DB::transaction(function () use ($user, $template, $templateVersionId, $tenantKey, $payload, $startedAt, $durationMs, $purpose, $succeeded, $finishedAt): QueryExecution {
             $tenant = $this->resolveTenant($user, $tenantKey);
+            $templateVersion = QueryTemplateVersion::query()->find($templateVersionId);
+            $semantic = $this->lineage->executionSnapshot(null, $templateVersion, $payload);
 
             return QueryExecution::query()->create([
                 'query_id' => null,
                 'query_template_id' => $template->id,
                 'query_template_version_id' => $templateVersionId,
+                'semantic_catalog_version_id' => $semantic['catalog_version_id'],
+                'semantic_lineage' => $semantic['lineage'] === [] ? null : $semantic['lineage'],
                 'user_id' => $user->id,
                 'oracle_tenant_id' => $tenant?->id,
                 'auth_connection_id' => $tenant === null ? null : $this->primaryConnectionId($tenant),

@@ -6,12 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\QueryTemplate;
 use App\Models\QueryTemplateVersion;
 use App\Models\User;
+use App\Services\OracleResourceCatalog;
 use App\Services\QueryTemplateGovernanceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
@@ -51,10 +53,17 @@ class QueryTemplateVersionController extends Controller
         QueryTemplate $queryTemplate,
         QueryTemplateVersion $queryTemplateVersion,
         QueryTemplateGovernanceService $governance,
+        OracleResourceCatalog $catalog,
     ): JsonResponse|RedirectResponse {
         $this->assertNestedVersion($queryTemplate, $queryTemplateVersion);
         Gate::authorize('updateDraft', [$queryTemplate, $queryTemplateVersion]);
-        /** @var array{name: string, description?: string|null, category_id?: int|null, sort_order: int, translations: array<string, array<string, mixed>>, change_summary?: string|null, business_owner_user_id?: int|null, review_due_at?: string|null, template_lock_version: int, version_lock_version: int} $validated */
+        $technicalFields = ['resource_key', 'resource_path', 'parameters', 'parameter_definitions'];
+
+        if ($request->hasAny($technicalFields)) {
+            Gate::authorize('updateTechnicalDefinition', [$queryTemplate, $queryTemplateVersion]);
+        }
+
+        /** @var array{name: string, description?: string|null, category_id?: int|null, sort_order: int, translations: array<string, array<string, mixed>>, resource_key?: string, parameters?: array<string, mixed>, parameter_definitions?: list<array<string, mixed>>, change_summary?: string|null, business_owner_user_id?: int|null, review_due_at?: string|null, template_lock_version: int, version_lock_version: int} $validated */
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:5000'],
@@ -69,6 +78,16 @@ class QueryTemplateVersionController extends Controller
             'translations.*.parameter_labels' => ['sometimes', 'array'],
             'translations.*.parameter_descriptions' => ['sometimes', 'array'],
             'translations.*.parameter_options' => ['sometimes', 'array'],
+            'resource_key' => ['sometimes', 'required', 'string', Rule::in($catalog->keys())],
+            'resource_path' => ['prohibited'],
+            'parameters' => ['sometimes', 'required', 'array:resource_key,fields,expand,joins,child_fields,q,orderBy,limit,offset'],
+            'parameters.limit' => ['nullable', 'integer', 'min:1', 'max:500'],
+            'parameters.offset' => ['nullable', 'integer', 'min:0'],
+            'parameters.q' => ['nullable', 'string', 'max:2000'],
+            'parameters.orderBy' => ['nullable', 'string', 'max:500'],
+            'parameters.child_fields' => ['nullable', 'array'],
+            'parameter_definitions' => ['sometimes', 'required', 'array', 'max:100'],
+            'parameter_definitions.*' => ['array'],
             'change_summary' => ['nullable', 'string', 'max:2000'],
             'business_owner_user_id' => ['nullable', 'integer', 'exists:users,id'],
             'review_due_at' => ['nullable', 'date_format:Y-m-d'],
@@ -81,6 +100,21 @@ class QueryTemplateVersionController extends Controller
             'category_id' => $validated['category_id'] ?? null,
             'sort_order' => $validated['sort_order'],
         ]);
+
+        if ($request->hasAny($technicalFields)) {
+            $resourceKey = $validated['resource_key'] ?? (string) $queryTemplateVersion->definition['resource_key'];
+            $resource = $catalog->find($resourceKey);
+            abort_if($resource === null, 422, __('La ressource Oracle sélectionnée est invalide.'));
+            $parameters = $validated['parameters'] ?? $queryTemplateVersion->definition['parameters'];
+            $parameters['resource_key'] = $resourceKey;
+            $definition = array_replace($definition, [
+                'resource_key' => $resourceKey,
+                'resource_path' => $resource['path'],
+                'parameters' => $parameters,
+                'parameter_definitions' => $validated['parameter_definitions']
+                    ?? $queryTemplateVersion->definition['parameter_definitions'],
+            ]);
+        }
         $translations = $this->mergeTranslations(
             $queryTemplateVersion->translations,
             $validated['translations'],

@@ -18,6 +18,10 @@ use Illuminate\Support\Carbon;
  * @property string $resource_key
  * @property string $child
  * @property list<string> $fields
+ * @property string $source
+ * @property string|null $title
+ * @property list<array<string, mixed>>|null $attributes
+ * @property string|null $schema_hash
  * @property Carbon $discovered_at
  * @property-read OracleTenant $oracleTenant
  */
@@ -26,6 +30,10 @@ use Illuminate\Support\Carbon;
     'resource_key',
     'child',
     'fields',
+    'source',
+    'title',
+    'attributes',
+    'schema_hash',
     'discovered_at',
 ])]
 class OracleResourceField extends Model
@@ -37,6 +45,7 @@ class OracleResourceField extends Model
     {
         return [
             'fields' => 'array',
+            'attributes' => 'array',
             'discovered_at' => 'datetime',
         ];
     }

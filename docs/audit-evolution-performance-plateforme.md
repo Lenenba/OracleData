@@ -142,7 +142,7 @@ Le futur SSO de la plateforme utilisera des tables d'identité distinctes et ne 
 
 ### Suivi d'avancement
 
-Dernière mise à jour : 18 juillet 2026.
+Dernière mise à jour : 19 juillet 2026.
 
 | Étape | Sujet | État |
 | ---: | --- | --- |
@@ -150,9 +150,9 @@ Dernière mise à jour : 18 juillet 2026.
 | 2 | Fondation multilingue FR/EN/ES | **En cours — 17 juillet 2026** |
 | 3 | Tenants personnels, onboarding et contrôle d'accès | **En cours — fondation livrée le 17 juillet 2026** |
 | 4 | Bibliothèque organisée | **Fait — 17 juillet 2026** |
-| 5 | Partage ciblé et collaboration | **Implémentation terminée — partage, invitations, réponses internes, demandes, commentaires et mentions livrés le 18 juillet 2026 ; validation PHP finale à relancer** |
-| 6 | Gouvernance et templates officiels | **En cours — lots 6A et 6B implémentés le 18 juillet 2026 : publication versionnée, comparaison, restauration et certification ; rôles éditoriaux spécialisés et édition Oracle contrôlée restent à livrer, validations PHP/Node et migrations locales `168000`/`169000` à relancer** |
-| 7 | Couche sémantique Oracle | À faire — catalogue technique et découverte des champs déjà partiels |
+| 5 | Partage ciblé et collaboration | **Fait et validé — 19 juillet 2026 : 55 tests et 652 assertions réussis ; migration `167000` appliquée** |
+| 6 | Gouvernance et templates officiels | **Fait et validé — 19 juillet 2026 : publication versionnée, rôles éditoriaux par template, propriétaire technique et édition Oracle contrôlée ; migrations `168000`, `169000` et `170000` appliquées** |
+| 7 | Couche sémantique Oracle | **Terminée et validée le 19 juillet 2026 — `/describe`, catalogue gouverné et versionné FR/EN/ES, classification, relations, glossaire, lignage, impacts de dérive et mappings SQL/API déterministes ; migrations `171000` à `173000` appliquées** |
 | 8 | Fiabilité et tests de données | À faire |
 | 9 | Exécution asynchrone et automatisation | À faire |
 | 10 | Dashboards et analyse avancée | À faire |
@@ -186,7 +186,7 @@ Résultat de l'étape 1 :
 - migration multi-tenant prête, avec arrêt sécurisé si les tenants historiques n'ont pas de propriétaire non ambigu ;
 - dernière validation cumulative exécutée avant les lots `167000` et `168000` : 433 tests et 2 595 assertions réussis au 18 juillet 2026 ;
 - lot d'invitations différées et centre de notifications interne livré et validé, avec migration locale `166000` appliquée en batch 13 ;
-- Pint, PHPStan, ESLint, Prettier, TypeScript et build Vite de production validés jusqu'au lot `166000` ; après les lots `167000` à `169000`, la parité et la validité des catalogues JSON ainsi que les contrôles statiques ciblés sont confirmés, mais la validation finale PHP et Node reste à relancer.
+- les validations ciblées PHP et frontend des étapes 5 et 6, les contrôles statiques, la parité des catalogues et le build Vite de production sont réussis au 19 juillet 2026 ; les migrations locales `167000` à `170000` sont appliquées.
 
 Chantier parallèle restant : **Étape 2 — finaliser la fondation multilingue FR/EN/ES**.
 
@@ -231,7 +231,7 @@ Résultat de l'étape 4 :
 - statistiques de bibliothèque fondées sur les agrégats atomiques et statistiques du dashboard fondées sur l'utilisateur qui a réellement exécuté la requête ; le test anti-N+1 maintient le chargement du dashboard à treize requêtes SQL au plus avec cinquante requêtes accessibles, dont deux requêtes bornées pour les groupes et leurs grants applicables et une pour le compteur de notifications non lues ;
 - 318 tests et 1 510 assertions réussis à la clôture initiale de l'étape 4 ; Pint, PHPStan, ESLint, Prettier, TypeScript et build Vite de production validés.
 
-Progression de l'étape 5 — **périmètre collaboratif interne implémenté le 18 juillet 2026** :
+Progression de l'étape 5 — **périmètre collaboratif interne terminé et validé le 19 juillet 2026** :
 
 - [x] remplacer le partage binaire par les niveaux `private`, `restricted` et `organization` ;
 - [x] permettre le partage direct avec un utilisateur, avec acceptation immédiate dans ce premier lot ;
@@ -246,7 +246,7 @@ Progression de l'étape 5 — **périmètre collaboratif interne implémenté le
 - [x] notifier une seule fois l'émetteur lors de l'acceptation ou du refus réel d'une invitation, sans dupliquer l'événement lors d'un rejeu ;
 - [x] ajouter les demandes de modification avec états gouvernés, commentaires immuables et mentions structurées limitées aux lecteurs actuels ;
 - [x] conserver les contenus des messages hors de l'audit et des notifications techniques ; une mention n'accorde jamais un accès ;
-- [ ] relancer les tests PHP et appliquer la migration locale `167000` dès que le runner Herd redevient disponible.
+- [x] valider les six suites PHP ciblées — 55 tests et 652 assertions réussis — et appliquer la migration locale `167000`.
 
 Résultat courant de l'étape 5 :
 
@@ -281,15 +281,15 @@ Résultat courant de l'étape 5 :
 - la migration `164000` introduit `groups`, `group_user` et `query_group_shares`, avec suppression logique des groupes, appartenance unique, snapshots de nom et index de résolution du cycle de vie ; elle est appliquée localement en batch 12 ;
 - la migration `165000`, également appliquée localement en batch 12, ajoute la suppression logique aux requêtes afin qu'une suppression fonctionnelle ne déclenche plus les cascades physiques sur leurs historiques ;
 - la migration `166000` étend `query_user_shares` avec les états et dates du parcours différé, ajoute ses index de résolution et crée la table Laravel `notifications` ; elle est appliquée localement en batch 13 et son schéma a été contrôlé ;
-- la migration `167000` crée `query_change_requests`, le fil `query_change_request_comments` et la table de mentions ; elle est prête mais son application locale reste à exécuter, le runner PHP externe ayant été refusé par l'environnement de travail ;
+- la migration `167000` crée `query_change_requests`, le fil `query_change_request_comments` et la table de mentions ; elle est appliquée localement en batch 14 et son périmètre est validé ;
 - 14 scénarios dédiés au partage direct couvrent notamment les permissions HTTP, l'IDOR, l'expiration, la révocation, le repartage durable, le passage en privé, les limites d'un gestionnaire délégué et l'absence de données sensibles dans l'audit ;
 - 16 scénarios dédiés aux groupes et au partage d'équipe couvrent la gouvernance des rôles, l'isolation IDOR, la résolution du droit le plus fort, l'expiration, le retrait immédiat d'un membre, l'archivage, le repartage durable, la révocation globale lors du passage en privé et l'audit sans données sensibles ;
 - l'archivage des requêtes est couvert par la conservation des cycles, la révocation atomique, l'audit sans contenu sensible, le refus d'un délégataire `manage` et l'absence de réactivation après restauration technique ;
 - les suites dédiées `QueryShareInvitationTest` et `NotificationCenterTest` couvrent l'absence d'accès avant consentement, l'acceptation et le refus idempotents, l'expiration calculée, l'IDOR, la perte d'autorité de l'émetteur, l'annulation lors du retour à `private` ou de l'archivage, l'isolation des notifications et leur payload technique ;
 - neuf nouveaux scénarios `QueryChangeRequestTest` couvrent création autorisée, IDOR, retrait d'accès, commentaires immuables, mentions autorisées, déduplication, transitions, rejeux idempotents, archivage atomique, masquage après perte d'accès, audit sans contenu et présentation normalisée dans le centre interne ;
-- dernière validation cumulative effectivement exécutée avant ces lots : 433 tests et 2 595 assertions réussis ; TypeScript, ESLint et Prettier ciblés du frontend collaboratif sont réussis. Pour les consoles 6A/6B, la validité et la parité des catalogues JSON FR/EN/ES ainsi que la revue statique ciblée sont confirmées, mais les contrôles Node complets, Pint, PHPStan et les tests PHP restent à relancer sans contournement lorsque les runners seront disponibles.
+- la validation finale ciblée de l'étape 5 réussit 55 tests et 652 assertions le 19 juillet 2026 ; les contrôles frontend ciblés du périmètre collaboratif sont également réussis.
 
-Progression de l'étape 6 — **socle et lots de gouvernance 6A/6B implémentés le 18 juillet 2026** :
+Progression de l'étape 6 — **gouvernance et templates officiels terminés et validés le 19 juillet 2026** :
 
 - [x] créer une table système `query_templates` distincte des requêtes personnelles afin que l'original ne puisse jamais être altéré par un utilisateur ;
 - [x] exposer une bibliothèque dédiée de modèles actifs avec recherche, catégorie, description et ressource Oracle ;
@@ -309,7 +309,9 @@ Progression de l'étape 6 — **socle et lots de gouvernance 6A/6B implémentés
 - [x] rattacher chaque clone, aperçu et exécution à la version officielle exacte capturée avant tout appel Oracle ;
 - [x] empêcher le seeder de réécrire une projection déjà gouvernée ; il initialise uniquement les modèles officiels encore absents ;
 - [x] ajouter la comparaison visuelle de deux versions exactes, la restauration sous forme d'une nouvelle version et la certification post-publication ;
-- [ ] ouvrir, dans un lot ultérieur, l'édition contrôlée de la définition Oracle technique et la création de nouveaux modèles officiels.
+- [x] déléguer les rôles `template_editor` et `template_publisher` dans le périmètre de chaque template, sans élargissement global des droits ;
+- [x] attribuer un propriétaire technique explicite et protéger ses mutations par Policy et verrou optimiste ;
+- [x] ouvrir l'édition contrôlée de la définition Oracle au propriétaire technique, à partir du catalogue de ressources et sans accepter de chemin Oracle libre fourni par le navigateur.
 
 Résultat courant de l'étape 6 :
 
@@ -327,17 +329,25 @@ Résultat courant de l'étape 6 :
 - la certification est une attestation distincte du statut « Template officiel » et intervient après publication : elle référence la version publiée exacte et son empreinte, exige un propriétaire métier ainsi qu'une date de révision non dépassée, et peut exposer une note publique facultative limitée à 500 caractères ;
 - une seule certification peut être active par modèle ; elle reste dans l'historique mais cesse d'être effective publiquement dès que le pointeur publié, l'empreinte, le propriétaire ou la date de révision ne correspondent plus, et toute nouvelle publication ou tout archivage la révoque atomiquement ; une révocation manuelle motivée reste également possible ;
 - la bibliothèque et le détail publics affichent un badge « Certifiée » distinct et la note publique uniquement lorsque l'attestation reste effective ; la console conserve l'attestation devenue non effective pour permettre sa compréhension et sa révocation ;
-- les champs `business_owner_user_id`, `review_due_at`, `published_at/by`, `archived_at/by` et les verrous optimistes rendent la responsabilité et les échéances explicites ; une échéance n'est en retard qu'à partir du lendemain ;
+- les champs `business_owner_user_id`, `technical_owner_user_id`, `review_due_at`, `published_at/by`, `archived_at/by` et les verrous optimistes rendent les responsabilités et les échéances explicites ; une échéance n'est en retard qu'à partir du lendemain ;
 - la provenance `query_template_version_id` est conservée sur les copies personnelles et leurs exécutions ultérieures, ainsi que sur les aperçus et exécutions directes ;
 - les opérations publiques capturent sous un verrou court le snapshot publié puis libèrent le verrou avant l'appel Oracle ; définition, traductions et numéro de version ne peuvent donc pas provenir de deux publications concurrentes différentes ;
-- la console 6A/6B permet de gouverner les métadonnées et contenus trilingues, l'historique, la restauration et la certification ; la structure Oracle et les liaisons de paramètres restent en lecture seule afin de ne pas contourner la validation technique ;
+- la console permet de gouverner les métadonnées et contenus trilingues, l'historique, la restauration, la certification, les délégations éditoriales et le propriétaire technique ; la définition Oracle est modifiable uniquement par ce dernier ou un super-administrateur, à partir des ressources cataloguées et avec validation serveur stricte ;
 - les migrations de traductions, de métriques de modèles et de politique d'exécution sont appliquées localement en batch 9 ; la base contient quatre modèles et douze traductions officielles ;
 - 19 scénarios dédiés aux modèles couvrent notamment visibilité, localisation, repli de langue, isolation des tenants, liaison typée, échappement, limites, métriques, audit, clonage, immutabilité et idempotence du seeder ; ils sont complétés par les tests de sécurité du moteur Oracle ;
 - dix nouveaux scénarios de gouvernance couvrent la Policy super-administrateur, la publication atomique, le cycle unique, les conflits Inertia actionnables, les verrous obsolètes, l'IDOR de version, la validation de snapshot, l'immutabilité, l'archivage, le seeder, la reprise d'un bootstrap interrompu, la cohérence définition/traductions en concurrence et la provenance des exécutions clonées ;
-- neuf scénarios supplémentaires de gouvernance 6B couvrent la restauration et sa provenance, les verrous obsolètes, le cycle ouvert, les versions jamais publiées, les snapshots altérés, la comparaison exacte et sans écriture, l'IDOR, les prérequis de certification, les conflits imbriqués, la révocation manuelle ou automatique et l'expiration publique liée à la date de révision ; ces scénarios sont écrits mais n'ont pas encore été exécutés ;
-- les migrations `168000` et `169000` sont prêtes mais ne sont pas encore appliquées localement ; `169000` ajoute la provenance des restaurations et l'historique immuable des certifications. Les 709 clés de chacun des catalogues frontend FR/EN/ES, leurs paramètres et les catalogues backend sont valides et paritaires, et `git diff --check` réussit ; Pint, PHPStan, les tests PHP, TypeScript, ESLint, Prettier et le build Vite finaux restent à relancer dès disponibilité des runners.
+- neuf scénarios supplémentaires de gouvernance 6B couvrent la restauration et sa provenance, les verrous obsolètes, le cycle ouvert, les versions jamais publiées, les snapshots altérés, la comparaison exacte et sans écriture, l'IDOR, les prérequis de certification, les conflits imbriqués, la révocation manuelle ou automatique et l'expiration publique liée à la date de révision ; ces scénarios sont exécutés avec succès ;
+- les migrations `168000`, `169000` et `170000` sont appliquées localement ; `169000` ajoute la provenance des restaurations et l'historique immuable des certifications, tandis que `170000` ajoute les délégations éditoriales par template et le propriétaire technique. Les catalogues frontend FR/EN/ES sont valides et paritaires ; Pint, PHPStan, les tests PHP ciblés, TypeScript, ESLint, Prettier et le build Vite de production sont réussis.
 
-La collaboration interne de l'**étape 5** est maintenant complète dans le code : partage direct et par groupes, invitations différées, réponses vers l'émetteur, demandes de modification, commentaires et mentions convergent dans le même centre interne sans partager les connexions Oracle. Les canaux e-mail et connecteurs sont volontairement rattachés aux étapes 9 et 12. L'**étape 6** possède désormais une publication versionnée réelle, une comparaison exacte, une restauration non destructive et une certification post-publication ; elle reste en cours uniquement pour les rôles éditoriaux spécialisés et l'édition contrôlée de la définition Oracle. Les migrations locales et les validations finales PHP et Node des lots `167000` à `169000` doivent être exécutées dès que les runners sont de nouveau autorisés.
+La collaboration interne de l'**étape 5** est complète et validée : partage direct et par groupes, invitations différées, réponses vers l'émetteur, demandes de modification, commentaires et mentions convergent dans le même centre interne sans partager les connexions Oracle. Les canaux e-mail et connecteurs sont volontairement rattachés aux étapes 9 et 12. L'**étape 6** est également complète et validée : publication versionnée, comparaison exacte, restauration non destructive, certification post-publication, délégations éditoriales par template, propriétaire technique et édition Oracle contrôlée sont en place. Les migrations locales `167000` à `170000` sont appliquées.
+
+Progression de l'étape 7 — **en cours, lot 7A livré le 19 juillet 2026** :
+
+- [x] synchroniser une ressource cataloguée depuis son endpoint Oracle `/describe` et normaliser strictement sa réponse ;
+- [x] conserver un schéma courant typé ainsi que des snapshots immuables reliés, avec empreinte et diff de changement ;
+- [x] faire de la description synchronisée la source prioritaire de découverte des champs, sans l'écraser par un probe d'exécution ;
+- [x] appliquer localement la migration `171000` qui porte les métadonnées courantes et l'historique immuable ;
+- [ ] poursuivre la couche sémantique avec relations, synonymes, glossaire trilingue, classification et lignée ; l'étape 7 complète reste ouverte.
 
 Périmètre analysé par ce document, qu'il soit déjà livré ou encore planifié :
 
@@ -490,7 +500,7 @@ Le chunk Wayfinder doit être analysé : vérifier le tree-shaking, limiter les 
 - la bibliothèque des modèles charge actuellement tous les modèles actifs et applique recherche et catégorie dans le navigateur ; ajouter pagination et recherche serveur avant une croissance importante du catalogue ;
 - plusieurs textes du query builder, des breadcrumbs et de l'affichage des résultats restent codés en français malgré la fondation i18n ;
 - le générateur SQL actuel produit du SQL pour BI Publisher à partir d'une configuration déjà structurée ; il ne constitue pas le futur traducteur de SQL standard vers un plan d'appels API ;
-- les lots de console 6A/6B, le versionnement, la comparaison, la restauration non destructive, la certification, le propriétaire métier et la date de révision sont implémentés ; des rôles éditoriaux plus fins que `super_admin` et l'édition Oracle contrôlée restent à livrer ;
+- les lots de console 6A/6B, le versionnement, la comparaison, la restauration non destructive, la certification, les propriétaires métier et technique, les rôles éditoriaux par template et l'édition Oracle contrôlée sont implémentés ; la création de nouveaux modèles officiels entièrement depuis la console reste une amélioration future hors du critère de clôture de l'étape 6 ;
 - la durée de rétention et la purge contrôlée de `query_executions` et `audit_events` restent à formaliser avant une volumétrie de production importante ;
 - l'observabilité devra distinguer les incompatibilités Oracle bloquées par la politique `exact` des erreurs réseau, sans journaliser le filtre ni ses valeurs ;
 - le chunk Wayfinder reste le principal poste frontend à analyser.
@@ -834,7 +844,7 @@ Le lot 6A ajoute les statuts de gouvernance et de version `draft`, `review`, `pu
 - le clone devient une requête utilisateur privée et modifiable ;
 - le clone conserve un lien de provenance, mais sa modification n'altère jamais le modèle ;
 - le seeder initialise uniquement un modèle absent et ne réécrit jamais une projection déjà gouvernée ;
-- toute modification officielle depuis la console crée une version distincte et seuls les super-administrateurs peuvent soumettre, publier ou archiver ;
+- toute modification officielle depuis la console crée une version distincte ; un `template_editor` délégué sur le modèle peut modifier et soumettre, tandis qu'un `template_publisher` du même périmètre peut publier, archiver et certifier ; le super-administrateur conserve tous les droits et la gestion des délégations ;
 - un brouillon ou une revue n'altère jamais le modèle visible par les utilisateurs ; seule une publication projette atomiquement le snapshot validé ;
 - la comparaison est une lecture déterministe de deux versions appartenant au même modèle et ne produit aucun audit ni effet de bord ;
 - restaurer une ancienne publication crée toujours un nouveau brouillon avec sa provenance ; la projection courante et l'ancienne version restent intactes ;
@@ -843,7 +853,7 @@ Le lot 6A ajoute les statuts de gouvernance et de version `draft`, `review`, `pu
 - une seule certification est active à la fois ; sa publication publique échoue de manière fermée si le modèle, la version, l'empreinte ou l'échéance ne correspondent plus, sans effacer l'historique ;
 - une nouvelle publication ou l'archivage révoque atomiquement l'attestation active ; un super-administrateur peut aussi la révoquer manuellement avec un verrou optimiste.
 
-L'autorité publique repose sur les middlewares d'authentification, de vérification et d'onboarding, sur `ensureActive()` et sur les protections du modèle Eloquent. La console éditoriale possède maintenant une `QueryTemplatePolicy` explicite réservée au `super_admin`, vérifie l'appartenance des versions imbriquées et applique ses règles côté service transactionnel ; masquer un bouton React n'est jamais considéré comme une autorisation.
+L'autorité publique repose sur les middlewares d'authentification, de vérification et d'onboarding, sur `ensureActive()` et sur les protections du modèle Eloquent. La console éditoriale possède maintenant une `QueryTemplatePolicy` explicite qui borne les rôles délégués au template concerné, réserve la définition technique à son propriétaire technique ou au super-administrateur, vérifie l'appartenance des versions imbriquées et applique ses règles côté service transactionnel ; masquer un bouton React n'est jamais considéré comme une autorisation.
 
 ### Interface
 
@@ -858,13 +868,14 @@ L'autorité publique repose sur les middlewares d'authentification, de vérifica
 - sélecteurs permettant de comparer deux versions exactes, avec sections métadonnées, traductions et technique ;
 - action de restauration uniquement sur une ancienne version publiée et remplacée, avec confirmation et résumé facultatif ;
 - carte de certification présentant les prérequis, la note publique, l'état effectif et la révocation ;
-- badge « Certifiée » distinct du badge « Template officiel » dans la bibliothèque et le détail publics.
+- badge « Certifiée » distinct du badge « Template officiel » dans la bibliothèque et le détail publics ;
+- gestion des délégations `template_editor` et `template_publisher`, attribution du propriétaire technique et éditeur Oracle contrôlé par le catalogue.
 
-### État livré le 18 juillet 2026
+### État livré et validé le 19 juillet 2026
 
-La bibliothèque dédiée, les quatre modèles initiaux et leurs contenus FR/EN/ES, la liaison typée et contrôlée des paramètres, l'aperçu, l'exécution mesurée et auditée ainsi que le clonage privé sont opérationnels. Le modèle original est protégé contre les mises à jour et suppressions applicatives. Les copies personnelles sont créées en politique `exact`, peuvent être modifiées et conservent une description adaptée à la langue active sans toucher à l'original. La console permet également de comparer l'historique complet, de restaurer une publication remplacée sous forme d'un nouveau brouillon et de certifier la publication exacte sans confondre confiance métier et caractère officiel. L'ajout de nouveaux modèles reste conditionné à une politique d'audit explicite et à une exécution qui échoue de manière fermée plutôt que de retirer silencieusement un filtre pour contourner une incompatibilité Oracle.
+La bibliothèque dédiée, les quatre modèles initiaux et leurs contenus FR/EN/ES, la liaison typée et contrôlée des paramètres, l'aperçu, l'exécution mesurée et auditée ainsi que le clonage privé sont opérationnels. Le modèle original est protégé contre les mises à jour et suppressions applicatives. Les copies personnelles sont créées en politique `exact`, peuvent être modifiées et conservent une description adaptée à la langue active sans toucher à l'original. La console permet également de comparer l'historique complet, de restaurer une publication remplacée sous forme d'un nouveau brouillon, de certifier la publication exacte, de déléguer les responsabilités éditoriales par template et de confier la définition Oracle contrôlée à un propriétaire technique. L'ajout de nouveaux modèles reste conditionné à une politique d'audit explicite et à une exécution qui échoue de manière fermée plutôt que de retirer silencieusement un filtre pour contourner une incompatibilité Oracle.
 
-Le périmètre restant de cette section est la délégation éditoriale : rôles spécialisés plus fins que `super_admin`, responsable technique et édition contrôlée de la définition Oracle.
+Le périmètre de gouvernance de cette section est clôturé : les rôles spécialisés, le propriétaire technique et l'édition contrôlée de la définition Oracle sont livrés et validés.
 
 ## 10. Architecture cible
 
@@ -1298,7 +1309,7 @@ La page `/groups` fournit en complément le CRUD des groupes accessibles, la lis
 
 Avant une montée en charge publique, ajouter des quotas et un throttling dédiés à la création de groupes, aux mutations de membres et aux cycles de partage. La suppression physique future d'une requête, ou la suppression du compte qui la possède, devra également suivre une politique explicite de rétention, d'anonymisation ou de purge puisqu'elle peut déclencher les cascades de base de données que l'archivage fonctionnel évite désormais.
 
-Le partage direct, le partage de groupe, les invitations différées, les réponses vers l'émetteur, les demandes de modification et le centre de notifications interne sont implémentés avec leurs expirations, révocations, historiques, audits et règles d'isolation. Les commentaires immuables et mentions structurées restent soumis à l'accès courant. Les canaux externes sont reportés aux étapes 9 et 12 ; la migration `167000` et la validation PHP finale doivent encore être exécutées localement.
+Le partage direct, le partage de groupe, les invitations différées, les réponses vers l'émetteur, les demandes de modification et le centre de notifications interne sont implémentés avec leurs expirations, révocations, historiques, audits et règles d'isolation. Les commentaires immuables et mentions structurées restent soumis à l'accès courant. Les canaux externes sont reportés aux étapes 9 et 12 ; la migration `167000` est appliquée et la validation ciblée finale réussit 55 tests et 652 assertions.
 
 ## 20. Administrateur général et limites de son périmètre
 
@@ -1563,7 +1574,7 @@ Cette extension est conservée pour retracer les décisions d'architecture. Sa n
 3. [x] Ajouter « Partagées avec moi » et « Gérer le partage » avec historique, expiration et révocation.
 4. [x] Créer les groupes et le partage d'équipe avec rôles, cycle de vie, historique et retrait immédiat des accès hérités.
 5. [x] Archiver logiquement les requêtes supprimées en conservant et clôturant leurs cycles de partage.
-6. [x] Créer les demandes de modification avec commentaires immuables, mentions structurées et transitions gouvernées — implémentées ; migration locale et validation PHP finale à relancer.
+6. [x] Créer les demandes de modification avec commentaires immuables, mentions structurées et transitions gouvernées — implémentées, migration `167000` appliquée et validation ciblée réussie.
 7. [x] Ajouter les invitations utilisateur avec acceptation différée et le centre de notifications interne — livrés, migrés et validés ; les réponses internes idempotentes vers l'émetteur sont également implémentées. Les canaux externes restent futurs.
 
 ### Phase 6 — Différenciation produit
@@ -1740,14 +1751,15 @@ query_template_translations
 semantic_resource_translations
 - semantic_resource_id
 - locale
-- business_name
+- name
 - description
+- synonyms JSON nullable
 - examples nullable
 ```
 
 Contrainte unique recommandée pour chaque table : `(entité_id, locale)`.
 
-État au 18 juillet 2026 : `query_template_translations` est livré pour le nom, la description, les libellés, les aides et les options des paramètres, avec unicité modèle/locale et repli `locale active -> fr -> contenu source`. `usage_instructions` reste une extension de la future gouvernance éditoriale.
+État au 19 juillet 2026 : `query_template_translations` est livré pour le nom, la description, les libellés, les aides et les options des paramètres, avec unicité modèle/locale et repli `locale active -> fr -> contenu source`. Les traductions sémantiques des ressources, champs, relations et termes contrôlés sont également livrées en FR/EN/ES. `usage_instructions` reste une extension future de la gouvernance éditoriale.
 
 Les requêtes personnelles ne doivent pas être traduites automatiquement. Leur propriétaire peut créer des variantes ou demander une traduction assistée clairement identifiée comme telle.
 
@@ -1992,7 +2004,7 @@ Cette feuille de route remplace l'ordre indicatif des sections précédentes. El
 
 ### Étape 5 — Partage ciblé et collaboration
 
-**Implémentation interne terminée le 18 juillet 2026. Migration locale et validation PHP finale à relancer. Les canaux externes relèvent des étapes 9 et 12.**
+**Terminée et validée le 19 juillet 2026 : migration locale `167000` appliquée, 55 tests et 652 assertions réussis. Les canaux externes relèvent des étapes 9 et 12.**
 
 - [x] niveaux `private`, `restricted`, `organization` ;
 - [x] partage direct avec des utilisateurs et gestion paginée des destinataires ;
@@ -2011,7 +2023,7 @@ Cette feuille de route remplace l'ordre indicatif des sections précédentes. El
 
 ### Étape 6 — Gouvernance et templates officiels
 
-**En cours. Lots 6A/6B implémentés le 18 juillet 2026 ; validations PHP/Node et migrations locales `168000`/`169000` à relancer. La délégation éditoriale spécialisée et l'édition Oracle contrôlée restent à livrer.**
+**Terminée et validée le 19 juillet 2026. Les migrations locales `168000`, `169000` et `170000` sont appliquées ; les délégations éditoriales par template, le propriétaire technique et l'édition Oracle contrôlée sont livrés.**
 
 - [x] historique immuable des versions officielles et provenance exacte des clones/exécutions ;
 - [x] comparaison exacte et restauration non destructive sous forme d'un nouveau brouillon ;
@@ -2019,16 +2031,24 @@ Cette feuille de route remplace l'ordre indicatif des sections précédentes. El
 - [x] workflow `draft -> review -> published`, projection atomique et archivage ;
 - [x] certification post-publication liée à la version et à son empreinte, badge public effectif et révocations historisées ;
 - [x] propriétaires métier et dates de révision ;
-- [ ] rôles éditoriaux spécialisés, responsable technique et édition contrôlée de la définition Oracle.
+- [x] rôles éditoriaux spécialisés par template, propriétaire technique et édition contrôlée de la définition Oracle.
 
 ### Étape 7 — Couche sémantique Oracle
 
-- catalogue de métadonnées synchronisé ;
-- relations, synonymes et glossaire trilingue ;
-- classification des données ;
-- détection de changements de schéma ;
-- lignée entre requêtes et ressources ;
-- mappings déterministes entre tables/colonnes SQL autorisées et ressources/champs API, prérequis du futur traducteur SQL.
+**Terminée et validée le 19 juillet 2026. Les migrations locales `171000`, `172000` et `173000` sont appliquées. Le bootstrap gouverné contient 20 ressources, 370 champs, 31 relations et 6 termes contrôlés ; sa resynchronisation est idempotente. Les 13 scénarios sémantiques ciblés ont été validés par lots, ainsi que 68 tests de régression requêtes/templates (402 assertions), 30 tests de l'outil Oracle (91 assertions), PHPStan ciblé, Pint, TypeScript, ESLint, le build Vite et la parité stricte des 941 clés FR/EN/ES.**
+
+- [x] synchronisation `/describe`, schéma courant typé et découverte prioritaire des champs ;
+- [x] snapshots immuables, chaînage, empreinte et diff des changements de schéma ;
+- [x] enrichissement contrôlé du catalogue à partir de `/describe` sans élargissement automatique de la liste blanche ;
+- [x] ressources, champs, relations, propriétaires, synonymes et glossaire gouvernés et traduits en FR/EN/ES ;
+- [x] classification et catégories de données aux niveaux ressource, champ et glossaire ;
+- [x] versions publiées immuables du catalogue, empreinte canonique, verrouillage optimiste et audit sans secrets ;
+- [x] lignée versionnée entre requêtes, versions de templates, exécutions et ressources/champs réellement interrogés ;
+- [x] analyse des dérives par tenant, identification des requêtes/templates affectés et acquittement isolé par propriétaire ;
+- [x] mappings déterministes entre tables/colonnes SQL autorisées et ressources/champs API : 8 ressources, 80 champs et 11 relations actuellement mappés exactement ; toute sélection non mappée désactive la génération BIP sans fallback ;
+- [x] écrans séparés « Catalogue sémantique » global et « Schéma observé » par connexion Oracle, avec contrôles d'accès et navigation trilingue.
+
+Le parseur SQL standard et la production d'un plan d'appels API restent volontairement à l'étape 11. L'étape 7 livre leur prérequis déterministe et versionné ; elle ne prétend pas encore convertir un SQL libre.
 
 ### Étape 8 — Fiabilité et tests de données
 

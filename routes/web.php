@@ -6,6 +6,7 @@ use App\Http\Controllers\GroupMemberController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OnboardingController;
+use App\Http\Controllers\OracleSchemaController;
 use App\Http\Controllers\OracleTenantController;
 use App\Http\Controllers\QueryChangeRequestCommentController;
 use App\Http\Controllers\QueryChangeRequestController;
@@ -58,6 +59,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->middleware('throttle:6,1')
             ->name('oracle-tenants.update');
         Route::delete('oracle-tenants/{tenant}', [OracleTenantController::class, 'destroy'])->name('oracle-tenants.destroy');
+        Route::get('oracle-tenants/{tenant}/schema', [OracleSchemaController::class, 'index'])
+            ->name('oracle-schema.index');
+        Route::get('oracle-tenants/{tenant}/schema/overview', [OracleSchemaController::class, 'page'])
+            ->name('oracle-schema.page');
+        Route::post('oracle-tenants/{tenant}/schema/sync', [OracleSchemaController::class, 'sync'])
+            ->middleware('throttle:10,1,oracle-schema-sync')
+            ->name('oracle-schema.sync');
+        Route::post('oracle-tenants/{tenant}/schema/{resourceKey}/impacts/acknowledge', [OracleSchemaController::class, 'acknowledgeImpacts'])
+            ->name('oracle-schema.impacts.acknowledge');
 
         Route::get('groups', [GroupController::class, 'index'])->name('groups.index');
         Route::post('groups', [GroupController::class, 'store'])->name('groups.store');

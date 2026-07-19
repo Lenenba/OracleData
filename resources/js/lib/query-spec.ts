@@ -269,13 +269,6 @@ export function qToFilterRows(
     return rows;
 }
 
-function toOracleColumn(field: string): string {
-    return field
-        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-        .replace(/[^A-Za-z0-9_]/g, '_')
-        .toUpperCase();
-}
-
 function relationAlias(relation: SqlRelationDef | undefined, fallback: string) {
     return relation?.alias ?? fallback;
 }
@@ -291,18 +284,15 @@ function qualifySqlExpression(expression: string, alias: string): string {
 }
 
 function sqlColumnExpression(
-    relation: SqlRelationDef | undefined,
+    relation: SqlRelationDef,
     alias: string,
     field: string,
 ): string {
-    return qualifySqlExpression(
-        relation?.columns?.[field] ?? toOracleColumn(field),
-        alias,
-    );
+    return qualifySqlExpression(relation.columns?.[field] ?? '', alias);
 }
 
 function selectSqlColumn(
-    relation: SqlRelationDef | undefined,
+    relation: SqlRelationDef,
     alias: string,
     field: string,
     outputName = field,
@@ -318,7 +308,7 @@ function sqlStringLiterals(expression: string): string {
 
 function mapSqlFilterExpression(
     expression: string,
-    relation: SqlRelationDef | undefined,
+    relation: SqlRelationDef,
     alias: string,
     fields: string[],
 ): string {
@@ -340,7 +330,7 @@ function mapSqlFilterExpression(
 
 function mapSqlOrderBy(
     orderBy: string,
-    relation: SqlRelationDef | undefined,
+    relation: SqlRelationDef,
     alias: string,
     fields: string[],
 ): string {
@@ -365,6 +355,75 @@ function mapSqlOrderBy(
         .join(', ');
 }
 
+function hasMappedColumns(
+    relation: SqlRelationDef | undefined,
+    fields: string[],
+): relation is SqlRelationDef {
+    return (
+        relation !== undefined &&
+        relation.table.trim() !== '' &&
+        fields.every((field) => {
+            const expression = relation.columns?.[field];
+
+            return typeof expression === 'string' && expression.trim() !== '';
+        })
+    );
+}
+
+function filterFields(expression: string): string[] {
+    return Array.from(
+        expression.matchAll(
+            /\b([A-Za-z_][A-Za-z0-9_]*)\b(?=\s*(?:>=|<=|!=|LIKE|=|>|<))/gi,
+        ),
+        (match) => match[1],
+    );
+}
+
+function orderByFields(orderBy: string): string[] {
+    return orderBy
+        .split(',')
+        .map((clause) => clause.split(':', 1)[0]?.trim() ?? '')
+        .filter(Boolean);
+}
+
+export function hasDeterministicSqlMapping(
+    resource: ResourceSuggestion,
+    fields: string[],
+    expand: string[],
+    joins: string[],
+    childFields: ChildFieldsMap,
+    filterQ: string,
+    orderBy: string,
+): boolean {
+    const sqlSource = resource.sql ?? undefined;
+    const rootFields = fields.length > 0 ? fields : (resource.fields ?? []);
+    const requiredRootFields = Array.from(
+        new Set([
+            ...rootFields,
+            ...filterFields(filterQ),
+            ...orderByFields(orderBy),
+        ]),
+    );
+
+    if (!hasMappedColumns(sqlSource, requiredRootFields)) {
+        return false;
+    }
+
+    return [...expand, ...joins].every((related) => {
+        const relation = expand.includes(related)
+            ? sqlSource.child_tables?.[related]
+            : sqlSource.joins?.[related];
+        const selectedFields = childFields[related] ?? [];
+
+        return (
+            selectedFields.length > 0 &&
+            hasMappedColumns(relation, selectedFields) &&
+            typeof relation.join === 'string' &&
+            relation.join.trim() !== ''
+        );
+    });
+}
+
 // Génère un SQL BIP (Oracle BI Publisher) à partir des paramètres du builder
 export function generateBipSql(
     resource: ResourceSuggestion,
@@ -375,15 +434,30 @@ export function generateBipSql(
     filterQ: string,
     orderBy: string,
     limit: number,
-): string {
+): string | null {
     const cols = fields.length > 0 ? fields : (resource.fields ?? []);
     const sqlSource = resource.sql ?? undefined;
-    const tableName = sqlSource?.table ?? resource.key.toUpperCase();
+
+    if (
+        !hasDeterministicSqlMapping(
+            resource,
+            fields,
+            expand,
+            joins,
+            childFields,
+            filterQ,
+            orderBy,
+        ) ||
+        sqlSource === undefined
+    ) {
+        return null;
+    }
+
+    const tableName = sqlSource.table;
     const tableAlias = relationAlias(sqlSource, tableName);
     const selectCols = cols
         .map((f) => selectSqlColumn(sqlSource, tableAlias, f))
         .join(',\n');
-    const joinKeysDefs = resource.join_keys ?? {};
 
     let sql = `-- Requête générée par OracleData Query Builder\n`;
     sql += `-- Ressource : ${resource.label} (${resource.domain})\n`;
@@ -398,7 +472,11 @@ export function generateBipSql(
     [...expand, ...joins].forEach((related) => {
         const relation =
             sqlSource?.child_tables?.[related] ?? sqlSource?.joins?.[related];
-        const relatedTable = relation?.table ?? related.toUpperCase();
+        if (relation === undefined) {
+            return;
+        }
+
+        const relatedTable = relation.table;
         const relatedAlias = relationAlias(relation, relatedTable);
         const cFields = childFields[related] ?? [];
 
@@ -411,8 +489,6 @@ export function generateBipSql(
                     `${related}.${cf}`,
                 )}`;
             });
-        } else {
-            sql += `,\n  ${relatedAlias}.*`;
         }
     });
 
@@ -420,32 +496,29 @@ export function generateBipSql(
 
     expand.forEach((child) => {
         const relation = sqlSource?.child_tables?.[child];
-        const childTable =
-            relation?.table ?? `${tableName}_${child.toUpperCase()}`;
+        if (relation === undefined) {
+            return;
+        }
+
+        const childTable = relation.table;
         const childAlias = relationAlias(relation, child.toUpperCase());
 
         sql += `\nLEFT JOIN ${childTable} ${childAlias}`;
 
-        if (relation?.join) {
-            sql += `\n  ON ${relation.join}`;
-        } else {
-            sql += `\n  ON ${childAlias}.PARENT_${tableName}_ID = ${tableAlias}.${tableName.replace(/S$/, '')}ID`;
-        }
+        sql += `\n  ON ${relation.join}`;
     });
 
     joins.forEach((target) => {
-        const joinDef = joinKeysDefs[target];
         const relation = sqlSource?.joins?.[target];
-        const targetTable = relation?.table ?? target.toUpperCase();
+        if (relation === undefined) {
+            return;
+        }
+
+        const targetTable = relation.table;
         const targetAlias = relationAlias(relation, targetTable);
 
-        if (relation?.join) {
-            sql += `\nLEFT JOIN ${targetTable} ${targetAlias}`;
-            sql += `\n  ON ${relation.join}`;
-        } else if (joinDef) {
-            sql += `\nLEFT JOIN ${targetTable} ${targetAlias}`;
-            sql += `\n  ON ${sqlColumnExpression(relation, targetAlias, joinDef.remote_key)} = ${sqlColumnExpression(sqlSource, tableAlias, joinDef.local_key)}`;
-        }
+        sql += `\nLEFT JOIN ${targetTable} ${targetAlias}`;
+        sql += `\n  ON ${relation.join}`;
     });
 
     if (filterQ.trim()) {

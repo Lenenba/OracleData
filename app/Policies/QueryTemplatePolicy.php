@@ -3,6 +3,7 @@
 namespace App\Policies;
 
 use App\Enums\QueryTemplateGovernanceStatus;
+use App\Enums\QueryTemplateRole;
 use App\Enums\QueryTemplateVersionStatus;
 use App\Models\QueryTemplate;
 use App\Models\QueryTemplateCertification;
@@ -13,24 +14,29 @@ class QueryTemplatePolicy
 {
     public function viewAnyGovernance(User $user): bool
     {
-        return $user->isSuperAdmin();
+        return $user->isSuperAdmin()
+            || $user->technicallyOwnedQueryTemplates()->exists()
+            || $user->queryTemplateRoles()->exists();
     }
 
     public function viewGovernance(User $user, QueryTemplate $template): bool
     {
-        return $user->isSuperAdmin();
+        return $user->isSuperAdmin()
+            || $this->isTechnicalOwner($user, $template)
+            || $this->hasRole($user, $template, QueryTemplateRole::Editor)
+            || $this->hasRole($user, $template, QueryTemplateRole::Publisher);
     }
 
     public function createDraft(User $user, QueryTemplate $template): bool
     {
-        return $user->isSuperAdmin()
+        return $this->canEdit($user, $template)
             && $template->governance_status === QueryTemplateGovernanceStatus::PUBLISHED
             && $template->published_version_id !== null;
     }
 
     public function updateDraft(User $user, QueryTemplate $template, QueryTemplateVersion $version): bool
     {
-        return $user->isSuperAdmin()
+        return $this->canEdit($user, $template)
             && $version->belongsToTemplate($template)
             && $version->status === QueryTemplateVersionStatus::DRAFT;
     }
@@ -42,7 +48,7 @@ class QueryTemplatePolicy
 
     public function publish(User $user, QueryTemplate $template, QueryTemplateVersion $version): bool
     {
-        return $user->isSuperAdmin()
+        return $this->canPublish($user, $template)
             && $version->belongsToTemplate($template)
             && $version->status === QueryTemplateVersionStatus::REVIEW;
     }
@@ -53,14 +59,14 @@ class QueryTemplatePolicy
         QueryTemplateVersion $fromVersion,
         QueryTemplateVersion $toVersion,
     ): bool {
-        return $user->isSuperAdmin()
+        return $this->viewGovernance($user, $template)
             && $fromVersion->belongsToTemplate($template)
             && $toVersion->belongsToTemplate($template);
     }
 
     public function restoreVersion(User $user, QueryTemplate $template, QueryTemplateVersion $version): bool
     {
-        return $user->isSuperAdmin()
+        return $this->canEdit($user, $template)
             && $template->isPublished()
             && $version->belongsToTemplate($template)
             && $version->status === QueryTemplateVersionStatus::SUPERSEDED
@@ -70,7 +76,7 @@ class QueryTemplatePolicy
 
     public function certify(User $user, QueryTemplate $template): bool
     {
-        return $user->isSuperAdmin()
+        return $this->canPublish($user, $template)
             && $template->governance_status === QueryTemplateGovernanceStatus::PUBLISHED;
     }
 
@@ -79,13 +85,58 @@ class QueryTemplatePolicy
         QueryTemplate $template,
         QueryTemplateCertification $certification,
     ): bool {
-        return $user->isSuperAdmin()
+        return $this->canPublish($user, $template)
             && $certification->belongsToTemplate($template);
     }
 
     public function archive(User $user, QueryTemplate $template): bool
     {
-        return $user->isSuperAdmin()
+        return $this->canPublish($user, $template)
             && $template->governance_status === QueryTemplateGovernanceStatus::PUBLISHED;
+    }
+
+    public function updateTechnicalDefinition(
+        User $user,
+        QueryTemplate $template,
+        QueryTemplateVersion $version,
+    ): bool {
+        return ($user->isSuperAdmin() || $this->isTechnicalOwner($user, $template))
+            && $version->belongsToTemplate($template)
+            && $version->status === QueryTemplateVersionStatus::DRAFT;
+    }
+
+    public function assignTechnicalOwner(User $user, QueryTemplate $template): bool
+    {
+        return $user->isSuperAdmin()
+            || $this->hasRole($user, $template, QueryTemplateRole::Publisher);
+    }
+
+    public function manageRoles(User $user, QueryTemplate $template): bool
+    {
+        return $user->isSuperAdmin();
+    }
+
+    private function canEdit(User $user, QueryTemplate $template): bool
+    {
+        return $user->isSuperAdmin()
+            || $this->isTechnicalOwner($user, $template)
+            || $this->hasRole($user, $template, QueryTemplateRole::Editor);
+    }
+
+    private function canPublish(User $user, QueryTemplate $template): bool
+    {
+        return $user->isSuperAdmin()
+            || $this->hasRole($user, $template, QueryTemplateRole::Publisher);
+    }
+
+    private function isTechnicalOwner(User $user, QueryTemplate $template): bool
+    {
+        return $template->technical_owner_user_id !== null
+            && $template->technical_owner_user_id === $user->id;
+    }
+
+    private function hasRole(User $user, QueryTemplate $template, QueryTemplateRole $role): bool
+    {
+        return $user->hasQueryTemplateRole($template, $role);
     }
 }

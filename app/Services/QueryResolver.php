@@ -20,6 +20,7 @@ class QueryResolver
     public function __construct(
         protected ClaudeClient $claude,
         protected OracleResourceCatalog $catalog,
+        protected SemanticCatalogReader $semanticCatalog,
     ) {}
 
     /**
@@ -91,11 +92,17 @@ class QueryResolver
 
     protected function systemPrompt(int $defaultLimit): string
     {
+        $catalogContext = $this->semanticCatalog->context(app()->getLocale());
+
+        if ($catalogContext === '') {
+            $catalogContext = $this->catalog->context();
+        }
+
         return <<<PROMPT
 Tu traduis une demande utilisateur en français en un plan de lecture Oracle Fusion REST (GET uniquement, lecture seule).
 
 Ressources disponibles (n'utilise QUE ces ressources, champs et enfants, jamais d'autres) :
-{$this->catalog->context()}
+{$catalogContext}
 
 Réponds STRICTEMENT par un seul objet JSON, sans texte autour, selon l'un de ces trois modes :
 

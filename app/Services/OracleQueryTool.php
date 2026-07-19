@@ -20,6 +20,7 @@ class OracleQueryTool
         protected FusionManager $fusion,
         protected OracleResourceCatalog $catalog,
         protected OracleFieldDiscovery $discovery,
+        protected SemanticCatalogReader $semanticCatalog,
     ) {}
 
     /**
@@ -49,6 +50,8 @@ class OracleQueryTool
         if ($resource === null) {
             throw new InvalidArgumentException("Ressource Oracle inconnue : [{$resourceKey}].");
         }
+
+        $query = $this->applySemanticGovernance($resourceKey, $query);
 
         $expand = $this->normalizeList($query['expand'] ?? null);
         $joins = $this->normalizeList($query['joins'] ?? null);
@@ -102,6 +105,81 @@ class OracleQueryTool
             'calls' => $calls,
             'query' => $this->canonicalQuery($resource['key'], $requestedFields, $expand, $joins, $childFields, $query),
         ];
+    }
+
+    /**
+     * Applies the published semantic allow-list before tenant discovery can
+     * broaden static metadata. No published catalog means bootstrap mode.
+     *
+     * @param  array<string, mixed>  $query
+     * @return array<string, mixed>
+     */
+    private function applySemanticGovernance(string $resourceKey, array $query): array
+    {
+        if ($this->semanticCatalog->currentVersion() === null) {
+            return $query;
+        }
+
+        $resources = collect($this->semanticCatalog->suggestions(app()->getLocale()))
+            ->keyBy('key');
+        $resource = $resources->get($resourceKey);
+
+        if (! is_array($resource)) {
+            throw new InvalidArgumentException("La ressource Oracle [{$resourceKey}] est désactivée dans le catalogue sémantique.");
+        }
+
+        $allowedFields = $this->normalizeList($resource['fields'] ?? null);
+        $fields = $this->normalizeList($query['fields'] ?? null);
+
+        if ($fields === []) {
+            $fields = $allowedFields;
+            $query['fields'] = $fields;
+        }
+
+        $this->assertKnown($fields, $allowedFields, 'champ gouverné', $resourceKey);
+        $expand = $this->normalizeList($query['expand'] ?? null);
+        $joins = $this->normalizeList($query['joins'] ?? null);
+        $allowedChildren = $this->normalizeList($resource['child_resources'] ?? null);
+        $allowedJoins = $this->normalizeList(array_keys((array) ($resource['join_keys'] ?? [])));
+        $this->assertKnown($expand, $allowedChildren, 'relation gouvernée (expand)', $resourceKey);
+        $this->assertKnown($joins, $allowedJoins, 'relation gouvernée (join)', $resourceKey);
+
+        $orderBy = trim((string) ($query['orderBy'] ?? ''));
+        if ($orderBy !== '') {
+            $this->assertKnown($this->orderByFields($orderBy), $allowedFields, 'champ de tri gouverné', $resourceKey);
+        }
+
+        $filter = trim((string) ($query['q'] ?? ''));
+        if ($filter !== '') {
+            $this->assertKnown($this->qFields($filter), $allowedFields, 'champ de filtre gouverné', $resourceKey);
+        }
+
+        $childFields = is_array($query['child_fields'] ?? null) ? $query['child_fields'] : [];
+
+        foreach ([...$expand, ...$joins] as $target) {
+            $allowed = $this->normalizeList(in_array($target, $expand, true)
+                ? data_get($resource, "child_fields.{$target}", [])
+                : data_get($resources->get($target), 'fields', []));
+            $targetFields = $this->normalizeList($childFields[$target] ?? null);
+
+            if ($targetFields === []) {
+                $targetFields = $allowed;
+                $childFields[$target] = $allowed;
+            }
+
+            $this->assertKnown(
+                $targetFields,
+                $allowed,
+                'champ relié gouverné',
+                $resourceKey,
+            );
+        }
+
+        if ($childFields !== []) {
+            $query['child_fields'] = $childFields;
+        }
+
+        return $query;
     }
 
     /**

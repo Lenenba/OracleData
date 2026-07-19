@@ -24,6 +24,7 @@ class QueryAgent
         protected ClaudeClient $claude,
         protected OracleQueryTool $tool,
         protected OracleResourceCatalog $catalog,
+        protected SemanticCatalogReader $semanticCatalog,
     ) {}
 
     /**
@@ -167,13 +168,19 @@ class QueryAgent
 
     protected function systemPrompt(): string
     {
+        $catalogContext = $this->semanticCatalog->context(app()->getLocale());
+
+        if ($catalogContext === '') {
+            $catalogContext = $this->catalog->context();
+        }
+
         return <<<PROMPT
 Tu es un analyste de données Oracle Fusion (lecture seule). À partir d'une demande en français,
 tu lis les ressources nécessaires avec l'outil `oracle_query`, tu joins/agrèges les données toi-même,
 puis tu renvoies le résultat final avec `submit_result`.
 
 Ressources disponibles (n'utilise QUE ces ressources, champs et enfants) :
-{$this->catalog->context()}
+{$catalogContext}
 
 Règles :
 - Lecture seule (GET). Appelle `oracle_query` autant de fois que nécessaire.
