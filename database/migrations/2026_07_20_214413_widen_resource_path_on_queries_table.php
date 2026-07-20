@@ -1,0 +1,30 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::table('queries', function (Blueprint $table) {
+            // Oracle composite identifiers can make child-resource paths much
+            // longer than the default VARCHAR(255) used by the original table.
+            $table->string('resource_path', 2048)->nullable()->change();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::table('queries', function (Blueprint $table) {
+            $table->string('resource_path', 255)->nullable()->change();
+        });
+    }
+};

@@ -232,6 +232,8 @@ class QueryController extends Controller
             'pinned' => $pinned,
             'categories' => $this->categoryOptions($locale),
             'tags' => $this->tagOptions($locale, $user),
+            'tenants' => $fusion->available(),
+            'defaultTenant' => $fusion->defaultKey(),
             'summary' => [
                 'all' => $accessible()->count(),
                 'mine' => Query::query()->where('user_id', $userId)->count(),

@@ -27,6 +27,7 @@ import { DataTable, StopClick, TableAvatar } from '@/components/data-table';
 import type { DataTableColumn } from '@/components/data-table';
 import { EntityChip } from '@/components/entity-chip';
 import Heading from '@/components/heading';
+import { PostmanImportDialog } from '@/components/queries/postman-import-dialog';
 import { QueryAccessLevelBadge } from '@/components/queries/query-access-level-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -381,6 +382,8 @@ export default function QueriesIndex({
     pinned = false,
     categories = [],
     tags = [],
+    tenants = {},
+    defaultTenant = '',
     usage,
     savedViews = [],
 }: {
@@ -395,6 +398,8 @@ export default function QueriesIndex({
     pinned?: boolean;
     categories?: CategoryOption[];
     tags?: TagOption[];
+    tenants?: Record<string, string>;
+    defaultTenant?: string;
     usage: UsageSummary;
     savedViews?: SavedView[];
 }) {
@@ -1022,6 +1027,10 @@ export default function QueriesIndex({
                             )}
                         </div>
                         <div className="flex items-center gap-2">
+                            <PostmanImportDialog
+                                tenants={tenants}
+                                defaultTenant={defaultTenant}
+                            />
                             <Button
                                 type="button"
                                 variant="outline"

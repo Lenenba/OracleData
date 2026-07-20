@@ -14,6 +14,7 @@ use App\Http\Controllers\QueryChangeRequestController;
 use App\Http\Controllers\QueryController;
 use App\Http\Controllers\QueryExportController;
 use App\Http\Controllers\QueryGroupShareController;
+use App\Http\Controllers\QueryImportController;
 use App\Http\Controllers\QueryPreferenceController;
 use App\Http\Controllers\QueryShareController;
 use App\Http\Controllers\QueryShareInvitationController;
@@ -83,6 +84,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('queries/shared', [QueryController::class, 'shared'])->name('queries.shared');
         Route::get('queries/create', [QueryController::class, 'create'])->name('queries.create');
         Route::post('queries', [QueryController::class, 'store'])->name('queries.store');
+
+        // Import de requêtes depuis une collection Postman (aucun appel Oracle).
+        Route::post('queries/import/preview', [QueryImportController::class, 'preview'])
+            ->middleware('throttle:30,1')
+            ->name('queries.import.preview');
+        Route::post('queries/import', [QueryImportController::class, 'store'])
+            ->middleware('throttle:20,1')
+            ->name('queries.import');
 
         Route::get('query-templates', [QueryTemplateController::class, 'index'])->name('query-templates.index');
         Route::get('query-templates/{queryTemplate}', [QueryTemplateController::class, 'show'])->name('query-templates.show');
