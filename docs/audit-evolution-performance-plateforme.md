@@ -142,7 +142,7 @@ Le futur SSO de la plateforme utilisera des tables d'identité distinctes et ne 
 
 ### Suivi d'avancement
 
-Dernière mise à jour : 19 juillet 2026.
+Dernière mise à jour : 20 juillet 2026.
 
 | Étape | Sujet | État |
 | ---: | --- | --- |
@@ -153,8 +153,8 @@ Dernière mise à jour : 19 juillet 2026.
 | 5 | Partage ciblé et collaboration | **Fait et validé — 19 juillet 2026 : 55 tests et 652 assertions réussis ; migration `167000` appliquée** |
 | 6 | Gouvernance et templates officiels | **Fait et validé — 19 juillet 2026 : publication versionnée, rôles éditoriaux par template, propriétaire technique et édition Oracle contrôlée ; migrations `168000`, `169000` et `170000` appliquées** |
 | 7 | Couche sémantique Oracle | **Terminée et validée le 19 juillet 2026 — `/describe`, catalogue gouverné et versionné FR/EN/ES, classification, relations, glossaire, lignage, impacts de dérive et mappings SQL/API déterministes ; migrations `171000` à `173000` appliquées** |
-| 8 | Fiabilité et tests de données | À faire |
-| 9 | Exécution asynchrone et automatisation | À faire |
+| 8 | Fiabilité et tests de données | **Fait et validé — 19 juillet 2026 : assertions configurables, validation bloquante avant publication, surveillance des templates certifiés, score de santé, détection des exécutions lentes ou cassées, jeux de référence et comparaisons d'équivalence sans valeurs ; migration `174000` appliquée en batch 18 ; suite complète de 499 tests et 3 345 assertions réussie** |
+| 9 | Exécution asynchrone et automatisation | **En cours — lots 9A (exécution agent asynchrone) et 9B (exports CSV serveur) livrés et validés le 20 juillet 2026 : jobs en queue, états, progression par polling, annulation coopérative, isolation par utilisateur, export paginé plafonné avec téléchargement différé et purge planifiée ; migrations `175000` et `176000` appliquées ; suite complète de 526 tests et 3 449 assertions réussie** |
 | 10 | Dashboards et analyse avancée | À faire |
 | 11 | Copilote IA gouverné | À faire |
 | 12 | Extensibilité et écosystème | À faire |
@@ -349,6 +349,52 @@ Progression de l'étape 7 — **en cours, lot 7A livré le 19 juillet 2026** :
 - [x] appliquer localement la migration `171000` qui porte les métadonnées courantes et l'historique immuable ;
 - [ ] poursuivre la couche sémantique avec relations, synonymes, glossaire trilingue, classification et lignée ; l'étape 7 complète reste ouverte.
 
+Progression de l'étape 8 — **fiabilité et tests de données terminés et validés le 19 juillet 2026** :
+
+- [x] définir des assertions configurables par version (`non_empty`, `row_count_range`, `unique`, `required_fields`, `allowed_values`, `max_duration`, `reference_equivalence`), plafonnées à cinquante par version et restreintes aux champs de la projection Oracle autorisée ;
+- [x] imposer une validation bloquante avant publication et avant certification : chaque scénario de référence exige un run réussi, à jour et rattaché à l'empreinte exacte des règles et du contenu de la version ;
+- [x] surveiller les templates publiés et certifiés via l'observation des exécutions réelles, avec suspension automatique de la certification lorsque la santé se dégrade ;
+- [x] projeter un score et un statut de santé (`healthy`, `degraded`, `failing`, `unknown`), un `quality_failure_streak` et le dernier run, en tenant compte des impacts de dérive de schéma ouverts ;
+- [x] détecter les exécutions lentes ou cassées par l'assertion `max_duration` et par l'échec fermé des erreurs Oracle, sans journaliser le filtre ni ses valeurs ;
+- [x] capturer des jeux de référence sans valeurs sensibles (empreinte HMAC versionnée) et comparer l'équivalence sur filtres, jointures, doublons, ordre, agrégations et valeurs nulles ;
+- [x] cloisonner tenant, connexion et version du lecteur, refuser les identifiants devinés (IDOR) et exclure toute donnée sensible de l'audit ;
+- [x] traduire l'interface FR/EN/ES avec parité des clés `templateQuality` et appliquer localement la migration `174000` en batch 18 ;
+- [x] valider la suite complète — 499 tests et 3 345 assertions réussis, dont 13 scénarios dédiés à la qualité des données.
+
+Résultat de l'étape 8 :
+
+- la migration `174000` ajoute `query_template_reference_datasets`, `query_template_validation_runs`, les colonnes de santé de `query_templates` et `query_template_versions.quality_rules`, avec index de résolution et `down()` de rollback ; elle est appliquée localement en batch 18 ;
+- `QueryTemplateQualityService` centralise l'exécution `exact` d'une version, la capture de référence, l'observation des exécutions publiées et la projection de santé sous verrou, sans jamais persister de valeur brute ;
+- `DataQualityAssertionEvaluator` évalue les assertions typées et `DatasetEquivalenceComparator` produit des profils et diffs d'équivalence à partir d'empreintes, jamais des lignes elles-mêmes ;
+- la gouvernance refuse la publication ou la certification tant qu'un run `pre_publication` réussi, à jour et couvrant chaque scénario de référence n'existe pas, et révoque atomiquement la certification lorsque la surveillance signale une régression ;
+- l'écran « Qualité du modèle » (`template-quality-card.tsx`) expose santé, dernier run, historique, capture de référence et lancement de validation, entièrement traduit FR/EN/ES ;
+- 13 scénarios dédiés couvrent le gating de publication, les profils sans valeurs et l'obligation que chaque scénario passe, la surveillance et la suspension de certification, ainsi que l'isolation tenant et IDOR imbriquée ; la suite complète réussit 499 tests et 3 345 assertions.
+
+Progression de l'étape 9 — **lot 9A (exécution agent asynchrone) livré et validé le 20 juillet 2026** :
+
+- [x] déplacer l'exécution d'une requête agent sauvegardée hors du cycle HTTP, dans un job en queue `database` (`RunAgentAnalysis`) résolu dans le périmètre de l'utilisateur, sans fallback global ;
+- [x] suivre le cycle de vie dans `agent_analysis_runs` (`queued`, `running`, `completed`, `failed`, `cancelled`) avec progression (itération, lectures Oracle) et propriétaire cloisonné ;
+- [x] exposer trois endpoints — lancement (`202`), suivi par polling léger et annulation — refusant tout accès croisé (IDOR) en `404` et bornant la connexion à celle du lecteur ;
+- [x] annuler de façon coopérative : un job non démarré est résolu immédiatement, un job en cours s'arrête proprement entre deux itérations ;
+- [x] écrire une ligne `query_executions` immuable (`succeeded`/`failed`) à la fin et journaliser `query.agent_dispatched`, `.completed`, `.failed` et `.cancelled` sans secret ni contenu Oracle ;
+- [x] plafonner le résultat stocké tout en conservant le décompte réel de lignes ;
+- [x] câbler le détail de requête au dispatch puis au polling (~2 s), avec progression, bouton d'annulation et rendu final, traduit FR/EN/ES ;
+- [x] retirer le chemin agent synchrone : `queries/{query}/run` ne traite plus que les requêtes mono-ressources ;
+- [x] valider : migration `175000` appliquée, 13 scénarios dédiés, suite complète de 512 tests et 3 395 assertions réussie, PHPStan (fichiers du lot), TypeScript, ESLint, Prettier et build Vite de production réussis.
+
+Progression de l'étape 9 — **lot 9B (exports CSV serveur) livré et validé le 20 juillet 2026** :
+
+- [x] générer un export CSV du jeu de données complet hors du cycle HTTP, dans un job en queue (`RunQueryExport`) qui ré-exécute la requête et **pagine Oracle** dans le périmètre du lecteur, sans fallback global ;
+- [x] réserver l'export serveur aux requêtes non-agent ; le CSV navigateur existant coexiste pour les lignes déjà à l'écran ;
+- [x] suivre le cycle de vie dans `query_exports` (`queued`, `running`, `completed`, `failed`, `cancelled`) avec décompte de lignes, plafond `max_rows` et indicateur de troncature ;
+- [x] écrire le fichier en flux sur un disque privé (BOM UTF-8), jamais servi publiquement ; exposer un téléchargement authentifié réservé au propriétaire ;
+- [x] exposer les endpoints lancement (`202`), suivi par polling, annulation coopérative entre deux pages et téléchargement, refusant tout accès croisé (IDOR) en `404` ;
+- [x] journaliser `query.export_dispatched`, `.completed`, `.failed` et `.cancelled` sans secret ni contenu Oracle ;
+- [x] borner la rétention par `expires_at` et purger fichiers et enregistrements expirés via la commande planifiée `exports:purge` ;
+- [x] câbler le détail de requête au bouton « Export complet (serveur) » avec progression, annulation et téléchargement, traduit FR/EN/ES ;
+- [x] valider : migration `176000` appliquée, 14 scénarios dédiés, suite complète de 526 tests et 3 449 assertions réussie, PHPStan (fichiers du lot), TypeScript, ESLint, Prettier et build Vite de production réussis.
+- [ ] lots suivants de l'étape 9 : planification (9C), alertes et événements (9D), diffusion contrôlée et webhooks (9E), aperçu agent du builder en asynchrone, exports XLSX/JSON ; l'étape 9 complète reste ouverte.
+
 Périmètre analysé par ce document, qu'il soit déjà livré ou encore planifié :
 
 - tags et catégories ;
@@ -423,15 +469,15 @@ query_user_preferences(user_id, is_pinned, pinned_at)
 
 Ces index sont présents dans les migrations actuelles, notamment sur la bibliothèque, les catégories et les exécutions. Leur ordre devra encore être confirmé avec les plans d'exécution et la volumétrie réels de la base de production.
 
-### 3.4 Grands tableaux de résultats
+### 3.4 Grands tableaux de résultats — export serveur livré le 20 juillet 2026 (lot 9B)
 
-Le tri, le filtrage, le rendu et l'export CSV sont actuellement réalisés dans le navigateur.
+Le tri, le filtrage et le rendu restent réalisés dans le navigateur. L'export CSV existe désormais en deux modes complémentaires : le navigateur pour les lignes déjà à l'écran, et un export serveur asynchrone pour le jeu de données complet.
 
 Recommandations :
 
 - traitement local pour les petits résultats ;
 - pagination ou virtualisation au-delà d'un seuil ;
-- export CSV côté serveur pour les gros volumes ;
+- export CSV côté serveur pour les gros volumes — **livré (lot 9B)** : job en queue, ré-exécution paginée d'Oracle dans le périmètre du lecteur, plafond de lignes, fichier sur disque privé, téléchargement différé et purge planifiée des exports expirés ;
 - chargement des sous-tableaux Oracle uniquement à leur ouverture ;
 - limite maximale de lignes renvoyées au navigateur.
 
@@ -468,17 +514,18 @@ La découverte dynamique des champs du query builder est également livrée :
 - déduplication des appels simultanés, timeout et retry borné côté navigateur ;
 - utilisation des champs découverts par l'interface et la validation backend des requêtes.
 
-### 3.7 Analyses agent synchrones
+### 3.7 Analyses agent synchrones — exécution asynchrone livrée le 20 juillet 2026 (lot 9A)
 
-Une analyse agent peut réaliser plusieurs cycles LLM et plusieurs appels Oracle dans la même requête HTTP.
+Une analyse agent réalisait plusieurs cycles LLM et plusieurs appels Oracle dans la même requête HTTP, bloquant le cycle.
 
-À terme, elle devrait être placée dans une queue avec :
+L'exécution d'une requête agent sauvegardée est désormais placée dans la queue `database` via le job `RunAgentAnalysis`, avec :
 
-- états `queued`, `running`, `completed`, `failed` et `cancelled` ;
-- polling léger ou flux serveur ;
-- progression visible ;
-- délai maximal et limite de coût ;
-- annulation lorsque possible.
+- états `queued`, `running`, `completed`, `failed` et `cancelled` portés par `agent_analysis_runs` ;
+- suivi par polling léger (~2 s) et progression visible (itération, lectures Oracle) ;
+- annulation coopérative, un job en cours s'arrêtant proprement entre deux itérations ;
+- résolution dans le périmètre de l'utilisateur, écriture d'une ligne `query_executions` immuable à la fin et audit sans secret.
+
+Reste ouvert pour les lots suivants : délai maximal et limite de coût, exécution asynchrone des exports (9B) et de l'aperçu agent du builder.
 
 ### 3.8 Bundle frontend
 
@@ -2050,22 +2097,26 @@ Cette feuille de route remplace l'ordre indicatif des sections précédentes. El
 
 Le parseur SQL standard et la production d'un plan d'appels API restent volontairement à l'étape 11. L'étape 7 livre leur prérequis déterministe et versionné ; elle ne prétend pas encore convertir un SQL libre.
 
-### Étape 8 — Fiabilité et tests de données
+### Étape 8 — Fiabilité et tests de données — **terminée et validée le 19 juillet 2026**
 
-- assertions configurables ;
-- validation automatique avant publication ;
-- surveillance des requêtes certifiées ;
-- score de santé ;
-- détection des requêtes lentes ou cassées ;
-- jeux de référence et comparaisons d'équivalence couvrant filtres, jointures, doublons, ordre, agrégations et valeurs nulles pour le futur traducteur SQL.
+- [x] assertions configurables ;
+- [x] validation automatique avant publication ;
+- [x] surveillance des requêtes certifiées ;
+- [x] score de santé ;
+- [x] détection des requêtes lentes ou cassées ;
+- [x] jeux de référence et comparaisons d'équivalence couvrant filtres, jointures, doublons, ordre, agrégations et valeurs nulles pour le futur traducteur SQL.
 
-### Étape 9 — Exécution asynchrone et automatisation
+Migration `174000` appliquée en batch 18 ; suite complète de 499 tests et 3 345 assertions réussie.
 
-- queue pour les agents et exports ;
-- progression et annulation ;
-- planification ;
-- alertes et événements ;
-- diffusion contrôlée et webhooks.
+### Étape 9 — Exécution asynchrone et automatisation — **lots 9A et 9B livrés le 20 juillet 2026**
+
+- [x] queue pour les agents (`RunAgentAnalysis`) et les exports (`RunQueryExport`) ;
+- [x] progression et annulation (analyses agent et exports serveur) ;
+- [ ] planification ;
+- [ ] alertes et événements ;
+- [ ] diffusion contrôlée et webhooks.
+
+Lots 9A et 9B : migrations `175000` et `176000` appliquées ; suite complète de 526 tests et 3 449 assertions réussie.
 
 ### Étape 10 — Dashboards et analyse avancée
 

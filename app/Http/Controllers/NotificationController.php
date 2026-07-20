@@ -233,6 +233,7 @@ class NotificationController extends Controller
             'query_change_request_commented',
             'query_change_request_mentioned',
             'query_change_request_status_changed',
+            'query_alert_triggered',
         ], true) ? $type : 'unknown';
     }
 

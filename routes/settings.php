@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\QueryAlertController;
+use App\Http\Controllers\QueryScheduleController;
 use App\Http\Controllers\Settings\CategoryController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\QueryTemplateCertificationController;
@@ -15,6 +17,7 @@ use App\Http\Controllers\Settings\SemanticFieldController;
 use App\Http\Controllers\Settings\SemanticGlossaryController;
 use App\Http\Controllers\Settings\SemanticRelationController;
 use App\Http\Controllers\Settings\TagController;
+use App\Http\Controllers\WebhookEndpointController;
 use Illuminate\Auth\Middleware\RequirePassword;
 use Illuminate\Support\Facades\Route;
 
@@ -96,6 +99,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('settings/tags', [TagController::class, 'store'])->name('tags.store');
     Route::put('settings/tags/{tag}', [TagController::class, 'update'])->name('tags.update');
     Route::delete('settings/tags/{tag}', [TagController::class, 'destroy'])->name('tags.destroy');
+
+    // Automatisation : planifications récurrentes des requêtes de l'utilisateur.
+    Route::get('settings/automation', [QueryScheduleController::class, 'index'])->name('automation.index');
+    Route::post('settings/schedules', [QueryScheduleController::class, 'store'])->name('schedules.store');
+    Route::patch('settings/schedules/{querySchedule}', [QueryScheduleController::class, 'update'])->name('schedules.update');
+    Route::delete('settings/schedules/{querySchedule}', [QueryScheduleController::class, 'destroy'])->name('schedules.destroy');
+    Route::post('settings/schedules/{querySchedule}/alerts', [QueryAlertController::class, 'store'])->name('alerts.store');
+    Route::patch('settings/alerts/{queryAlert}', [QueryAlertController::class, 'update'])->name('alerts.update');
+    Route::delete('settings/alerts/{queryAlert}', [QueryAlertController::class, 'destroy'])->name('alerts.destroy');
+    Route::post('settings/webhooks', [WebhookEndpointController::class, 'store'])->name('webhooks.store');
+    Route::patch('settings/webhooks/{webhookEndpoint}', [WebhookEndpointController::class, 'update'])->name('webhooks.update');
+    Route::delete('settings/webhooks/{webhookEndpoint}', [WebhookEndpointController::class, 'destroy'])->name('webhooks.destroy');
 });
 
 Route::get('.well-known/passkey-endpoints', function () {
