@@ -25,7 +25,7 @@ trait QueryValidationRules
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:2000'],
             'mode' => ['required', Rule::in(['single', 'agent'])],
-            'resource_path' => ['nullable', 'required_if:mode,single', 'string', new AllowedResourcePath],
+            'resource_path' => ['nullable', 'required_if:mode,single', 'string', 'max:'.AllowedResourcePath::MAX_LENGTH, new AllowedResourcePath],
             'tenant_key' => ['required', 'string', Rule::in(app(FusionManager::class)->keys())],
             'parameters' => ['nullable', 'array'],
             'parameters.limit' => ['nullable', 'integer', 'min:1', 'max:500'],

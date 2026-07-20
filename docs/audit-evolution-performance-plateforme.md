@@ -154,10 +154,10 @@ Dernière mise à jour : 20 juillet 2026.
 | 6 | Gouvernance et templates officiels | **Fait et validé — 19 juillet 2026 : publication versionnée, rôles éditoriaux par template, propriétaire technique et édition Oracle contrôlée ; migrations `168000`, `169000` et `170000` appliquées** |
 | 7 | Couche sémantique Oracle | **Terminée et validée le 19 juillet 2026 — `/describe`, catalogue gouverné et versionné FR/EN/ES, classification, relations, glossaire, lignage, impacts de dérive et mappings SQL/API déterministes ; migrations `171000` à `173000` appliquées** |
 | 8 | Fiabilité et tests de données | **Fait et validé — 19 juillet 2026 : assertions configurables, validation bloquante avant publication, surveillance des templates certifiés, score de santé, détection des exécutions lentes ou cassées, jeux de référence et comparaisons d'équivalence sans valeurs ; migration `174000` appliquée en batch 18 ; suite complète de 499 tests et 3 345 assertions réussie** |
-| 9 | Exécution asynchrone et automatisation | **En cours — lots 9A (exécution agent asynchrone) et 9B (exports CSV serveur) livrés et validés le 20 juillet 2026 : jobs en queue, états, progression par polling, annulation coopérative, isolation par utilisateur, export paginé plafonné avec téléchargement différé et purge planifiée ; migrations `175000` et `176000` appliquées ; suite complète de 526 tests et 3 449 assertions réussie** |
-| 10 | Dashboards et analyse avancée | À faire |
+| 9 | Exécution asynchrone et automatisation | **Clôture fonctionnelle — lots 9A à 9E livrés le 20 juillet 2026 : analyses agent et exports CSV en queue, progression et annulation, planification, alertes et événements, webhooks d'alerte signés ; migrations `175000` à `179000` appliquées en batches 19 à 21 ; 33 scénarios dédiés aux lots 9C à 9E et suite complète de 559 tests et 3 538 assertions réussies. La validation de production sans réserve reste conditionnée aux trois durcissements listés dans le détail de l'étape.** |
+| 10 | Dashboards et analyse avancée | **Prochaine étape — lot 10A à démarrer sur le socle déjà livré des paramètres de templates ; lots 10A à 10E définis dans le détail** |
 | 11 | Copilote IA gouverné | À faire |
-| 12 | Extensibilité et écosystème | À faire |
+| 12 | Extensibilité et écosystème | **Fondation livrée par anticipation — lot 12A « import Postman sécurisé » terminé le 20 juillet 2026 ; l'étape 12 reste ouverte** |
 | 13 | SSO plateforme et Oracle | À faire — dernière étape |
 
 Progression de l'étape 1 :
@@ -276,7 +276,7 @@ Résultat courant de l'étape 5 :
 - chaque demande possède un fil borné de commentaires immuables ; les lecteurs actuels peuvent le suivre tant que la requête reste accessible et les états terminaux ferment les nouveaux commentaires ;
 - les mentions sont structurées par identifiants, limitées à dix personnes par message, validées contre la Policy de lecture courante et dédupliquées des notifications ordinaires ; elles ne créent aucun grant ;
 - le centre interne distingue création, commentaire, mention et changement d'état, résout les noms depuis les relations encore autorisées et ne persiste jamais le titre, le message ou le commentaire dans la notification ;
-- les notifications e-mail restent planifiées avec la queue à l'étape 9 et les connecteurs externes à l'étape 12 ; ils ne font plus partie du critère de clôture de la collaboration interne synchrone ;
+- les notifications e-mail et les connecteurs Teams/Slack restent planifiés à l'étape 12 ; seul le webhook d'alerte signé relève du lot 9E et ces canaux ne font pas partie du critère de clôture de la collaboration interne synchrone ;
 - la migration `162000` introduit les niveaux d'accès et les partages directs en lot local 10 ; la migration de compatibilité `163000`, appliquée en lot local 11, remplace sans perte la contrainte unique historique par l'index `(query_id, user_id, status)` afin de conserver chaque cycle de partage ;
 - la migration `164000` introduit `groups`, `group_user` et `query_group_shares`, avec suppression logique des groupes, appartenance unique, snapshots de nom et index de résolution du cycle de vie ; elle est appliquée localement en batch 12 ;
 - la migration `165000`, également appliquée localement en batch 12, ajoute la suppression logique aux requêtes afin qu'une suppression fonctionnelle ne déclenche plus les cascades physiques sur leurs historiques ;
@@ -393,7 +393,59 @@ Progression de l'étape 9 — **lot 9B (exports CSV serveur) livré et validé l
 - [x] borner la rétention par `expires_at` et purger fichiers et enregistrements expirés via la commande planifiée `exports:purge` ;
 - [x] câbler le détail de requête au bouton « Export complet (serveur) » avec progression, annulation et téléchargement, traduit FR/EN/ES ;
 - [x] valider : migration `176000` appliquée, 14 scénarios dédiés, suite complète de 526 tests et 3 449 assertions réussie, PHPStan (fichiers du lot), TypeScript, ESLint, Prettier et build Vite de production réussis.
-- [ ] lots suivants de l'étape 9 : planification (9C), alertes et événements (9D), diffusion contrôlée et webhooks (9E), aperçu agent du builder en asynchrone, exports XLSX/JSON ; l'étape 9 complète reste ouverte.
+
+Progression de l'étape 9 — **lot 9C (planification) livré le 20 juillet 2026** :
+
+- [x] planifier les requêtes non-agent avec fréquences horaire, quotidienne ou hebdomadaire, selon le fuseau horaire de l'utilisateur ;
+- [x] détecter chaque minute les planifications actives arrivées à échéance via `schedules:run-due`, sans chevauchement de la commande, puis calculer leur prochaine échéance ;
+- [x] exécuter chaque occurrence hors du cycle HTTP dans `RunScheduledQuery`, avec la connexion du propriétaire et un historique horodaté dans `query_schedule_runs` ;
+- [x] isoler le CRUD par propriétaire et refuser les accès croisés en `404` ; exposer les planifications et leur dernier résultat dans l'écran « Automatisation » traduit FR/EN/ES ;
+- [x] valider : migration `177000` appliquée en batch 21 et 15 scénarios dédiés réussis.
+
+Progression de l'étape 9 — **lot 9D (alertes et événements) livré le 20 juillet 2026** :
+
+- [x] évaluer après chaque exécution planifiée les conditions `run_failed`, `row_count_above` et `row_count_below` ;
+- [x] historiser chaque déclenchement dans `query_alert_events`, notifier le propriétaire dans le canal interne et écrire un audit technique sans ligne Oracle ;
+- [x] isoler le CRUD des alertes par propriétaire et refuser les accès croisés en `404` ; exposer leur configuration dans l'écran « Automatisation » traduit FR/EN/ES ;
+- [x] valider : migration `178000` appliquée en batch 21 et 10 scénarios dédiés réussis.
+
+Progression de l'étape 9 — **lot 9E (webhooks d'alerte signés) livré le 20 juillet 2026** :
+
+- [x] gérer des endpoints HTTPS par utilisateur, avec secret chiffré au repos, jamais renvoyé au client et rotatif par mise à jour ;
+- [x] diffuser l'événement `query.alert_triggered` hors du cycle HTTP après commit, avec signature HMAC-SHA256, délais bornés et trois tentatives ;
+- [x] conserver un journal technique des livraisons sans secret ni ligne Oracle, ignorer les endpoints inactifs et refuser le CRUD croisé en `404` ;
+- [x] valider : migration `179000` appliquée en batch 21 et 8 scénarios dédiés réussis.
+
+**Clôture fonctionnelle vérifiée le 20 juillet 2026 :** les lots 9A à 9E sont livrés ; les 33 scénarios dédiés aux lots 9C à 9E réussissent 89 assertions et la suite complète réussit 559 tests et 3 538 assertions. Les migrations `175000`, `176000` et `177000` à `179000` sont appliquées respectivement en batches 19, 20 et 21.
+
+**Réserves avant validation de production sans réserve :**
+
+- revalider dans `RunScheduledQuery` le droit d'exécuter la requête au moment de chaque occurrence, notamment après révocation d'un partage ;
+- protéger les destinations webhook contre les SSRF, y compris les adresses privées ou de loopback, les redirections et le rebinding DNS ;
+- présenter `query_alert_triggered` comme un type dédié dans le centre de notifications, avec contexte autorisé et libellés FR/EN/ES.
+
+Les notifications e-mail et les connecteurs Teams/Slack sont rebaselinés à l'étape 12. Les formats XLSX/JSON et les exports analytiques complémentaires relèvent de l'étape 10 ; le délai maximal, la limite de coût et l'aperçu agent asynchrone du builder relèvent de l'étape 11.
+
+Prochaine étape — **Étape 10, dashboards et analyse avancée** :
+
+- [ ] **lot 10A — paramétrage généralisé** : étendre aux requêtes personnelles les définitions typées déjà livrées pour les templates officiels, proposer des formulaires d'exécution réutilisables, conserver des liaisons serveur autorisées et ajouter les listes de valeurs Oracle avec cache isolé par tenant ; ce lot est à démarrer, le socle des templates ne suffisant pas à le déclarer en cours ;
+- [ ] **lot 10B — dashboards composables** : persister dashboards, widgets et disposition, proposer KPI, tableau, graphique et tendance, puis rattacher chaque widget à la requête exacte ou à la version de template exacte, à ses paramètres, à son tenant et à son statut de certification ;
+- [ ] **lot 10C — comparaisons temporelles** : produire des séries et périodes comparables à partir de captures d'agrégats gouvernées, sans conserver les lignes Oracle brutes par défaut, avec provenance, rétention et isolation explicites ;
+- [ ] **lot 10D — exports analytiques** : étendre le pipeline asynchrone CSV du lot 9B aux formats XLSX et JSON, avec les mêmes limites, règles d'accès, stockage privé, expiration et purge ;
+- [ ] **lot 10E — résultats volumineux** : ajouter pagination, tri et filtrage serveur, virtualisation des lignes et colonnes et chargement des sous-tableaux uniquement à leur ouverture.
+
+Les fondations réutilisables sont déjà présentes — dashboard SQL fixe optimisé, paramètres typés des templates officiels, historique d'exécution, comparateur d'équivalence, export CSV asynchrone, planification et alertes — mais aucun des cinq lots ci-dessus n'est encore clôturé. L'étape 10 reste donc la première priorité incomplète et actionnable.
+
+Progression anticipée de l'étape 12 — **lot 12A (import Postman sécurisé) terminé et fondation livrée le 20 juillet 2026** :
+
+- [x] proposer depuis la bibliothèque un import JSON Postman avec aperçu, sélection explicite des requêtes et choix obligatoire d'un tenant Oracle appartenant à l'utilisateur ; chaque définition créée reste privée et aucun appel Oracle n'est effectué pendant l'aperçu ou l'import ;
+- [x] n'accepter que les requêtes `GET` des API Oracle HCM et FSCM, via la liste blanche centralisée des chemins, et borner la collection, sa profondeur, le nombre d'entrées, les candidats, les paramètres autorisés et leurs longueurs ;
+- [x] ignorer systématiquement l'hôte, l'authentification, les en-têtes, le corps, les scripts et les exemples Postman ; ne jamais importer ni exécuter un secret ou une écriture ;
+- [x] prendre en charge les chemins jusqu'à 2 048 caractères, signaler les chemins liés à un tenant et les laisser décochés par défaut afin d'exiger une sélection consciente ;
+- [x] dédupliquer les candidats dans la collection et contre la bibliothèque existante, créer le lot dans une transaction atomique, synchroniser la lignée sémantique et journaliser l'import sans contenu sensible ;
+- [x] traduire le parcours et ses erreurs en FR/EN/ES, couvrir les invariants par 14 scénarios dédiés et vérifier le catalogue Workers réel : 5 lectures importables, 4 écritures, 1 appel `/describe` et 9 brouillons ou entrées non prises en charge correctement ignorés.
+
+Le lot 12A apporte une interopérabilité entrante de catalogue ; ses paramètres importés sont des valeurs statiques et ne remplissent pas le critère « requêtes paramétrables » du lot 10A. Conformément à la règle d'anticipation de la feuille de route maîtresse, cette fondation ne clôt ni l'étape 10, ni l'étape 11, ni l'étape 12 ; le chantier suivant reste l'étape 10.
 
 Périmètre analysé par ce document, qu'il soit déjà livré ou encore planifié :
 
@@ -406,6 +458,7 @@ Périmètre analysé par ce document, qu'il soit déjà livré ou encore planifi
 - onboarding avec première connexion Basic active, vérifiée et par défaut ;
 - gestion de plusieurs tenants et connexions par utilisateur ;
 - partage ciblé avec des utilisateurs ou des groupes ;
+- import sécurisé de collections Postman dans la bibliothèque personnelle ;
 - super-administration et gouvernance globale ;
 - interface et contenus officiels multilingues en français, anglais et espagnol ;
 - trajectoire SSO pour la plateforme et les tenants Oracle ;
@@ -525,7 +578,7 @@ L'exécution d'une requête agent sauvegardée est désormais placée dans la qu
 - annulation coopérative, un job en cours s'arrêtant proprement entre deux itérations ;
 - résolution dans le périmètre de l'utilisateur, écriture d'une ligne `query_executions` immuable à la fin et audit sans secret.
 
-Reste ouvert pour les lots suivants : délai maximal et limite de coût, exécution asynchrone des exports (9B) et de l'aperçu agent du builder.
+Restent au backlog du copilote à l'étape 11 : délai maximal, limite de coût et exécution asynchrone de l'aperçu agent du builder. L'export CSV serveur asynchrone est livré par le lot 9B ; les formats complémentaires XLSX/JSON relèvent de l'étape 10.
 
 ### 3.8 Bundle frontend
 
@@ -795,7 +848,7 @@ Le titre reste sur la demande, tandis que le message initial, les précisions et
 
 Les mentions sont limitées à dix utilisateurs et vérifiées contre l'accès courant à la requête ; elles ne modifient jamais les grants. Les commentaires ne peuvent être ni modifiés ni supprimés. L'audit et les notifications conservent uniquement des identifiants et des états, jamais le titre ou le corps des messages.
 
-Les e-mails devront être envoyés via la queue à l'étape 9 et les intégrations externes via les connecteurs de l'étape 12.
+Les e-mails et les intégrations Teams/Slack devront être envoyés via des connecteurs en queue à l'étape 12. Le lot 9E couvre uniquement le webhook signé déclenché par une alerte planifiée.
 
 ## 9. Templates officiels verrouillés
 
@@ -1253,7 +1306,7 @@ notifications
 
 La notification Laravel utilise uniquement le canal `database` et est écrite de manière synchrone dans la transaction qui crée l'invitation. Le navigateur ne reçoit pas de nom ou d'adresse stockés dans `notifications.data` : le contrôleur résout en lot la requête, l'émetteur et l'état courant depuis la ligne de partage autorisée. Le centre `/notifications` est paginé, accepte les filtres `all` et `unread`, autorise la lecture unitaire ou globale et expose un compteur non lu borné dans les props Inertia communes. Une réponse marque la notification correspondante comme lue.
 
-L'émetteur reçoit maintenant une notification interne idempotente lors de l'acceptation ou du refus réel ; un rejeu de la même réponse ne crée aucun doublon. Les e-mails, Teams, Slack, webhooks et autres canaux externes restent futurs et devront être envoyés après commit via la queue.
+L'émetteur reçoit maintenant une notification interne idempotente lors de l'acceptation ou du refus réel ; un rejeu de la même réponse ne crée aucun doublon. Le webhook signé d'alerte est livré par le lot 9E. Les e-mails, Teams, Slack et les autres événements ou canaux externes restent prévus à l'étape 12 et devront être envoyés après commit via la queue.
 
 `queries.deleted_at` transforme la suppression fonctionnelle en archivage. Le propriétaire est le seul à pouvoir l'effectuer ; la requête est verrouillée, tous ses grants actifs sont révoqués, toutes ses invitations encore valides sont annulées et ces mutations sont auditées avant l'archivage dans la même transaction. Les lignes directes, les lignes de groupe et les exécutions ne sont donc plus effacées par cascade. Une éventuelle restauration technique ne réactive ni grant ni invitation ; une future purge physique devra suivre une politique de rétention explicite.
 
@@ -1970,7 +2023,7 @@ Chaque promotion peut exiger tests automatiques, approbation, résumé de change
 
 **Partiellement livré le 18 juillet 2026 pour les modèles prédéfinis.** Les types nombre, entier, texte, date, liste et booléen sont pris en charge avec valeurs par défaut, obligation, bornes et options autorisées. Les liaisons de filtre et de limite sont construites côté serveur à partir de définitions contrôlées. Leur présentation officielle est disponible en FR/EN/ES et chaque valeur possède une politique d'audit explicite ; les valeurs techniques des listes ne sont jamais traduites.
 
-La suite ajoutera les paramètres métier comme l'unité opérationnelle, le fournisseur, la devise et les listes de valeurs provenant d'Oracle, avec cache prudent et isolation par tenant.
+Le lot 10A généralisera ce mécanisme aux requêtes personnelles et ajoutera les paramètres métier comme l'unité opérationnelle, le fournisseur, la devise et les listes de valeurs provenant d'Oracle, avec cache prudent et isolation par tenant. Les valeurs statiques conservées lors d'un import Postman ne constituent pas des paramètres d'exécution et ne modifient pas ce périmètre.
 
 ### Dashboards composables
 
@@ -1996,6 +2049,7 @@ Une requête certifiée peut devenir un tableau, KPI, graphique, tendance ou ale
 
 ### Plateforme extensible
 
+- import sécurisé de collections Postman vers la bibliothèque personnelle — **fondation livrée par anticipation dans le lot 12A** ;
 - API avec scopes et quotas ;
 - webhooks signés ;
 - connecteurs de notifications ;
@@ -2051,7 +2105,7 @@ Cette feuille de route remplace l'ordre indicatif des sections précédentes. El
 
 ### Étape 5 — Partage ciblé et collaboration
 
-**Terminée et validée le 19 juillet 2026 : migration locale `167000` appliquée, 55 tests et 652 assertions réussis. Les canaux externes relèvent des étapes 9 et 12.**
+**Terminée et validée le 19 juillet 2026 : migration locale `167000` appliquée, 55 tests et 652 assertions réussis. Le webhook signé d'alerte relève du lot 9E ; les e-mails et connecteurs Teams/Slack relèvent de l'étape 12.**
 
 - [x] niveaux `private`, `restricted`, `organization` ;
 - [x] partage direct avec des utilisateurs et gestion paginée des destinataires ;
@@ -2066,7 +2120,8 @@ Cette feuille de route remplace l'ordre indicatif des sections précédentes. El
 - [x] notification interne idempotente de la réponse à l'émetteur ;
 - [x] demandes de modification, commentaires immuables et mentions structurées ;
 - [x] clôture atomique des demandes ouvertes lors de l'archivage et masquage du contexte après perte d'accès ;
-- [ ] e-mails via la queue — étape 9 ; connecteurs externes — étape 12.
+- [x] webhook signé pour les alertes planifiées — lot 9E ;
+- [ ] e-mails et connecteurs Teams/Slack via la queue — étape 12.
 
 ### Étape 6 — Gouvernance et templates officiels
 
@@ -2108,23 +2163,27 @@ Le parseur SQL standard et la production d'un plan d'appels API restent volontai
 
 Migration `174000` appliquée en batch 18 ; suite complète de 499 tests et 3 345 assertions réussie.
 
-### Étape 9 — Exécution asynchrone et automatisation — **lots 9A et 9B livrés le 20 juillet 2026**
+### Étape 9 — Exécution asynchrone et automatisation — **clôture fonctionnelle des lots 9A à 9E le 20 juillet 2026**
 
 - [x] queue pour les agents (`RunAgentAnalysis`) et les exports (`RunQueryExport`) ;
 - [x] progression et annulation (analyses agent et exports serveur) ;
-- [ ] planification ;
-- [ ] alertes et événements ;
-- [ ] diffusion contrôlée et webhooks.
+- [x] planification ;
+- [x] alertes et événements ;
+- [x] diffusion des alertes par webhooks HTTPS signés.
 
-Lots 9A et 9B : migrations `175000` et `176000` appliquées ; suite complète de 526 tests et 3 449 assertions réussie.
+Lots 9A à 9E : migrations `175000` à `179000` appliquées en batches 19 à 21 ; 33 scénarios dédiés aux lots 9C à 9E réussis, totalisant 89 assertions ; suite complète de 559 tests et 3 538 assertions réussie.
 
-### Étape 10 — Dashboards et analyse avancée
+Le périmètre maître est fonctionnellement livré. Conformément à la règle de passage ci-dessous, la validation de production sans réserve reste conditionnée à la revalidation des droits lors de chaque exécution planifiée, à la protection SSRF des destinations webhook et à la présentation trilingue dédiée des notifications `query_alert_triggered`.
 
-- widgets composables ;
-- requêtes paramétrables ;
-- comparaisons temporelles ;
-- exports volumineux côté serveur ;
-- virtualisation des résultats.
+### Étape 10 — Dashboards et analyse avancée — **prochaine étape**
+
+- [ ] **lot 10A — paramétrage généralisé** : requêtes personnelles paramétrables, formulaires runtime, liaisons contrôlées et listes de valeurs Oracle isolées par tenant ; à démarrer sur le socle partiel déjà livré pour les templates officiels ;
+- [ ] **lot 10B — dashboards composables** : widgets KPI, tableaux et graphiques, disposition persistante, paramètres, provenance, tenant et certification ;
+- [ ] **lot 10C — comparaisons temporelles** : séries, périodes comparées et captures d'agrégats gouvernées avec rétention ;
+- [ ] **lot 10D — exports analytiques** : formats XLSX/JSON ajoutés au pipeline asynchrone privé du lot 9B ;
+- [ ] **lot 10E — résultats volumineux** : pagination, tri et filtrage serveur, virtualisation et chargement différé des sous-tableaux.
+
+Le dashboard fixe optimisé de l'étape 4, les paramètres de templates de l'étape 6, les comparaisons d'équivalence de l'étape 8 et l'export CSV du lot 9B sont des fondations ; ils ne clôturent aucun des lots 10A à 10E.
 
 ### Étape 11 — Copilote IA gouverné
 
@@ -2133,16 +2192,20 @@ Lots 9A et 9B : migrations `175000` et `176000` appliquées ; suite complète de
 - diagnostic `exact`, `partiel` ou `impossible`, avec fragments non pris en charge et alternatives ;
 - suggestions et explications ;
 - génération de tests et visualisations ;
+- aperçu agent du builder en asynchrone avec délai maximal et limite de coût ;
 - confiance, provenance et limites ;
 - quotas, coûts et validation humaine.
 
-### Étape 12 — Extensibilité et écosystème
+### Étape 12 — Extensibilité et écosystème — **lot 12A livré par anticipation ; étape ouverte**
 
-- API publique interne ;
-- scopes, quotas et clés rotatives ;
-- webhooks et connecteurs ;
-- moteur de recommandation ;
-- intégration future d'autres sources.
+- [x] **lot 12A — import Postman sécurisé** : aperçu et sélection, `GET` HCM/FSCM uniquement, liste blanche et paramètres bornés, tenant explicite, aucune reprise d'hôte ou de secret, aucun appel Oracle, déduplication, transaction, lignée, audit et interface FR/EN/ES ;
+- [ ] API publique interne ;
+- [ ] scopes, quotas et clés rotatives ;
+- [ ] nouveaux événements webhook et connecteurs e-mail, Teams et Slack ;
+- [ ] moteur de recommandation ;
+- [ ] intégration future d'autres sources.
+
+La livraison anticipée du lot 12A applique la règle de priorité de cette section : elle ne clôt pas l'étape 12 et ne fait pas passer le chantier devant l'étape 10, qui reste la prochaine étape incomplète et actionnable.
 
 ### Étape 13 — SSO, en dernière étape
 

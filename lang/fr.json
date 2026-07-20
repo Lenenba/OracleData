@@ -64,5 +64,8 @@
     "Cette certification n’est plus active.": "Cette certification n’est plus active.",
     "Version restaurée dans un nouveau brouillon.": "Version restaurée dans un nouveau brouillon.",
     "Modèle officiel certifié.": "Modèle officiel certifié.",
-    "Certification révoquée.": "Certification révoquée."
+    "Certification révoquée.": "Certification révoquée.",
+    "L’environnement Oracle choisi n’est pas disponible.": "L’environnement Oracle choisi n’est pas disponible.",
+    "La collection Postman ne doit pas dépasser 5 Mio.": "La collection Postman ne doit pas dépasser 5 Mio.",
+    "Import Postman terminé : :created créée(s), :skipped déjà présente(s).": "Import Postman terminé : :created créée(s), :skipped déjà présente(s)."
 }

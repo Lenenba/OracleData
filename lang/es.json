@@ -87,5 +87,8 @@
     "Cette certification n’est plus active.": "Esta certificación ya no está activa.",
     "Version restaurée dans un nouveau brouillon.": "Versión restaurada en un nuevo borrador.",
     "Modèle officiel certifié.": "Plantilla oficial certificada.",
-    "Certification révoquée.": "Certificación revocada."
+    "Certification révoquée.": "Certificación revocada.",
+    "L’environnement Oracle choisi n’est pas disponible.": "El entorno de Oracle seleccionado no está disponible.",
+    "La collection Postman ne doit pas dépasser 5 Mio.": "La colección de Postman no debe superar los 5 MiB.",
+    "Import Postman terminé : :created créée(s), :skipped déjà présente(s).": "Importación de Postman completada: :created creadas, :skipped ya existentes."
 }
