@@ -765,9 +765,18 @@ class QueryController extends Controller
     /**
      * Execute the query against the selected tenant and return the rows.
      */
-    public function run(RunQueryRequest $request, Query $query, FusionManager $fusion, QueryAgent $agent, OracleQueryTool $tool, AuditRecorder $audit, QueryExecutionRecorder $executions): JsonResponse
+    public function run(RunQueryRequest $request, Query $query, FusionManager $fusion, OracleQueryTool $tool, AuditRecorder $audit, QueryExecutionRecorder $executions): JsonResponse
     {
         Gate::authorize('execute', $query);
+
+        // Agent analyses now run asynchronously via AgentAnalysisRunController so
+        // they no longer block the request cycle. See étape 9 (lot 9A).
+        abort_if(
+            $query->mode === 'agent',
+            422,
+            __('Les analyses agent s’exécutent de façon asynchrone.'),
+        );
+
         $fusion = $fusion->forUser($request->user());
 
         $ownerPreferredTenant = $query->user_id === $request->user()->id
@@ -783,7 +792,7 @@ class QueryController extends Controller
 
         $startedAt = now();
         $startedAtNs = hrtime(true);
-        $payload = $this->executeQuery($query, $tenant, $fusion, $agent, $tool);
+        $payload = $this->executeQuery($query, $tenant, $fusion, $tool);
         $durationMs = (int) round((hrtime(true) - $startedAtNs) / 1_000_000);
 
         $executions->recordQueryRun($request->user(), $query, $tenant, $payload, $startedAt, $durationMs);
@@ -797,12 +806,8 @@ class QueryController extends Controller
      *
      * @return array<string, mixed>
      */
-    private function executeQuery(Query $query, string $tenant, FusionManager $fusion, QueryAgent $agent, OracleQueryTool $tool): array
+    private function executeQuery(Query $query, string $tenant, FusionManager $fusion, OracleQueryTool $tool): array
     {
-        if ($query->mode === 'agent') {
-            return $this->runAgent($tenant, (string) ($query->description ?? ''), $agent);
-        }
-
         $parameters = $query->parameters ?? [];
 
         // Requête issue du wizard (resource_key présent) : rejouée via l'outil
@@ -901,7 +906,7 @@ class QueryController extends Controller
     {
         try {
             $result = $agent->run($tenant, $intent);
-        } catch (InvalidArgumentException|RuntimeException $e) {
+        } catch (RuntimeException $e) {
             return $this->basePayload($tenant, 'agent', $e->getMessage());
         }
 

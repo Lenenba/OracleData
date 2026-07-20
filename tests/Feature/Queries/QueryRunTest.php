@@ -193,31 +193,18 @@ test('an ambiguous request returns a clarification question', function () {
         ->assertJsonCount(0, 'items');
 });
 
-test('an agent query is executed by the agent at run time', function () {
-    Http::fake([
-        'api.anthropic.com/*' => Http::sequence()
-            ->push(['content' => [['type' => 'tool_use', 'id' => 'r1', 'name' => 'oracle_query', 'input' => ['resource' => 'suppliers']]], 'stop_reason' => 'tool_use'])
-            ->push(['content' => [['type' => 'tool_use', 'id' => 'r2', 'name' => 'submit_result', 'input' => [
-                'columns' => ['Supplier'],
-                'rows' => [['Supplier' => 'Acme']],
-                'analysis' => 'ok',
-            ]]], 'stop_reason' => 'tool_use']),
-        'client-x.fa.oraclecloud.com/*' => Http::response(['items' => [['Supplier' => 'Acme']], 'count' => 1]),
-    ]);
-
+test('an agent query no longer runs synchronously and defers to the async endpoint', function () {
     $user = $this->runner;
     $query = Query::factory()->for($user)->agent()->create([
         'tenant_key' => 'client_x',
         'oracle_tenant_id' => $this->clientX->id,
     ]);
 
+    // The agent path moved to AgentAnalysisRunController (étape 9, lot 9A); the
+    // synchronous run endpoint now handles single-resource queries only.
     $this->actingAs($user)
         ->postJson(route('queries.run', $query), ['tenant' => 'client_x'])
-        ->assertOk()
-        ->assertJsonPath('mode', 'agent')
-        ->assertJsonPath('analysis', 'ok')
-        ->assertJsonPath('error', null)
-        ->assertJsonCount(1, 'items');
+        ->assertStatus(422);
 });
 
 test('running targets the selected tenant base url', function () {

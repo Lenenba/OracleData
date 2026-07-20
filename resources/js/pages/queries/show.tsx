@@ -1,8 +1,17 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { Copy, Eye, MessageSquareText, Pencil, Share2 } from 'lucide-react';
+import {
+    Copy,
+    Eye,
+    MessageSquareText,
+    Pencil,
+    Share2,
+    Sparkles,
+    X,
+} from 'lucide-react';
 import { useState } from 'react';
 import Heading from '@/components/heading';
 import { QueryAccessLevelBadge } from '@/components/queries/query-access-level-badge';
+import { QueryExportButton } from '@/components/queries/query-export-button';
 import { QueryResultView } from '@/components/queries/query-result';
 import type { QueryResult } from '@/components/queries/query-result';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -18,6 +27,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
+import { useAgentRun } from '@/hooks/use-agent-run';
 import { useI18n } from '@/i18n/i18n-context';
 import { readCsrfToken } from '@/lib/csrf';
 import queries from '@/routes/queries';
@@ -64,11 +74,29 @@ export default function ShowQuery({
     const [result, setResult] = useState<QueryResult | null>(null);
     const [fetchError, setFetchError] = useState<string | null>(null);
 
+    const isAgent = query.mode === 'agent';
+    const agent = useAgentRun(query.id);
+    const agentRun = agent.run;
+
     const tenantLabel = tenants[result?.tenant ?? tenant] ?? tenant;
     const changeRequestsUrl = `/queries/${query.id}/change-requests`;
 
     function cloneQuery() {
         router.post(queries.clone(query.id));
+    }
+
+    function execute() {
+        if (!query.can.execute) {
+            return;
+        }
+
+        if (isAgent) {
+            void agent.start(tenant);
+
+            return;
+        }
+
+        void run();
     }
 
     async function run() {
@@ -234,12 +262,44 @@ export default function ShowQuery({
                             </div>
 
                             <Button
-                                onClick={run}
-                                disabled={status === 'loading' || tenant === ''}
+                                onClick={execute}
+                                disabled={
+                                    (isAgent
+                                        ? agent.isActive
+                                        : status === 'loading') || tenant === ''
+                                }
                             >
-                                {status === 'loading' && <Spinner />}
-                                {t('queries.run')}
+                                {(
+                                    isAgent
+                                        ? agent.isActive
+                                        : status === 'loading'
+                                ) ? (
+                                    <Spinner />
+                                ) : isAgent ? (
+                                    <Sparkles className="size-4" />
+                                ) : null}
+                                {isAgent
+                                    ? t('queries.runAnalysis')
+                                    : t('queries.run')}
                             </Button>
+                            {isAgent && agent.isActive && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => void agent.cancel()}
+                                >
+                                    <X className="size-4" />
+                                    {t('queries.cancelAnalysis')}
+                                </Button>
+                            )}
+
+                            {!isAgent && (
+                                <QueryExportButton
+                                    queryId={query.id}
+                                    tenant={tenant}
+                                    disabled={tenant === ''}
+                                />
+                            )}
                         </div>
                     ) : (
                         <Alert>
@@ -253,7 +313,7 @@ export default function ShowQuery({
                         </Alert>
                     )}
 
-                    {status === 'loading' && (
+                    {!isAgent && status === 'loading' && (
                         <div className="space-y-2">
                             <Skeleton className="h-9 w-full" />
                             <Skeleton className="h-9 w-full" />
@@ -261,7 +321,7 @@ export default function ShowQuery({
                         </div>
                     )}
 
-                    {status === 'done' && fetchError && (
+                    {!isAgent && status === 'done' && fetchError && (
                         <QueryResultView
                             result={
                                 {
@@ -283,12 +343,76 @@ export default function ShowQuery({
                         />
                     )}
 
-                    {status === 'done' && !fetchError && result && (
+                    {!isAgent && status === 'done' && !fetchError && result && (
                         <QueryResultView
                             result={result}
                             tenantLabel={tenantLabel}
                         />
                     )}
+
+                    {isAgent &&
+                        agentRun &&
+                        (agentRun.status === 'queued' ||
+                            agentRun.status === 'running') && (
+                            <div className="space-y-3 rounded-xl border p-4">
+                                <div className="flex items-center gap-2 text-sm font-medium">
+                                    <Spinner />
+                                    {t(
+                                        agentRun.status === 'queued'
+                                            ? 'queries.agentQueued'
+                                            : 'queries.agentRunning',
+                                    )}
+                                </div>
+                                {agentRun.status === 'running' && (
+                                    <p className="text-xs text-muted-foreground">
+                                        {t('queries.agentProgress', {
+                                            iteration: agentRun.iteration,
+                                            max: agentRun.max_iterations,
+                                            calls: agentRun.oracle_calls_count,
+                                        })}
+                                    </p>
+                                )}
+                                <Skeleton className="h-9 w-full" />
+                                <Skeleton className="h-9 w-full" />
+                            </div>
+                        )}
+
+                    {isAgent && agentRun?.status === 'cancelled' && (
+                        <Alert>
+                            <X />
+                            <AlertTitle>
+                                {t('queries.agentCancelledTitle')}
+                            </AlertTitle>
+                            <AlertDescription>
+                                {t('queries.agentCancelledDescription')}
+                            </AlertDescription>
+                        </Alert>
+                    )}
+
+                    {isAgent &&
+                        (agentRun?.status === 'failed' || agent.error) && (
+                            <Alert>
+                                <AlertTitle>
+                                    {t('queries.agentFailedTitle')}
+                                </AlertTitle>
+                                <AlertDescription>
+                                    {agent.error ??
+                                        t('queries.agentFailedDescription')}
+                                </AlertDescription>
+                            </Alert>
+                        )}
+
+                    {isAgent &&
+                        agentRun?.status === 'completed' &&
+                        agentRun.result && (
+                            <QueryResultView
+                                result={agentRun.result}
+                                tenantLabel={
+                                    tenants[agentRun.result.tenant] ??
+                                    tenantLabel
+                                }
+                            />
+                        )}
                 </div>
             </div>
         </>

@@ -7,6 +7,7 @@ import { useCurrentUrl } from '@/hooks/use-current-url';
 import { useI18n } from '@/i18n/i18n-context';
 import { cn, toUrl } from '@/lib/utils';
 import { edit as editAppearance } from '@/routes/appearance';
+import automation from '@/routes/automation';
 import categories from '@/routes/categories';
 import oracleTenants from '@/routes/oracle-tenants';
 import { edit } from '@/routes/profile';
@@ -31,6 +32,11 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
         {
             title: t('settings.connections'),
             href: oracleTenants.index(),
+            icon: null,
+        },
+        {
+            title: t('settings.automation'),
+            href: automation.index(),
             icon: null,
         },
         ...(props.auth.user.is_super_admin

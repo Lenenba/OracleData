@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use App\Exceptions\AgentAnalysisCancelled;
+use App\Models\User;
+use Closure;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -28,15 +31,39 @@ class QueryAgent
     ) {}
 
     /**
-     * @return array{columns: list<string>, rows: array<int, mixed>, analysis: string, oracleCalls: list<array{resource: string, params: array<string, mixed>, count: int}>}
+     * Return an agent bound to a single user, for background and explicit-user
+     * flows that cannot rely on the current authentication guard.
      */
-    public function run(string $tenantKey, string $intent): array
+    public function forUser(User|int $user): self
     {
+        $scoped = clone $this;
+        $scoped->tool = $this->tool->forUser($user);
+
+        return $scoped;
+    }
+
+    /**
+     * @param  Closure(int $iteration, int $oracleCalls): void|null  $onProgress  Called after each completed iteration.
+     * @param  Closure(): bool|null  $shouldCancel  Checked before each iteration; a truthy return aborts the run.
+     * @return array{columns: list<string>, rows: array<int, mixed>, analysis: string, oracleCalls: list<array{resource: string, params: array<string, mixed>, count: int}>}
+     *
+     * @throws AgentAnalysisCancelled when a cooperative cancellation is requested mid-run.
+     */
+    public function run(
+        string $tenantKey,
+        string $intent,
+        ?Closure $onProgress = null,
+        ?Closure $shouldCancel = null,
+    ): array {
         /** @var array<int, array<string, mixed>> $messages */
         $messages = [['role' => 'user', 'content' => $intent]];
         $oracleCalls = [];
 
         for ($iteration = 0; $iteration < $this->maxIterations; $iteration++) {
+            if ($shouldCancel !== null && $shouldCancel()) {
+                throw new AgentAnalysisCancelled;
+            }
+
             $response = $this->claude->messages([
                 'max_tokens' => 4096,
                 'system' => $this->systemPrompt(),
@@ -54,6 +81,10 @@ class QueryAgent
                 }
 
                 if ($block['name'] === 'submit_result') {
+                    if ($onProgress !== null) {
+                        $onProgress($iteration + 1, count($oracleCalls));
+                    }
+
                     return $this->finalResult($block['input'] ?? [], $oracleCalls);
                 }
 
@@ -62,6 +93,10 @@ class QueryAgent
                     $oracleCalls[] = $call;
                     $toolResults[] = $toolResult;
                 }
+            }
+
+            if ($onProgress !== null) {
+                $onProgress($iteration + 1, count($oracleCalls));
             }
 
             if ($toolResults === []) {

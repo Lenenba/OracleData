@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AgentAnalysisRunController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GroupController;
 use App\Http\Controllers\GroupMemberController;
@@ -11,6 +12,7 @@ use App\Http\Controllers\OracleTenantController;
 use App\Http\Controllers\QueryChangeRequestCommentController;
 use App\Http\Controllers\QueryChangeRequestController;
 use App\Http\Controllers\QueryController;
+use App\Http\Controllers\QueryExportController;
 use App\Http\Controllers\QueryGroupShareController;
 use App\Http\Controllers\QueryPreferenceController;
 use App\Http\Controllers\QueryShareController;
@@ -130,6 +132,32 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::middleware('throttle:15,1')->group(function () {
             Route::post('queries/preview', [QueryController::class, 'preview'])->name('queries.preview');
             Route::post('queries/{query}/run', [QueryController::class, 'run'])->name('queries.run');
+            // Lancement asynchrone d'une analyse agent : le travail coûteux part
+            // en queue, seul le dispatch compte dans ce quota.
+            Route::post('queries/{query}/agent-runs', [AgentAnalysisRunController::class, 'store'])
+                ->name('queries.agent-runs.store');
+            // Lancement d'un export serveur : re-lecture Oracle paginée en queue.
+            Route::post('queries/{query}/exports', [QueryExportController::class, 'store'])
+                ->name('queries.exports.store');
+        });
+
+        // Suivi et annulation d'une analyse agent : lectures/écritures DB légères,
+        // quota élargi pour absorber le polling (~1 appel toutes les 2 s).
+        Route::middleware('throttle:120,1,agent-runs')->group(function () {
+            Route::get('agent-runs/{agentAnalysisRun}', [AgentAnalysisRunController::class, 'show'])
+                ->name('agent-runs.show');
+            Route::post('agent-runs/{agentAnalysisRun}/cancel', [AgentAnalysisRunController::class, 'cancel'])
+                ->name('agent-runs.cancel');
+        });
+
+        // Suivi, annulation et téléchargement d'un export serveur.
+        Route::middleware('throttle:120,1,exports')->group(function () {
+            Route::get('exports/{queryExport}', [QueryExportController::class, 'show'])
+                ->name('exports.show');
+            Route::post('exports/{queryExport}/cancel', [QueryExportController::class, 'cancel'])
+                ->name('exports.cancel');
+            Route::get('exports/{queryExport}/download', [QueryExportController::class, 'download'])
+                ->name('exports.download');
         });
 
         // Aperçu direct sans LLM (query builder live) : GET Oracle bornés, quota plus large.
