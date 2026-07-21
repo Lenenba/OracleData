@@ -52,11 +52,16 @@ class AgentAnalysisRunController extends Controller
 
         $tenant = $request->user()->oracleTenants()->where('key', $tenantKey)->first();
 
+        // Lot 11A — enregistrer la limite d'itérations au moment du dispatch
+        // afin qu'elle soit visible depuis le frontend pour l'indicateur de progression.
+        $maxIterations = max(1, (int) config('services.anthropic.max_iterations', 8));
+
         $run = AgentAnalysisRun::create([
             'user_id' => $request->user()->id,
             'query_id' => $query->id,
             'oracle_tenant_id' => $tenant?->id,
             'status' => AgentAnalysisRunStatus::Queued,
+            'max_iterations' => $maxIterations,
             'queued_at' => now(),
         ]);
 

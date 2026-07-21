@@ -3,6 +3,7 @@ import {
     Database,
     FileSliders,
     LayoutGrid,
+    LayoutPanelTop,
     Server,
     Share2,
     UsersRound,
@@ -21,6 +22,7 @@ import {
 } from '@/components/ui/sidebar';
 import { useI18n } from '@/i18n/i18n-context';
 import { dashboard } from '@/routes';
+import dashboards from '@/routes/dashboards';
 import groupRoutes from '@/routes/groups';
 import oracleTenants from '@/routes/oracle-tenants';
 import queries from '@/routes/queries';
@@ -38,6 +40,12 @@ export function AppSidebar() {
             icon: FileSliders,
         },
         { title: t('nav.sharedQueries'), href: queries.shared(), icon: Share2 },
+        // Lot 10B — composable dashboards.
+        {
+            title: t('nav.dashboards'),
+            href: dashboards.index(),
+            icon: LayoutPanelTop,
+        },
         {
             title: t('nav.groups'),
             href: groupRoutes.index(),

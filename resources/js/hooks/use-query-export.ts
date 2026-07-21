@@ -45,8 +45,9 @@ function postJson(url: string, body?: unknown): Promise<Response> {
 }
 
 /**
- * Dispatches a server-side CSV export for one query, then polls its status
- * until it reaches a terminal state, exposing progress and cancellation.
+ * Dispatches a server-side export for one query (CSV, XLSX or JSON), then
+ * polls its status until it reaches a terminal state, exposing progress and
+ * cancellation. Lot 10D adds the `format` parameter.
  */
 export function useQueryExport(queryId: number) {
     const [record, setRecord] = useState<QueryExportStatus | null>(null);
@@ -115,7 +116,7 @@ export function useQueryExport(queryId: number) {
     }, [poll]);
 
     const start = useCallback(
-        async (tenant: string) => {
+        async (tenant: string, format: 'csv' | 'xlsx' | 'json' = 'csv') => {
             clearPoll();
             setError(null);
             setRecord(null);
@@ -124,6 +125,7 @@ export function useQueryExport(queryId: number) {
             try {
                 const response = await postJson(storeExport.url(queryId), {
                     tenant,
+                    format,
                 });
                 const data = (await response
                     .json()

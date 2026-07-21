@@ -1,4 +1,4 @@
-import { AlertCircle, HelpCircle } from 'lucide-react';
+import { AlertCircle, HelpCircle, ShieldCheck, ShieldAlert, Shield } from 'lucide-react';
 import AlertError from '@/components/alert-error';
 import { ResultsTable } from '@/components/queries/results-table';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -20,6 +20,8 @@ export type OracleCall = {
     count: number;
 };
 
+export type ConfidenceLevel = 'high' | 'medium' | 'low';
+
 export type QueryResult = {
     mode: 'single' | 'agent' | 'clarify';
     tenant: string;
@@ -27,6 +29,9 @@ export type QueryResult = {
     parameters: Record<string, unknown> | null;
     columns: string[] | null;
     analysis: string | null;
+    /** Lot 11B — confiance et provenance */
+    confidence?: ConfidenceLevel;
+    sources_used?: string[];
     items: Record<string, unknown>[];
     count: number;
     hasMore: boolean;
@@ -108,6 +113,35 @@ export function QueryResultView({
                     {result.hasMore && ' (plus de résultats disponibles)'}
                 </span>
             </div>
+
+            {/* Lot 11B — badge de confiance + sources */}
+            {result.mode === 'agent' && result.confidence && (
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                    {result.confidence === 'high' && (
+                        <Badge variant="outline" className="gap-1 border-emerald-500/40 text-emerald-700 dark:text-emerald-400">
+                            <ShieldCheck className="size-3" />
+                            Confiance élevée
+                        </Badge>
+                    )}
+                    {result.confidence === 'medium' && (
+                        <Badge variant="outline" className="gap-1 border-amber-500/40 text-amber-700 dark:text-amber-400">
+                            <Shield className="size-3" />
+                            Confiance moyenne
+                        </Badge>
+                    )}
+                    {result.confidence === 'low' && (
+                        <Badge variant="outline" className="gap-1 border-red-500/40 text-red-700 dark:text-red-400">
+                            <ShieldAlert className="size-3" />
+                            Confiance faible
+                        </Badge>
+                    )}
+                    {result.sources_used && result.sources_used.length > 0 && (
+                        <span className="text-muted-foreground">
+                            Sources : {result.sources_used.join(', ')}
+                        </span>
+                    )}
+                </div>
+            )}
 
             {result.analysis && (
                 <Alert>

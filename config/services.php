@@ -36,10 +36,15 @@ return [
     ],
 
     'anthropic' => [
-        'api_key' => env('ANTHROPIC_API_KEY'),
-        'base_url' => env('ANTHROPIC_BASE_URL', 'https://api.anthropic.com'),
-        'model' => env('ANTHROPIC_MODEL', 'claude-opus-4-8'),
-        'version' => env('ANTHROPIC_VERSION', '2023-06-01'),
+        'api_key'          => env('ANTHROPIC_API_KEY'),
+        'base_url'         => env('ANTHROPIC_BASE_URL', 'https://api.anthropic.com'),
+        'model'            => env('ANTHROPIC_MODEL', 'claude-opus-4-8'),
+        'version'          => env('ANTHROPIC_VERSION', '2023-06-01'),
+        // Lot 11A — gouvernance de l'agent IA.
+        // Nombre maximum d'allers-retours LLM avant abandon forcé (garde-fou anti-boucle).
+        'max_iterations'   => (int) env('ANTHROPIC_MAX_ITERATIONS', 8),
+        // Délai maximal total du job agent en secondes. Doit rester < queue retry_after (90s).
+        'max_timeout_seconds' => (int) env('ANTHROPIC_MAX_TIMEOUT_SECONDS', 85),
     ],
 
 ];

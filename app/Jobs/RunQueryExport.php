@@ -10,6 +10,7 @@ use App\Services\AuditRecorder;
 use App\Services\FusionManager;
 use App\Services\OracleQueryTool;
 use App\Services\QueryExportRunner;
+use App\Services\XlsxWriter;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Storage;
@@ -66,8 +67,15 @@ class RunQueryExport implements ShouldQueue
 
         $scopedFusion = $fusion->forUser($user);
         $scopedTool = $tool->forUser($user);
+        $format = $export->format ?: 'csv';
+        $extension = match ($format) {
+            'xlsx' => 'xml', // SpreadsheetML — .xml opens as xlsx in Excel
+            'json' => 'json',
+            default => 'csv',
+        };
+
         $disk = Storage::disk(QueryExport::DISK);
-        $relativePath = 'exports/'.$user->id.'/'.Str::uuid()->toString().'.csv';
+        $relativePath = 'exports/'.$user->id.'/'.Str::uuid()->toString().'.'.$extension;
         $disk->makeDirectory('exports/'.$user->id);
         $handle = fopen($disk->path($relativePath), 'w');
 
@@ -85,6 +93,7 @@ class RunQueryExport implements ShouldQueue
                 $scopedFusion,
                 $scopedTool,
                 $handle,
+                $format,
             );
         } catch (InvalidArgumentException|RuntimeException) {
             fclose($handle);
@@ -140,7 +149,7 @@ class RunQueryExport implements ShouldQueue
     }
 
     /**
-     * Paginate Oracle, writing each page to the CSV handle until exhausted, the
+     * Paginate Oracle, writing each page to the handle until exhausted, the
      * row cap is hit, or a cooperative cancellation is requested between pages.
      *
      * @param  resource  $handle
@@ -153,12 +162,19 @@ class RunQueryExport implements ShouldQueue
         FusionManager $fusion,
         OracleQueryTool $tool,
         $handle,
+        string $format,
     ): array {
-        fwrite($handle, "\xEF\xBB\xBF");
         $columns = null;
         $written = 0;
         $offset = 0;
         $truncated = false;
+        $jsonRows = [];
+        $xlsx = $format === 'xlsx' ? app(XlsxWriter::class) : null;
+        $options = $export->export_options ?? [];
+
+        if ($format === 'csv') {
+            fwrite($handle, "\xEF\xBB\xBF");
+        }
 
         do {
             if ($this->cancellationRequested($export)) {
@@ -177,7 +193,12 @@ class RunQueryExport implements ShouldQueue
 
             if ($columns === null) {
                 $columns = $runner->columns($query, $rows);
-                fputcsv($handle, $columns, escape: '');
+
+                match ($format) {
+                    'csv' => fputcsv($handle, $columns, escape: ''),
+                    'xlsx' => $xlsx->writeHeader($handle, $columns, $options),
+                    default => null,
+                };
             }
 
             foreach ($rows as $row) {
@@ -187,7 +208,13 @@ class RunQueryExport implements ShouldQueue
                     break;
                 }
 
-                fputcsv($handle, $this->line($columns, $row), escape: '');
+                match ($format) {
+                    'csv' => fputcsv($handle, $this->line($columns, $row), escape: ''),
+                    'xlsx' => $xlsx->writeDataRow($handle, $row, $columns),
+                    'json' => $jsonRows[] = $row,
+                    default => null,
+                };
+
                 $written++;
             }
 
@@ -200,6 +227,12 @@ class RunQueryExport implements ShouldQueue
             $offset += QueryExport::PAGE_SIZE;
             $export->forceFill(['row_count' => $written])->save();
         } while ($page['hasMore']);
+
+        match ($format) {
+            'xlsx' => $columns !== null ? $xlsx->writeFooter($handle) : null,
+            'json' => fwrite($handle, json_encode($jsonRows, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)),
+            default => null,
+        };
 
         return ['rows' => $written, 'truncated' => $truncated, 'cancelled' => false];
     }

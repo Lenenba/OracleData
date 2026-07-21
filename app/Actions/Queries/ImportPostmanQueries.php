@@ -2,6 +2,7 @@
 
 namespace App\Actions\Queries;
 
+use App\Enums\OracleExecutionPolicy;
 use App\Enums\QueryAccessLevel;
 use App\Models\Query;
 use App\Models\User;
@@ -12,6 +13,18 @@ use App\Services\SemanticLineageService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * Lot 12A — imports Oracle Fusion REST queries from a Postman collection.
+ *
+ * Two entry-points:
+ *
+ * - `preview()` parses the collection and enriches each candidate with an
+ *   `already_imported` flag (true if an identical path+parameters combination
+ *   already exists in the user's library) and a `default_selected` flag.
+ *
+ * - `execute()` creates the selected queries for the chosen tenant, skipping
+ *   any duplicate that already exists (idempotent).
+ */
 class ImportPostmanQueries
 {
     public function __construct(
@@ -22,6 +35,8 @@ class ImportPostmanQueries
     ) {}
 
     /**
+     * Parse and annotate a Postman collection for the preview dialog.
+     *
      * @param  array<string, mixed>  $collection
      * @return array<string, mixed>
      */
@@ -33,7 +48,7 @@ class ImportPostmanQueries
         foreach ($result['importable'] as $index => $candidate) {
             $alreadyImported = isset($existing[$this->fingerprint(
                 $candidate['resource_path'],
-                $candidate['parameters'],
+                (array) $candidate['parameters'],
             )]);
 
             $result['importable'][$index]['already_imported'] = $alreadyImported;
@@ -45,8 +60,10 @@ class ImportPostmanQueries
     }
 
     /**
+     * Persist the selected candidates as private queries for the given tenant.
+     *
      * @param  array<string, mixed>  $collection
-     * @param  list<int>|null  $selected
+     * @param  list<int>|null  $selected  null = use the recommended selection
      * @return array{created: int, skipped_existing: int, skipped_invalid_selection: int, selected: int}
      */
     public function execute(User $user, array $collection, ?array $selected, string $tenantKey): array
@@ -55,7 +72,7 @@ class ImportPostmanQueries
 
         if (! $fusion->has($tenantKey)) {
             throw ValidationException::withMessages([
-                'tenant_key' => __('L’environnement Oracle choisi n’est pas disponible.'),
+                'tenant_key' => __('L\'environnement Oracle choisi n\'est pas disponible.'),
             ]);
         }
 
@@ -85,7 +102,10 @@ class ImportPostmanQueries
                     continue;
                 }
 
-                $fingerprint = $this->fingerprint($candidate['resource_path'], $candidate['parameters']);
+                $fingerprint = $this->fingerprint(
+                    $candidate['resource_path'],
+                    (array) $candidate['parameters'],
+                );
 
                 if (isset($existing[$fingerprint])) {
                     $skippedExisting++;
@@ -93,20 +113,30 @@ class ImportPostmanQueries
                     continue;
                 }
 
+                // Build a readable name — prefix with folder when present.
+                $name = $candidate['name'];
+
+                if (isset($candidate['folder']) && $candidate['folder'] !== '' && $candidate['folder'] !== null) {
+                    $name = \Illuminate\Support\Str::limit((string) $candidate['folder'], 40, '').' / '.$name;
+                }
+
+                $name = \Illuminate\Support\Str::limit($name, 255, '');
+
                 $query = $user->queries()->create([
-                    'name' => $candidate['name'],
-                    'description' => null,
-                    'resource_path' => $candidate['resource_path'],
-                    'mode' => 'single',
-                    'access_level' => QueryAccessLevel::PRIVATE,
-                    'tenant_key' => $tenantKey,
+                    'name'             => $name,
+                    'description'      => null,
+                    'resource_path'    => $candidate['resource_path'],
+                    'mode'             => 'single',
+                    'access_level'     => QueryAccessLevel::PRIVATE,
+                    'execution_policy' => OracleExecutionPolicy::BEST_EFFORT,
+                    'tenant_key'       => $tenantKey,
                     'oracle_tenant_id' => $tenantId,
-                    'parameters' => $candidate['parameters'],
+                    'parameters'       => $candidate['parameters'] !== [] ? $candidate['parameters'] : null,
                 ]);
 
-                $lineageDefinition = $candidate['parameters'];
+                $lineageDefinition = (array) $candidate['parameters'];
 
-                if (is_string($candidate['semantic_resource_key'])) {
+                if (is_string($candidate['semantic_resource_key'] ?? null)) {
                     $lineageDefinition['resource_key'] = $candidate['semantic_resource_key'];
                 }
 
@@ -116,32 +146,34 @@ class ImportPostmanQueries
             }
 
             $this->audit->record($user, 'query.collection_imported', $user, [
-                'candidates_count' => count($candidates),
-                'selected_count' => count($selected),
-                'created_count' => $created,
-                'skipped_existing_count' => $skippedExisting,
+                'candidates_count'              => count($candidates),
+                'selected_count'                => count($selected),
+                'created_count'                 => $created,
+                'skipped_existing_count'        => $skippedExisting,
                 'skipped_invalid_selection_count' => $skippedInvalidSelection,
             ]);
 
             return [
-                'created' => $created,
-                'skipped_existing' => $skippedExisting,
+                'created'                   => $created,
+                'skipped_existing'          => $skippedExisting,
                 'skipped_invalid_selection' => $skippedInvalidSelection,
-                'selected' => count($selected),
+                'selected'                  => count($selected),
             ];
         });
     }
 
     /**
+     * Build a map of import-fingerprint => true for all existing queries
+     * belonging to the given user so we can detect duplicates cheaply.
+     *
      * @return array<string, true>
      */
     private function existingFingerprints(User $user, bool $lock = false): array
     {
         $query = Query::query()
             ->where('user_id', $user->id)
-            ->where('mode', 'single')
             ->whereNotNull('resource_path')
-            ->select(['id', 'resource_path', 'parameters']);
+            ->select(['resource_path', 'parameters']);
 
         if ($lock) {
             $query->lockForUpdate();
@@ -152,7 +184,7 @@ class ImportPostmanQueries
         foreach ($query->get() as $savedQuery) {
             $fingerprints[$this->fingerprint(
                 (string) $savedQuery->resource_path,
-                $savedQuery->parameters ?? [],
+                is_array($savedQuery->parameters) ? $savedQuery->parameters : [],
             )] = true;
         }
 
@@ -160,6 +192,8 @@ class ImportPostmanQueries
     }
 
     /**
+     * Deterministic fingerprint matching the one used by PostmanCollectionImporter.
+     *
      * @param  array<string, mixed>  $parameters
      */
     private function fingerprint(string $path, array $parameters): string

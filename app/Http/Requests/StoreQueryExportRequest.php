@@ -28,6 +28,10 @@ class StoreQueryExportRequest extends FormRequest
     {
         return [
             'tenant' => ['nullable', 'string', Rule::in(app(FusionManager::class)->keys())],
+            // Lot 10D — analytical export formats.
+            'format' => ['nullable', 'string', Rule::in(['csv', 'xlsx', 'json'])],
+            'export_options' => ['nullable', 'array'],
+            'export_options.sheet_name' => ['nullable', 'string', 'max:31'],
         ];
     }
 
