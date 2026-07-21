@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\PersonalApiToken;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
@@ -84,6 +85,12 @@ class User extends Authenticatable implements HasLocalePreference, PasskeyUser
     public function queries(): HasMany
     {
         return $this->hasMany(Query::class);
+    }
+
+    /** @return HasMany<PersonalApiToken, $this> */
+    public function personalApiTokens(): HasMany
+    {
+        return $this->hasMany(PersonalApiToken::class);
     }
 
     /**

@@ -20,7 +20,7 @@ use Illuminate\Support\Carbon;
  *
  * @property int $id
  * @property int $user_id
- * @property int $query_id
+ * @property int|null $query_id
  * @property int|null $oracle_tenant_id
  * @property int|null $auth_connection_id
  * @property int|null $query_execution_id
@@ -38,7 +38,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read User $user
- * @property-read Query $executedQuery
+ * @property-read Query|null $executedQuery
  * @property-read OracleTenant|null $oracleTenant
  * @property-read AuthConnection|null $authConnection
  * @property-read QueryExecution|null $queryExecution

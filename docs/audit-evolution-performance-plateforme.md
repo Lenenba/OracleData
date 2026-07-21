@@ -156,8 +156,8 @@ Dernière mise à jour : 20 juillet 2026.
 | 8 | Fiabilité et tests de données | **Fait et validé — 19 juillet 2026 : assertions configurables, validation bloquante avant publication, surveillance des templates certifiés, score de santé, détection des exécutions lentes ou cassées, jeux de référence et comparaisons d'équivalence sans valeurs ; migration `174000` appliquée en batch 18 ; suite complète de 499 tests et 3 345 assertions réussie** |
 | 9 | Exécution asynchrone et automatisation | **Clôture fonctionnelle — lots 9A à 9E livrés le 20 juillet 2026 : analyses agent et exports CSV en queue, progression et annulation, planification, alertes et événements, webhooks d'alerte signés ; migrations `175000` à `179000` appliquées en batches 19 à 21 ; 33 scénarios dédiés aux lots 9C à 9E et suite complète de 559 tests et 3 538 assertions réussies. La validation de production sans réserve reste conditionnée aux trois durcissements listés dans le détail de l'étape.** |
 | 10 | Dashboards et analyse avancée | **TERMINÉE — lots 10A à 10E livrés le 21 juillet 2026** |
-| 11 | Copilote IA gouverné | À faire |
-| 12 | Extensibilité et écosystème | **Fondation livrée par anticipation — lot 12A « import Postman sécurisé » terminé le 20 juillet 2026 ; l'étape 12 reste ouverte** |
+| 11 | Copilote IA gouverné | **En cours — lots 11A, 11B, 11D et 11E livrés le 22 juillet 2026 ; lot 11C (SQL → API) spécifié mais reporté** |
+| 12 | Extensibilité et écosystème | **En cours — lot 12A « import Postman sécurisé » + lot 12A+ « catalogue intégré Oracle HCM Workers » livrés ; reste ouverte** |
 | 13 | SSO plateforme et Oracle | À faire — dernière étape |
 
 Progression de l'étape 1 :
@@ -436,16 +436,22 @@ Prochaine étape — **Étape 10, dashboards et analyse avancée** :
 
 Les fondations réutilisables sont déjà présentes — dashboard SQL fixe optimisé, paramètres typés des templates officiels, historique d'exécution, comparateur d'équivalence, export CSV asynchrone, planification et alertes — mais aucun des cinq lots ci-dessus n'est encore clôturé. L'étape 10 reste donc la première priorité incomplète et actionnable.
 
-Progression anticipée de l'étape 12 — **lot 12A (import Postman sécurisé) terminé et fondation livrée le 20 juillet 2026** :
+Progression anticipée de l'étape 12 — **lots 12A à 12E livrés le 20–22 juillet 2026** :
 
-- [x] proposer depuis la bibliothèque un import JSON Postman avec aperçu, sélection explicite des requêtes et choix obligatoire d'un tenant Oracle appartenant à l'utilisateur ; chaque définition créée reste privée et aucun appel Oracle n'est effectué pendant l'aperçu ou l'import ;
-- [x] n'accepter que les requêtes `GET` des API Oracle HCM et FSCM, via la liste blanche centralisée des chemins, et borner la collection, sa profondeur, le nombre d'entrées, les candidats, les paramètres autorisés et leurs longueurs ;
-- [x] ignorer systématiquement l'hôte, l'authentification, les en-têtes, le corps, les scripts et les exemples Postman ; ne jamais importer ni exécuter un secret ou une écriture ;
-- [x] prendre en charge les chemins jusqu'à 2 048 caractères, signaler les chemins liés à un tenant et les laisser décochés par défaut afin d'exiger une sélection consciente ;
-- [x] dédupliquer les candidats dans la collection et contre la bibliothèque existante, créer le lot dans une transaction atomique, synchroniser la lignée sémantique et journaliser l'import sans contenu sensible ;
-- [x] traduire le parcours et ses erreurs en FR/EN/ES, couvrir les invariants par 14 scénarios dédiés et vérifier le catalogue Workers réel : 5 lectures importables, 4 écritures, 1 appel `/describe` et 9 brouillons ou entrées non prises en charge correctement ignorés.
+- [x] proposer depuis la bibliothèque un import JSON Postman avec aperçu, sélection explicite des requêtes et choix obligatoire d'un tenant Oracle appartenant à l'utilisateur ; chaque définition créée reste privée et aucun appel Oracle n'est effectué pendant l'aperçu ou l'import ; *(lot 12A)*
+- [x] n'accepter que les requêtes `GET` des API Oracle HCM et FSCM, via la liste blanche centralisée des chemins, et borner la collection, sa profondeur, le nombre d'entrées, les candidats, les paramètres autorisés et leurs longueurs ; *(lot 12A)*
+- [x] ignorer systématiquement l'hôte, l'authentification, les en-têtes, le corps, les scripts et les exemples Postman ; ne jamais importer ni exécuter un secret ou une écriture ; *(lot 12A)*
+- [x] prendre en charge les chemins jusqu'à 2 048 caractères, signaler les chemins liés à un tenant et les laisser décochés par défaut afin d'exiger une sélection consciente ; *(lot 12A)*
+- [x] dédupliquer les candidats dans la collection et contre la bibliothèque existante, créer le lot dans une transaction atomique, synchroniser la lignée sémantique et journaliser l'import sans contenu sensible ; *(lot 12A)*
+- [x] traduire le parcours et ses erreurs en FR/EN/ES, couvrir les invariants par 14 scénarios dédiés et vérifier le catalogue Workers réel : 5 lectures importables, 4 écritures, 1 appel `/describe` et 9 brouillons ou entrées non prises en charge correctement ignorés. *(lot 12A)*
+- [x] émettre trois nouveaux événements webhook — `query.run_completed`, `query.export_ready` et `query.agent_completed` — en complément de `query.alert_triggered` déjà présent ; les dispatcher depuis `QueryExecutionRecorder`, `RunQueryExport` et `RunAgentAnalysis` après commit ; l'enum `WebhookEvent` et `WebhookDispatcher` portent les nouvelles méthodes typées ; l'écran « Automatisation » affiche automatiquement les quatre événements disponibles depuis `WebhookEvent::values()` ; *(lot 12D)*
+- [x] créer la table `personal_api_tokens` avec secret haché en SHA-256, scopes (`read:queries`, `run:queries`), quota journalier, expiration et statut actif ; exposer le CRUD depuis « Paramètres > API & Tokens » avec révélation unique du secret à la création ; *(lot 12B)*
+- [x] vérifier scope et quota dans le middleware `AuthenticateApiToken` avant chaque appel API public ; exposer les endpoints GET `/api/v1/queries` et POST `/api/v1/queries/{query}/run` sous le groupe `api.token` ; *(lot 12C)*
+- [x] livrer le moteur de recommandations `GET /queries/recommendations` limité à 8 résultats, fondé sur les exécutions récentes et les requêtes populaires de l'organisation ; afficher le panneau `QueryRecommendations` dans le tableau de bord avant la liste des requêtes récentes ; *(lot 12E)*
+- [x] traduire les parcours API tokens, recommandations et webhooks en FR/EN/ES (17 clés `apiTokens.*`, 6 clés `recommendations.*`, 4 clés `webhooks.event*`) ; *(lots 12B/C/E)*
+- [x] valider : migration `personal_api_tokens` appliquée, Wayfinder régénéré, `npx tsc --noEmit` sans erreur et build Vite de production réussi le 22 juillet 2026.
 
-Le lot 12A apporte une interopérabilité entrante de catalogue ; ses paramètres importés sont des valeurs statiques et ne remplissent pas le critère « requêtes paramétrables » du lot 10A. Conformément à la règle d'anticipation de la feuille de route maîtresse, cette fondation ne clôt ni l'étape 10, ni l'étape 11, ni l'étape 12 ; le chantier suivant reste l'étape 10.
+Le lot 12A apporte une interopérabilité entrante de catalogue ; ses paramètres importés sont des valeurs statiques et ne remplissent pas le critère « requêtes paramétrables » du lot 10A. Les lots 12B à 12E posent les fondations API publique, gestion des tokens personnels, événements webhook étendus et recommandations intelligentes. Conformément à la règle d'anticipation de la feuille de route maîtresse, cette fondation ne clôt pas l'étape 10 ni l'étape 11 ; le chantier suivant reste l'étape 10.
 
 Périmètre analysé par ce document, qu'il soit déjà livré ou encore planifié :
 
@@ -2187,16 +2193,46 @@ Le dashboard fixe optimisé de l'étape 4, les paramètres de templates de l'ét
 
 **L'étape 10 est entièrement livrée au 21 juillet 2026.**
 
-### Étape 11 — Copilote IA gouverné
+### Étape 11 — Copilote IA gouverné — **lots 11A, 11B, 11D et 11E livrés le 22 juillet 2026**
 
-- génération fondée sur la couche sémantique ;
-- analyse de SQL standard et traduction déterministe en plans d'appels API en lecture seule ;
-- diagnostic `exact`, `partiel` ou `impossible`, avec fragments non pris en charge et alternatives ;
-- suggestions et explications ;
-- génération de tests et visualisations ;
-- aperçu agent du builder en asynchrone avec délai maximal et limite de coût ;
-- confiance, provenance et limites ;
-- quotas, coûts et validation humaine.
+#### Lot 11A — Quotas et délai maximal agent ✅
+- `config/services.php` : `anthropic.max_iterations` et `anthropic.max_timeout_seconds` configurables via variables d'environnement.
+- `QueryAgent::maxIterations` lu depuis la configuration (plus codé en dur à `8`).
+- `RunAgentAnalysis::$timeout` configurable, borné entre 10 et 85 secondes.
+- `AgentAnalysisRunController::store` enregistre `max_iterations` sur le run au dispatch.
+
+#### Lot 11B — Confidence et provenance ✅
+- L'outil `submit_result` de `QueryAgent` exige `confidence` (high/medium/low) et `sources_used` (liste de clés).
+- `RunAgentAnalysis::normalizedResult()` inclut ces champs dans le payload stocké et exposé via l'API.
+- `QueryResult` TypeScript : badge de confiance (`ShieldCheck` / `Shield` / `ShieldAlert`) + sources affichées sur les résultats agent.
+
+#### Lot 11C — SQL → API (différé — spécification uniquement)
+Reporté à l'étape 12. La couche sémantique (`SemanticSqlMappingResolver`) pose la fondation ; la traduction bidirectionnelle SQL ↔ REST nécessite un travail de catalogue plus large.
+
+#### Lot 11D — Suggestions copilote dans le builder ✅
+- `QueryCopilotController::suggest` : `POST /queries/copilot-suggest` — appelle `QueryResolver` (LLM uniquement, sans Oracle), renvoie `{ suggestion, resources[0..5] }` triées par score de pertinence.
+- `CopilotSuggestionPanel` : panneau débounced (700 ms) activé dès 20 caractères dans la description du builder ; ressources cliquables pour pré-sélectionner directement dans le builder.
+- 4 clés de traduction × 3 langues (FR/EN/ES).
+
+#### Lot 11E — Aperçu agent asynchrone depuis le builder ✅
+- Migration `2026_07_22_110000` : `agent_analysis_runs.query_id` nullable (compatible SQLite et PostgreSQL/MySQL).
+- `QueryAgentPreviewController::store` : `POST /queries/agent-preview` — dispatch éphémère avec intention brute (`result._intent_override`, effacé au démarrage du job).
+- `RunAgentAnalysis` mis à jour pour `?Query` et lecture de `_intent_override`.
+- Hook `useAgentPreview(intent, tenantKey)` — même interface que `useAgentRun`, réutilise les routes de polling/annulation existantes.
+- Onglet **« Analyser avec l'IA »** dans `QueryBuilder` : lancement, indicateur d'itération, `QueryResultView`, annulation, réinitialisation.
+- 9 clés de traduction × 3 langues (FR/EN/ES).
+
+#### Lot 12A+ — Catalogue intégré de collections Postman ✅
+- `resources/js/lib/postman-catalog.ts` : collection **Oracle HCM Workers** sanitisée embarquée (workers, affectations, managers, unités métier, combinaisons GL).
+- `PostmanImportDialog` : nouvel onglet « Catalogue » en plus de « Fichier local » — sélection radio, chargement inline sans appel réseau supplémentaire.
+- Catalogue extensible : ajouter une entrée dans `ORACLE_CATALOG` suffit.
+- 10 clés de traduction × 3 langues (FR/EN/ES) ; 2 clés communes ajoutées (`common.reset`, `common.dismiss`).
+
+#### Validation — 22 juillet 2026
+- `php artisan migrate` : migration `2026_07_22_110000` appliquée.
+- `php artisan wayfinder:generate` : actions générées pour `QueryCopilotController` et `QueryAgentPreviewController`.
+- `npx tsc --noEmit` : zéro nouvelle erreur introduite (22 erreurs `.form` pré-existantes inchangées).
+- `npm run build` : build de production réussi, 2 405 modules transformés.
 
 ### Étape 12 — Extensibilité et écosystème — **lot 12A livré par anticipation ; étape ouverte**
 
@@ -2232,3 +2268,4 @@ Une étape est terminée uniquement lorsque :
 - les trois langues sont complètes pour les fonctions livrées ;
 - un plan de rollback existe ;
 - les décisions techniques importantes sont documentées.
+

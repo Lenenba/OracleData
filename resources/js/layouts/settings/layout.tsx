@@ -7,6 +7,7 @@ import { useCurrentUrl } from '@/hooks/use-current-url';
 import { useI18n } from '@/i18n/i18n-context';
 import { cn, toUrl } from '@/lib/utils';
 import { edit as editAppearance } from '@/routes/appearance';
+import apiTokens from '@/routes/api-tokens';
 import automation from '@/routes/automation';
 import categories from '@/routes/categories';
 import oracleTenants from '@/routes/oracle-tenants';
@@ -37,6 +38,11 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
         {
             title: t('settings.automation'),
             href: automation.index(),
+            icon: null,
+        },
+        {
+            title: t('settings.apiTokens'),
+            href: apiTokens.index(),
             icon: null,
         },
         ...(props.auth.user.is_super_admin

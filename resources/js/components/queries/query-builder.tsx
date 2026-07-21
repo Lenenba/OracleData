@@ -1,5 +1,6 @@
 import { Link, router } from '@inertiajs/react';
 import {
+    Bot,
     Braces,
     Code2,
     Eye,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import AlertError from '@/components/alert-error';
+import { CopilotSuggestionPanel } from '@/components/queries/copilot-suggestion-panel';
 import { QueryAccessLevelBadge } from '@/components/queries/query-access-level-badge';
 import { QueryConfigPanel } from '@/components/queries/query-config-panel';
 import { QueryResultView } from '@/components/queries/query-result';
@@ -34,6 +36,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
+import { useAgentPreview } from '@/hooks/use-agent-preview';
 import { useLivePreview } from '@/hooks/use-live-preview';
 import { useI18n } from '@/i18n/i18n-context';
 import {
@@ -174,7 +177,8 @@ export function QueryBuilder({
     const [tagInput, setTagInput] = useState('');
     const [saving, setSaving] = useState(false);
     const [saveErrors, setSaveErrors] = useState<string[]>([]);
-    const [activeTab, setActiveTab] = useState<'preview' | 'sql'>('preview');
+    const [activeTab, setActiveTab] = useState<'preview' | 'sql' | 'agent'>('preview');
+    const agentPreview = useAgentPreview();
     // Aucun appel Oracle tant que l'utilisateur n'a pas demandé l'aperçu. En
     // édition, la requête existante s'affiche d'emblée (un appel attendu).
     const [previewEnabled, setPreviewEnabled] = useState(mode === 'edit');
@@ -488,6 +492,20 @@ export function QueryBuilder({
                             <Code2 className="size-4" />
                             SQL BIP
                         </button>
+                        {/* Lot 11E — agent preview tab */}
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab('agent')}
+                            className={[
+                                'flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors',
+                                activeTab === 'agent'
+                                    ? 'border-primary text-primary'
+                                    : 'border-transparent text-muted-foreground hover:text-foreground',
+                            ].join(' ')}
+                        >
+                            <Bot className="size-4" />
+                            {t('agentPreview.title')}
+                        </button>
 
                         <div className="ml-auto flex items-center gap-2 pr-3">
                             {live.loading && (
@@ -599,6 +617,105 @@ export function QueryBuilder({
                                 <pre className="overflow-x-auto rounded-lg border bg-muted p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-foreground">
                                     {bipSql}
                                 </pre>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Lot 11E — Agent preview tab */}
+                    {activeTab === 'agent' && (
+                        <div className="flex flex-col gap-3 p-4">
+                            <p className="text-xs text-muted-foreground">
+                                {t('agentPreview.description')}
+                            </p>
+
+                            {tenantKeys.length === 0 ? (
+                                <p className="text-sm text-amber-700 dark:text-amber-400">
+                                    {t('agentPreview.noTenant')}
+                                </p>
+                            ) : queryDescription.trim().length < 10 ? (
+                                <p className="text-sm text-muted-foreground">
+                                    {t('agentPreview.noDescription')}
+                                </p>
+                            ) : (
+                                <>
+                                    {agentPreview.error !== null && (
+                                        <AlertError
+                                            title={t('agentPreview.errorTitle')}
+                                            errors={[agentPreview.error]}
+                                        />
+                                    )}
+
+                                    {agentPreview.run !== null && (
+                                        <div className="space-y-2 text-sm">
+                                            {agentPreview.run.status === 'completed' && agentPreview.run.result !== null ? (
+                                                <QueryResultView
+                                                    result={agentPreview.run.result}
+                                                    tenantLabel={tenantLabel}
+                                                />
+                                            ) : agentPreview.isActive ? (
+                                                <div className="flex items-center gap-2 text-muted-foreground">
+                                                    <Spinner className="size-4" />
+                                                    <span>
+                                                        {t('agentPreview.iteration', {
+                                                            current: agentPreview.run.iteration,
+                                                            max: agentPreview.run.max_iterations,
+                                                        })}
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <Badge variant="secondary">
+                                                    {agentPreview.run.status}
+                                                </Badge>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    <div className="flex gap-2">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            disabled={agentPreview.isActive}
+                                            onClick={() =>
+                                                void agentPreview.start(
+                                                    queryDescription.trim(),
+                                                    tenant,
+                                                )
+                                            }
+                                        >
+                                            {agentPreview.dispatching ? (
+                                                <>
+                                                    <Spinner data-icon="inline-start" />
+                                                    {t('agentPreview.running')}
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Bot data-icon="inline-start" />
+                                                    {t('agentPreview.button')}
+                                                </>
+                                            )}
+                                        </Button>
+                                        {agentPreview.isActive && (
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => void agentPreview.cancel()}
+                                            >
+                                                {t('agentPreview.cancel')}
+                                            </Button>
+                                        )}
+                                        {agentPreview.run !== null && !agentPreview.isActive && (
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="ghost"
+                                                onClick={agentPreview.reset}
+                                            >
+                                                {t('common.reset')}
+                                            </Button>
+                                        )}
+                                    </div>
+                                </>
                             )}
                         </div>
                     )}
@@ -730,6 +847,12 @@ export function QueryBuilder({
                         <p className="text-[11px] text-muted-foreground">
                             {t('queries.descriptionHint')}
                         </p>
+                        {/* Lot 11D — Copilot suggestions */}
+                        <CopilotSuggestionPanel
+                            intent={queryDescription}
+                            allResources={resourceSuggestions}
+                            onSelectResource={selectResource}
+                        />
                     </div>
 
                     <div className="grid gap-3 md:grid-cols-2">

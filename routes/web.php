@@ -17,6 +17,8 @@ use App\Http\Controllers\QueryDashboardController;
 use App\Http\Controllers\QueryDashboardWidgetController;
 use App\Http\Controllers\QueryExportController;
 use App\Http\Controllers\QueryGroupShareController;
+use App\Http\Controllers\QueryAgentPreviewController;
+use App\Http\Controllers\QueryCopilotController;
 use App\Http\Controllers\QueryImportController;
 use App\Http\Controllers\QueryParameterController;
 use App\Http\Controllers\QueryPreferenceController;
@@ -154,6 +156,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
             // Lancement d'un export serveur : re-lecture Oracle paginée en queue.
             Route::post('queries/{query}/exports', [QueryExportController::class, 'store'])
                 ->name('queries.exports.store');
+            // Lot 11E — async agent preview from builder (no saved query required).
+            Route::post('queries/agent-preview', [QueryAgentPreviewController::class, 'store'])
+                ->name('queries.agent-preview.store');
+            // Lot 11D — copilot suggestions for the query builder (LLM only, no Oracle).
+            Route::post('queries/copilot-suggest', [QueryCopilotController::class, 'suggest'])
+                ->name('queries.copilot-suggest');
         });
 
         // Suivi et annulation d'une analyse agent : lectures/écritures DB légères,
