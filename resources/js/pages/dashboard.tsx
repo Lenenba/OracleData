@@ -13,6 +13,7 @@ import type { DataTableColumn } from '@/components/data-table';
 import { EntityChip } from '@/components/entity-chip';
 import Heading from '@/components/heading';
 import { QueryAccessLevelBadge } from '@/components/queries/query-access-level-badge';
+import { QueryRecommendations } from '@/components/queries/query-recommendations';
 import { StatCard } from '@/components/stat-card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -378,6 +379,8 @@ export default function Dashboard({
                         <DomainBreakdownPanel slices={domainBreakdown} />
                         <TenantsPanel tenants={tenants} />
                     </div>
+
+                    <QueryRecommendations />
 
                     <RecentQueriesTable rows={recentQueries} />
                 </div>

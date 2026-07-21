@@ -12,6 +12,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use App\Services\WebhookDispatcher;
 
 /**
  * Journalise chaque exécution de requête et maintient atomiquement les
@@ -25,6 +26,7 @@ class QueryExecutionRecorder
     public function __construct(
         private readonly SemanticLineageService $lineage,
         private readonly AggregateRecorder $aggregates,
+        private readonly WebhookDispatcher $webhooks,
     ) {}
 
     /**
@@ -41,7 +43,7 @@ class QueryExecutionRecorder
         $succeeded = ($payload['error'] ?? null) === null;
         $finishedAt = now();
 
-        return DB::transaction(function () use ($user, $query, $tenantKey, $succeeded, $durationMs, $payload, $startedAt, $finishedAt): QueryExecution {
+        $execution = DB::transaction(function () use ($user, $query, $tenantKey, $succeeded, $durationMs, $payload, $startedAt, $finishedAt): QueryExecution {
             // A run that started before a concurrent soft archive still
             // belongs to that historical query and must keep its provenance.
             $recordedQuery = Query::withTrashed()
@@ -100,7 +102,15 @@ class QueryExecutionRecorder
 
             return $execution;
         });
+
+        // Lot 12D — webhook hors transaction pour ne pas bloquer le commit.
+        if (($payload['error'] ?? null) === null) {
+            $this->webhooks->dispatchRunCompleted($execution);
+        }
+
+        return $execution;
     }
+
 
     /**
      * Record a direct preview or run of a predefined template.

@@ -1,6 +1,7 @@
 import { router } from '@inertiajs/react';
 import {
     AlertTriangle,
+    BookOpen,
     FileJson,
     LoaderCircle,
     RefreshCw,
@@ -36,6 +37,7 @@ import {
 } from '@/components/ui/select';
 import { useI18n } from '@/i18n/i18n-context';
 import { readCsrfToken } from '@/lib/csrf';
+import { ORACLE_CATALOG } from '@/lib/postman-catalog';
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
@@ -193,6 +195,9 @@ export function PostmanImportDialog({ tenants, defaultTenant }: Props) {
     const fileInput = useRef<HTMLInputElement>(null);
     const previewRequest = useRef(0);
     const [open, setOpen] = useState(false);
+    const [importTab, setImportTab] = useState<'file' | 'catalog'>('file');
+    const [catalogId, setCatalogId] = useState<string>('');
+    const [catalogLoading, setCatalogLoading] = useState(false);
     const [tenant, setTenant] = useState(() =>
         initialTenant(tenants, defaultTenant),
     );
@@ -216,10 +221,33 @@ export function PostmanImportDialog({ tenants, defaultTenant }: Props) {
         setPreviewing(false);
         setImporting(false);
         setError(null);
+        setCatalogLoading(false);
+        setCatalogId('');
 
         if (fileInput.current !== null) {
             fileInput.current.value = '';
         }
+    }
+
+    async function loadFromCatalog(): Promise<void> {
+        const entry = ORACLE_CATALOG.find((c) => c.id === catalogId);
+
+        if (entry === undefined) {
+            return;
+        }
+
+        setCatalogLoading(true);
+        setError(null);
+        setCollection(null);
+        setPreview(null);
+        setFileName(null);
+
+        // Load the catalog collection as a static import — no external fetch.
+        const col = entry.collection as JsonObject;
+        setFileName(entry.label);
+        setCollection(col);
+        await requestPreview(col, tenant);
+        setCatalogLoading(false);
     }
 
     function changeOpen(nextOpen: boolean) {
@@ -442,37 +470,65 @@ export function PostmanImportDialog({ tenants, defaultTenant }: Props) {
                         </AlertDescription>
                     </Alert>
 
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="grid gap-2">
-                            <Label htmlFor="postman-import-tenant">
-                                {t('queries.importTenant')}
-                            </Label>
-                            <Select
-                                value={tenant}
-                                onValueChange={changeTenant}
-                                disabled={
-                                    tenantEntries.length === 0 ||
-                                    previewing ||
-                                    importing
-                                }
-                            >
-                                <SelectTrigger id="postman-import-tenant">
-                                    <SelectValue
-                                        placeholder={t(
-                                            'queries.importTenantPlaceholder',
-                                        )}
-                                    />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {tenantEntries.map(([key, label]) => (
-                                        <SelectItem key={key} value={key}>
-                                            {label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
+                    {/* ── Oracle environment selector ── */}
+                    <div className="grid gap-2">
+                        <Label htmlFor="postman-import-tenant">
+                            {t('queries.importTenant')}
+                        </Label>
+                        <Select
+                            value={tenant}
+                            onValueChange={changeTenant}
+                            disabled={
+                                tenantEntries.length === 0 ||
+                                previewing ||
+                                importing
+                            }
+                        >
+                            <SelectTrigger id="postman-import-tenant">
+                                <SelectValue
+                                    placeholder={t(
+                                        'queries.importTenantPlaceholder',
+                                    )}
+                                />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {tenantEntries.map(([key, label]) => (
+                                    <SelectItem key={key} value={key}>
+                                        {label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
 
+                    {/* ── Source tabs: file vs catalog ── */}
+                    <div className="flex gap-1 rounded-lg border bg-muted/30 p-1">
+                        {(
+                            [
+                                { id: 'file', icon: Upload, label: t('queries.importFileTab') },
+                                { id: 'catalog', icon: BookOpen, label: t('queries.importCatalogTab') },
+                            ] as const
+                        ).map(({ id, icon: Icon, label }) => (
+                            <button
+                                key={id}
+                                type="button"
+                                disabled={previewing || importing}
+                                onClick={() => setImportTab(id)}
+                                className={[
+                                    'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                                    importTab === id
+                                        ? 'bg-background shadow-sm'
+                                        : 'text-muted-foreground hover:text-foreground',
+                                ].join(' ')}
+                            >
+                                <Icon className="size-3.5" />
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* ── File tab ── */}
+                    {importTab === 'file' && (
                         <div className="grid gap-2">
                             <Label htmlFor="postman-import-file">
                                 {t('queries.importFile')}
@@ -488,14 +544,70 @@ export function PostmanImportDialog({ tenants, defaultTenant }: Props) {
                                 }
                             />
                             <p className="text-xs text-muted-foreground">
-                                {fileName === null
+                                {fileName === null || importTab !== 'file'
                                     ? t('queries.importFileHint')
                                     : t('queries.importFileSelected', {
                                           name: fileName,
                                       })}
                             </p>
                         </div>
-                    </div>
+                    )}
+
+                    {/* ── Catalog tab ── */}
+                    {importTab === 'catalog' && (
+                        <div className="space-y-3">
+                            <p className="text-sm text-muted-foreground">
+                                {t('queries.importCatalogDescription')}
+                            </p>
+                            {ORACLE_CATALOG.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">
+                                    {t('queries.importCatalogEmpty')}
+                                </p>
+                            ) : (
+                                <div className="divide-y rounded-lg border">
+                                    {ORACLE_CATALOG.map((entry) => (
+                                        <label
+                                            key={entry.id}
+                                            className="flex cursor-pointer items-start gap-3 p-3 transition-colors hover:bg-muted/40"
+                                        >
+                                            <input
+                                                type="radio"
+                                                name="catalog-entry"
+                                                value={entry.id}
+                                                checked={catalogId === entry.id}
+                                                disabled={previewing || importing}
+                                                onChange={() => setCatalogId(entry.id)}
+                                                className="mt-1"
+                                            />
+                                            <span className="min-w-0 flex-1">
+                                                <span className="block text-sm font-medium">{entry.label}</span>
+                                                <span className="block text-xs text-muted-foreground">{entry.description}</span>
+                                                <span className="block text-xs text-muted-foreground">
+                                                    {entry.itemCount} {t('queries.importPreviewSummary', { count: entry.itemCount })}
+                                                </span>
+                                            </span>
+                                        </label>
+                                    ))}
+                                </div>
+                            )}
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={catalogId === '' || previewing || importing || catalogLoading}
+                                onClick={() => void loadFromCatalog()}
+                            >
+                                {catalogLoading ? (
+                                    <>
+                                        <LoaderCircle className="size-4 animate-spin" />
+                                        {t('queries.importCatalogLoading')}
+                                    </>
+                                ) : (
+                                    t('queries.importCatalogLoad')
+                                )}
+                            </Button>
+                        </div>
+                    )}
 
                     {tenantEntries.length === 0 && (
                         <Alert variant="destructive">

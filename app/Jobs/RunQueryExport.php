@@ -10,6 +10,7 @@ use App\Services\AuditRecorder;
 use App\Services\FusionManager;
 use App\Services\OracleQueryTool;
 use App\Services\QueryExportRunner;
+use App\Services\WebhookDispatcher;
 use App\Services\XlsxWriter;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -44,6 +45,7 @@ class RunQueryExport implements ShouldQueue
         OracleQueryTool $tool,
         QueryExportRunner $runner,
         AuditRecorder $audit,
+        WebhookDispatcher $webhooks,
     ): void {
         $export = $this->export->fresh();
 
@@ -121,6 +123,10 @@ class RunQueryExport implements ShouldQueue
             'expires_at' => now()->addDays(QueryExport::RETENTION_DAYS),
             'finished_at' => now(),
         ])->save();
+
+        // Lot 12D — webhook event
+        $export->refresh();
+        $webhooks->dispatchExportReady($export);
 
         $audit->record($user, 'query.export_completed', $query, [
             'query_export_id' => $export->id,

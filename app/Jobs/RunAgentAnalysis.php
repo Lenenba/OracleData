@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\AuditRecorder;
 use App\Services\QueryAgent;
 use App\Services\QueryExecutionRecorder;
+use App\Services\WebhookDispatcher;
 use Carbon\CarbonInterface;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -51,6 +52,7 @@ class RunAgentAnalysis implements ShouldQueue
         QueryAgent $agent,
         QueryExecutionRecorder $executions,
         AuditRecorder $audit,
+        WebhookDispatcher $webhooks,
     ): void {
         $run = $this->run->fresh();
 
@@ -60,6 +62,12 @@ class RunAgentAnalysis implements ShouldQueue
 
         $user = $run->user;
         $query = $run->executedQuery;
+
+        // Lot 11E — intent override for ephemeral builder previews (query_id = null).
+        $intentOverride = is_array($run->result) ? ($run->result['_intent_override'] ?? null) : null;
+        $intent = is_string($intentOverride) && $intentOverride !== ''
+            ? $intentOverride
+            : (string) ($query?->description ?? '');
 
         // A cancellation requested before the worker picked the job up resolves
         // immediately, without any Oracle or LLM call.
@@ -74,12 +82,15 @@ class RunAgentAnalysis implements ShouldQueue
         $run->forceFill([
             'status' => AgentAnalysisRunStatus::Running,
             'started_at' => $startedAt,
+            // Clear the intent override from result so the polling endpoint
+            // does not expose the raw intent after the run starts.
+            'result' => null,
         ])->save();
 
         try {
             $result = $agent->forUser($user)->run(
                 $this->tenantKey,
-                (string) ($query->description ?? ''),
+                $intent,
                 onProgress: function (int $iteration, int $oracleCalls) use ($run): void {
                     $run->forceFill([
                         'iteration' => $iteration,
@@ -101,7 +112,7 @@ class RunAgentAnalysis implements ShouldQueue
             return;
         }
 
-        $this->markCompleted($run, $user, $query, $executions, $audit, $result, $startedAt, $startedAtNs);
+        $this->markCompleted($run, $user, $query, $executions, $audit, $webhooks, $result, $startedAt, $startedAtNs);
     }
 
     /**
@@ -128,9 +139,10 @@ class RunAgentAnalysis implements ShouldQueue
     private function markCompleted(
         AgentAnalysisRun $run,
         User $user,
-        Query $query,
+        ?Query $query,
         QueryExecutionRecorder $executions,
         AuditRecorder $audit,
+        WebhookDispatcher $webhooks,
         array $result,
         CarbonInterface $startedAt,
         float $startedAtNs,
@@ -140,28 +152,36 @@ class RunAgentAnalysis implements ShouldQueue
         $durationMs = $this->durationMs($startedAtNs);
         $storedResult = $this->normalizedResult($result, $rows, $rowCount, null);
 
-        $execution = $executions->recordQueryRun(
-            $user,
-            $query,
-            $this->tenantKey,
-            array_replace($storedResult, ['items' => $rows]),
-            $startedAt,
-            $durationMs,
-        );
+        if ($query !== null) {
+            $execution = $executions->recordQueryRun(
+                $user,
+                $query,
+                $this->tenantKey,
+                array_replace($storedResult, ['items' => $rows]),
+                $startedAt,
+                $durationMs,
+            );
+
+            $run->forceFill([
+                'query_execution_id' => $execution->id,
+                'oracle_tenant_id'   => $execution->oracle_tenant_id,
+                'auth_connection_id' => $execution->auth_connection_id,
+            ])->save();
+        }
 
         $run->forceFill([
-            'status' => AgentAnalysisRunStatus::Completed,
-            'query_execution_id' => $execution->id,
-            'oracle_tenant_id' => $execution->oracle_tenant_id,
-            'auth_connection_id' => $execution->auth_connection_id,
-            'result' => $storedResult,
+            'status'    => AgentAnalysisRunStatus::Completed,
+            'result'    => $storedResult,
             'row_count' => $rowCount,
             'finished_at' => now(),
         ])->save();
 
-        $audit->record($user, 'query.agent_completed', $query, [
+        // Lot 12D — webhook event
+        $run->refresh();
+        $webhooks->dispatchAgentCompleted($run);
+
+        $audit->record($user, 'query.agent_completed', $query ?? $user, [
             'agent_analysis_run_id' => $run->id,
-            'query_execution_id' => $execution->id,
             'tenant_key' => $this->tenantKey,
             'duration_ms' => $durationMs,
             'row_count' => $rowCount,
@@ -171,34 +191,39 @@ class RunAgentAnalysis implements ShouldQueue
     private function markFailed(
         AgentAnalysisRun $run,
         User $user,
-        Query $query,
+        ?Query $query,
         QueryExecutionRecorder $executions,
         AuditRecorder $audit,
         CarbonInterface $startedAt,
         float $startedAtNs,
     ): void {
         $durationMs = $this->durationMs($startedAtNs);
-        $execution = $executions->recordQueryRun(
-            $user,
-            $query,
-            $this->tenantKey,
-            ['items' => [], 'oracleCalls' => [], 'error' => __('La validation Oracle a échoué.')],
-            $startedAt,
-            $durationMs,
-        );
+
+        if ($query !== null) {
+            $execution = $executions->recordQueryRun(
+                $user,
+                $query,
+                $this->tenantKey,
+                ['items' => [], 'oracleCalls' => [], 'error' => __('La validation Oracle a échoué.')],
+                $startedAt,
+                $durationMs,
+            );
+
+            $run->forceFill([
+                'query_execution_id' => $execution->id,
+                'oracle_tenant_id'   => $execution->oracle_tenant_id,
+                'auth_connection_id' => $execution->auth_connection_id,
+            ])->save();
+        }
 
         $run->forceFill([
-            'status' => AgentAnalysisRunStatus::Failed,
-            'query_execution_id' => $execution->id,
-            'oracle_tenant_id' => $execution->oracle_tenant_id,
-            'auth_connection_id' => $execution->auth_connection_id,
-            'error_code' => 'agent_error',
+            'status'      => AgentAnalysisRunStatus::Failed,
+            'error_code'  => 'agent_error',
             'finished_at' => now(),
         ])->save();
 
-        $audit->record($user, 'query.agent_failed', $query, [
+        $audit->record($user, 'query.agent_failed', $query ?? $user, [
             'agent_analysis_run_id' => $run->id,
-            'query_execution_id' => $execution->id,
             'tenant_key' => $this->tenantKey,
             'error_code' => 'agent_error',
         ]);
@@ -207,7 +232,7 @@ class RunAgentAnalysis implements ShouldQueue
     private function markCancelled(
         AgentAnalysisRun $run,
         User $user,
-        Query $query,
+        ?Query $query,
         AuditRecorder $audit,
     ): void {
         $run->forceFill([
@@ -216,7 +241,7 @@ class RunAgentAnalysis implements ShouldQueue
             'finished_at' => now(),
         ])->save();
 
-        $audit->record($user, 'query.agent_cancelled', $query, [
+        $audit->record($user, 'query.agent_cancelled', $query ?? $user, [
             'agent_analysis_run_id' => $run->id,
             'tenant_key' => $this->tenantKey,
         ]);

@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\QueryAlertController;
+use App\Http\Controllers\QueryRecommendationController;
 use App\Http\Controllers\QueryScheduleController;
+use App\Http\Controllers\Settings\ApiTokenController;
 use App\Http\Controllers\Settings\CategoryController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\QueryTemplateCertificationController;
@@ -111,6 +113,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('settings/webhooks', [WebhookEndpointController::class, 'store'])->name('webhooks.store');
     Route::patch('settings/webhooks/{webhookEndpoint}', [WebhookEndpointController::class, 'update'])->name('webhooks.update');
     Route::delete('settings/webhooks/{webhookEndpoint}', [WebhookEndpointController::class, 'destroy'])->name('webhooks.destroy');
+
+    // Lot 12B/12C — gestion des tokens d'API personnels.
+    Route::get('settings/api-tokens', [ApiTokenController::class, 'index'])->name('api-tokens.index');
+    Route::post('settings/api-tokens', [ApiTokenController::class, 'store'])->name('api-tokens.store');
+    Route::patch('settings/api-tokens/{personalApiToken}', [ApiTokenController::class, 'update'])->name('api-tokens.update');
+    Route::delete('settings/api-tokens/{personalApiToken}', [ApiTokenController::class, 'destroy'])->name('api-tokens.destroy');
+
+    // Lot 12E — recommandations de requêtes (lecture légère, DB only).
+    Route::get('queries/recommendations', [QueryRecommendationController::class, 'index'])
+        ->middleware('throttle:60,1,recommendations')
+        ->name('queries.recommendations');
 });
 
 Route::get('.well-known/passkey-endpoints', function () {
