@@ -30,6 +30,15 @@ class RunQueryRequest extends FormRequest
     {
         return [
             'tenant' => ['nullable', 'string', Rule::in(app(FusionManager::class)->keys())],
+            // Lot 10A — optional runtime parameter values supplied by the reader.
+            // Deep validation (type, binding, allowed keys) is handled by
+            // RuntimeQueryParameterBinder once the Query model is known.
+            'parameter_values' => ['nullable', 'array', 'max:20'],
+            'parameter_values.*' => ['nullable'],
+            // Lot 10E — server-side offset pagination. `offset` advances the
+            // Oracle cursor; `limit` overrides the per-page default (max 500).
+            'offset' => ['nullable', 'integer', 'min:0', 'max:2147483647'],
+            'limit'  => ['nullable', 'integer', 'min:1', 'max:500'],
         ];
     }
 

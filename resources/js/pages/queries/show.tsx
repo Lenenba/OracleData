@@ -1,5 +1,7 @@
 import { Head, Link, router } from '@inertiajs/react';
 import {
+    ChevronLeft,
+    ChevronRight,
     Copy,
     Eye,
     MessageSquareText,
@@ -10,10 +12,13 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import Heading from '@/components/heading';
+import { ParameterDefinitionEditor } from '@/components/queries/parameter-definition-editor';
+import { TrendPanel } from '@/components/queries/trend-panel';
 import { QueryAccessLevelBadge } from '@/components/queries/query-access-level-badge';
 import { QueryExportButton } from '@/components/queries/query-export-button';
 import { QueryResultView } from '@/components/queries/query-result';
 import type { QueryResult } from '@/components/queries/query-result';
+import { RuntimeParameterForm } from '@/components/queries/runtime-parameter-form';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,6 +41,25 @@ import type {
     QueryCapabilities,
 } from '@/types/query-sharing';
 
+type ParameterDefinition = {
+    key: string;
+    type: 'string' | 'integer' | 'number' | 'date' | 'boolean' | 'select';
+    label: string;
+    required: boolean;
+    default?: string | number | boolean | null;
+    description?: string | null;
+    min?: number;
+    max?: number;
+    step?: number;
+    options?: Array<{ value: string; label: string }>;
+    binding?: {
+        kind: 'filter' | 'parameter';
+        field?: string;
+        operator?: string;
+        key?: string;
+    };
+};
+
 type QueryDetail = {
     id: number;
     name: string;
@@ -44,6 +68,7 @@ type QueryDetail = {
     tenant_key: string | null;
     mode: 'single' | 'agent';
     parameters: Record<string, unknown>;
+    parameter_definitions: ParameterDefinition[];
     access_level: QueryAccessLevel;
     category: { slug: string; name: string; color: string | null } | null;
     tags: Array<{ slug: string; name: string }>;
@@ -73,10 +98,26 @@ export default function ShowQuery({
     const [status, setStatus] = useState<'idle' | 'loading' | 'done'>('idle');
     const [result, setResult] = useState<QueryResult | null>(null);
     const [fetchError, setFetchError] = useState<string | null>(null);
+    // Lot 10E — offset for server-side pagination (advances Oracle cursor).
+    const [pageOffset, setPageOffset] = useState(0);
+
+    // Lot 10A — runtime parameter values filled by the user before execution.
+    const [paramValues, setParamValues] = useState<Record<string, string | number | boolean | null>>(() => {
+        const defaults: Record<string, string | number | boolean | null> = {};
+        for (const def of query.parameter_definitions) {
+            if (def.default !== undefined && def.default !== null) {
+                defaults[def.key] = def.default;
+            }
+        }
+        return defaults;
+    });
 
     const isAgent = query.mode === 'agent';
     const agent = useAgentRun(query.id);
     const agentRun = agent.run;
+    const hasParams = query.parameter_definitions.length > 0;
+    // Lot 10E — keep a boolean so TypeScript doesn't narrow 'status' away inside done blocks.
+    const isRunning = status === 'loading';
 
     const tenantLabel = tenants[result?.tenant ?? tenant] ?? tenant;
     const changeRequestsUrl = `/queries/${query.id}/change-requests`;
@@ -96,19 +137,27 @@ export default function ShowQuery({
             return;
         }
 
-        void run();
+        // Lot 10E — reset offset when the user triggers a fresh run.
+        setPageOffset(0);
+        void run(0);
     }
 
-    async function run() {
+    async function run(offset = pageOffset) {
         if (!query.can.execute) {
             return;
         }
 
         setStatus('loading');
         setFetchError(null);
-        setResult(null);
+        if (offset === 0) {
+            setResult(null);
+        }
 
         try {
+            const body: Record<string, unknown> = { tenant };
+            if (hasParams) body.parameter_values = paramValues;
+            if (offset > 0) body.offset = offset;
+
             const response = await fetch(queries.run.url(query.id), {
                 method: 'POST',
                 headers: {
@@ -118,7 +167,7 @@ export default function ShowQuery({
                     'X-XSRF-TOKEN': readCsrfToken(),
                 },
                 credentials: 'same-origin',
-                body: JSON.stringify({ tenant }),
+                body: JSON.stringify(body),
             });
 
             const data = (await response
@@ -188,6 +237,12 @@ export default function ShowQuery({
                                     </Link>
                                 </Button>
                             )}
+                            {query.can.update && (
+                                <ParameterDefinitionEditor
+                                    queryId={query.id}
+                                    definitions={query.parameter_definitions}
+                                />
+                            )}
                         </div>
                     }
                 />
@@ -236,6 +291,22 @@ export default function ShowQuery({
 
                     {query.can.execute ? (
                         <div className="flex flex-wrap items-end gap-3 rounded-xl border p-4">
+                            {/* Lot 10A — runtime parameter form */}
+                            {hasParams && !isAgent && (
+                                <div className="w-full">
+                                    <RuntimeParameterForm
+                                        definitions={query.parameter_definitions}
+                                        values={paramValues}
+                                        disabled={status === 'loading'}
+                                        onChange={(key, value) =>
+                                            setParamValues((prev) => ({
+                                                ...prev,
+                                                [key]: value,
+                                            }))
+                                        }
+                                    />
+                                </div>
+                            )}
                             <div className="grid gap-2">
                                 <Label htmlFor="tenant">
                                     {t('queries.environment')}
@@ -344,10 +415,52 @@ export default function ShowQuery({
                     )}
 
                     {!isAgent && status === 'done' && !fetchError && result && (
-                        <QueryResultView
-                            result={result}
-                            tenantLabel={tenantLabel}
-                        />
+                        <>
+                            <QueryResultView
+                                result={result}
+                                tenantLabel={tenantLabel}
+                            />
+                            {/* Lot 10E — server-side pagination controls */}
+                            <div className="flex items-center justify-between gap-3 text-sm">
+                                <span className="text-muted-foreground">
+                                    {t('queries.pageOffset', { n: pageOffset, count: result.count })}
+                                </span>
+                                <div className="flex items-center gap-2">
+                                    {pageOffset > 0 && (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={isRunning}
+                                            onClick={() => {
+                                                const prev = Math.max(0, pageOffset - result.count);
+                                                setPageOffset(prev);
+                                                void run(prev);
+                                            }}
+                                        >
+                                            <ChevronLeft className="size-4" />
+                                            {t('queries.pagePrev')}
+                                        </Button>
+                                    )}
+                                    {result.hasMore && (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={isRunning}
+                                            onClick={() => {
+                                                const next = pageOffset + result.count;
+                                                setPageOffset(next);
+                                                void run(next);
+                                            }}
+                                        >
+                                            {t('queries.pageNext')}
+                                            <ChevronRight className="size-4" />
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+                        </>
                     )}
 
                     {isAgent &&
@@ -413,6 +526,12 @@ export default function ShowQuery({
                                 }
                             />
                         )}
+
+                    {/* Lot 10C — daily execution trend panel */}
+                    <TrendPanel
+                        queryId={query.id}
+                        aggregatesUrl={`/queries/${query.id}/aggregates`}
+                    />
                 </div>
             </div>
         </>

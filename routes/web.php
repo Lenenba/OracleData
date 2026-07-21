@@ -9,12 +9,16 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\OracleSchemaController;
 use App\Http\Controllers\OracleTenantController;
+use App\Http\Controllers\QueryAggregateController;
 use App\Http\Controllers\QueryChangeRequestCommentController;
 use App\Http\Controllers\QueryChangeRequestController;
 use App\Http\Controllers\QueryController;
+use App\Http\Controllers\QueryDashboardController;
+use App\Http\Controllers\QueryDashboardWidgetController;
 use App\Http\Controllers\QueryExportController;
 use App\Http\Controllers\QueryGroupShareController;
 use App\Http\Controllers\QueryImportController;
+use App\Http\Controllers\QueryParameterController;
 use App\Http\Controllers\QueryPreferenceController;
 use App\Http\Controllers\QueryShareController;
 use App\Http\Controllers\QueryShareInvitationController;
@@ -130,6 +134,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('queries/{query}/group-shares/{queryGroupShare}', [QueryGroupShareController::class, 'destroy'])->name('queries.group-shares.destroy');
         Route::patch('queries/{query}/access-level', [QueryShareController::class, 'updateAccessLevel'])->name('queries.access-level');
         Route::patch('queries/{query}/preference', [QueryPreferenceController::class, 'update'])->name('queries.preference');
+        // Lot 10A — parameter definitions managed separately from the query builder.
+        Route::put('queries/{query}/parameters', [QueryParameterController::class, 'update'])->name('queries.parameters.update');
         Route::post('queries/{query}/clone', [QueryController::class, 'duplicate'])->name('queries.clone');
         Route::delete('queries/{query}', [QueryController::class, 'destroy'])->name('queries.destroy');
 
@@ -183,6 +189,30 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('queries.resource-fields');
 
         Route::get('queries/{query}', [QueryController::class, 'show'])->name('queries.show');
+        // Lot 10C — lightweight temporal aggregates, no Oracle call.
+        Route::get('queries/{query}/aggregates', [QueryAggregateController::class, 'index'])
+            ->middleware('throttle:120,1,query-aggregates')
+            ->name('queries.aggregates.index');
+
+        // Lot 10B — composable personal dashboards.
+        Route::get('dashboards', [QueryDashboardController::class, 'index'])->name('dashboards.index');
+        Route::get('dashboards/create', [QueryDashboardController::class, 'create'])->name('dashboards.create');
+        Route::post('dashboards', [QueryDashboardController::class, 'store'])->name('dashboards.store');
+        Route::get('dashboards/{dashboard}', [QueryDashboardController::class, 'show'])->name('dashboards.show');
+        Route::get('dashboards/{dashboard}/edit', [QueryDashboardController::class, 'edit'])->name('dashboards.edit');
+        Route::put('dashboards/{dashboard}', [QueryDashboardController::class, 'update'])->name('dashboards.update');
+        Route::delete('dashboards/{dashboard}', [QueryDashboardController::class, 'destroy'])->name('dashboards.destroy');
+
+        // Dashboard widget management.
+        Route::post('dashboards/{dashboard}/widgets', [QueryDashboardWidgetController::class, 'store'])
+            ->name('dashboards.widgets.store');
+        Route::patch('dashboards/{dashboard}/widgets/{widget}', [QueryDashboardWidgetController::class, 'update'])
+            ->name('dashboards.widgets.update');
+        Route::delete('dashboards/{dashboard}/widgets/{widget}', [QueryDashboardWidgetController::class, 'destroy'])
+            ->name('dashboards.widgets.destroy');
+        Route::patch('dashboards/{dashboard}/widgets/reorder', [QueryDashboardWidgetController::class, 'reorder'])
+            ->middleware('throttle:60,1')
+            ->name('dashboards.widgets.reorder');
     });
 });
 

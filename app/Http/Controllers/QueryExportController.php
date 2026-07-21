@@ -55,11 +55,18 @@ class QueryExportController extends Controller
 
         $tenant = $request->user()->oracleTenants()->where('key', $tenantKey)->first();
 
+        $format = (string) ($request->validated()['format'] ?? 'csv');
+        $exportOptions = is_array($request->validated()['export_options'] ?? null)
+            ? $request->validated()['export_options']
+            : null;
+
         $export = QueryExport::create([
             'user_id' => $request->user()->id,
             'query_id' => $query->id,
             'oracle_tenant_id' => $tenant?->id,
             'status' => QueryExportStatus::Queued,
+            'format' => $format,
+            'export_options' => $exportOptions,
             'max_rows' => QueryExport::MAX_ROWS,
             'queued_at' => now(),
         ]);
@@ -123,7 +130,8 @@ class QueryExportController extends Controller
     }
 
     /**
-     * Stream the generated CSV file to its owner while it exists and is unexpired.
+     * Stream the generated file to its owner while it exists and is unexpired.
+     * The MIME type and suggested filename derive from the export format.
      */
     public function download(Request $request, QueryExport $queryExport): StreamedResponse
     {
@@ -139,9 +147,18 @@ class QueryExportController extends Controller
             Response::HTTP_NOT_FOUND,
         );
 
+        $format = $queryExport->format ?: 'csv';
+
+        [$mime, $extension] = match ($format) {
+            'xlsx' => ['application/vnd.ms-excel', 'xls'],
+            'json' => ['application/json', 'json'],
+            default => ['text/csv', 'csv'],
+        };
+
         return $disk->download(
             (string) $queryExport->file_path,
-            'export-'.$queryExport->id.'.csv',
+            'export-'.$queryExport->id.'.'.$extension,
+            ['Content-Type' => $mime],
         );
     }
 

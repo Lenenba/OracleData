@@ -20,6 +20,7 @@ use App\Services\QueryChangeRequestService;
 use App\Services\QueryExecutionRecorder;
 use App\Services\QueryResolver;
 use App\Services\QueryShareLifecycleService;
+use App\Services\RuntimeQueryParameterBinder;
 use App\Services\SemanticCatalogReader;
 use App\Services\SemanticLineageService;
 use Illuminate\Database\Eloquent\Builder;
@@ -739,6 +740,11 @@ class QueryController extends Controller
                     : null,
                 'mode' => $query->mode,
                 'parameters' => (object) ($query->parameters ?? []),
+                // Lot 10A — parameter definitions visible to the owner only,
+                // so that shared readers cannot infer the owner's binding config.
+                'parameter_definitions' => $query->user_id === $request->user()->id
+                    ? ($query->parameter_definitions ?? [])
+                    : [],
                 'access_level' => $query->access_level,
                 'category' => $query->category === null ? null : [
                     'slug' => $query->category->slug,
@@ -767,7 +773,7 @@ class QueryController extends Controller
     /**
      * Execute the query against the selected tenant and return the rows.
      */
-    public function run(RunQueryRequest $request, Query $query, FusionManager $fusion, OracleQueryTool $tool, AuditRecorder $audit, QueryExecutionRecorder $executions): JsonResponse
+    public function run(RunQueryRequest $request, Query $query, FusionManager $fusion, OracleQueryTool $tool, AuditRecorder $audit, QueryExecutionRecorder $executions, RuntimeQueryParameterBinder $paramBinder): JsonResponse
     {
         Gate::authorize('execute', $query);
 
@@ -776,7 +782,7 @@ class QueryController extends Controller
         abort_if(
             $query->mode === 'agent',
             422,
-            __('Les analyses agent s’exécutent de façon asynchrone.'),
+            __("Les analyses agent s'exécutent de façon asynchrone."),
         );
 
         $fusion = $fusion->forUser($request->user());
@@ -786,6 +792,38 @@ class QueryController extends Controller
                 ? $query->tenant_key
                 : null;
         $tenant = (string) ($request->validated()['tenant'] ?? $ownerPreferredTenant ?? $fusion->defaultKey());
+
+        // Lot 10A — if the query has parameter definitions, merge the reader's
+        // runtime values before execution. The binder validates types, options
+        // and binding rules; it returns the fully resolved parameters.
+        $paramValues = is_array($request->validated()['parameter_values'] ?? null)
+            ? $request->validated()['parameter_values']
+            : [];
+
+        if ($paramValues !== [] || ($query->parameter_definitions ?? []) !== []) {
+            $query->forceFill([
+                'parameters' => $paramBinder->bind($query, $paramValues),
+            ]);
+        }
+
+        // Lot 10E — server-side offset pagination: merge caller-supplied offset
+        // and limit into the query parameters so Oracle advances its cursor.
+        $offset = isset($request->validated()['offset']) ? (int) $request->validated()['offset'] : null;
+        $limit  = isset($request->validated()['limit'])  ? (int) $request->validated()['limit']  : null;
+
+        if ($offset !== null || $limit !== null) {
+            $params = is_array($query->parameters) ? $query->parameters : [];
+
+            if ($offset !== null) {
+                $params['offset'] = $offset;
+            }
+
+            if ($limit !== null) {
+                $params['limit'] = $limit;
+            }
+
+            $query->forceFill(['parameters' => $params]);
+        }
 
         $audit->record($request->user(), 'query.executed', $query, [
             'tenant_key' => $tenant,

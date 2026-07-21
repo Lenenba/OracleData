@@ -33,16 +33,19 @@ class RunAgentAnalysis implements ShouldQueue
     public int $tries = 1;
 
     /**
-     * Kept below the database queue `retry_after` (90s) so a stalled run is not
-     * reclaimed and processed twice. A configurable ceiling is deferred to a
-     * later lot of étape 9.
+     * Lot 11A — délai maximal configurable via ANTHROPIC_MAX_TIMEOUT_SECONDS.
+     * Doit rester inférieur au `retry_after` de la queue (90 s par défaut) afin
+     * qu'un run bloqué ne soit pas reclamé et traité deux fois.
      */
-    public int $timeout = 85;
+    public int $timeout;
 
     public function __construct(
         public AgentAnalysisRun $run,
         public string $tenantKey,
-    ) {}
+    ) {
+        $configured = (int) config('services.anthropic.max_timeout_seconds', 85);
+        $this->timeout = max(10, min(85, $configured));
+    }
 
     public function handle(
         QueryAgent $agent,
@@ -223,26 +226,31 @@ class RunAgentAnalysis implements ShouldQueue
      * Normalized, capped result payload shared by storage and the status
      * endpoint, so a completed run renders exactly like a synchronous one.
      *
-     * @param  array{columns: list<string>, rows: array<int, mixed>, analysis: string, oracleCalls: list<array{resource: string, params: array<string, mixed>, count: int}>}  $result
+     * Lot 11B — inclut confidence et sources_used dans le payload pour l'affichage
+     * de la provenance et du niveau de confiance dans le frontend.
+     *
+     * @param  array{columns: list<string>, rows: array<int, mixed>, analysis: string, confidence: string, sources_used: list<string>, oracleCalls: list<array{resource: string, params: array<string, mixed>, count: int}>}  $result
      * @param  array<int, mixed>  $rows
      * @return array<string, mixed>
      */
     private function normalizedResult(array $result, array $rows, int $rowCount, ?string $error): array
     {
         return [
-            'mode' => 'agent',
-            'tenant' => $this->tenantKey,
-            'resource' => null,
-            'parameters' => null,
-            'columns' => $result['columns'],
-            'analysis' => $result['analysis'],
-            'items' => array_slice($rows, 0, AgentAnalysisRun::MAX_RESULT_ROWS),
-            'count' => $rowCount,
-            'hasMore' => false,
-            'oracleCalls' => $result['oracleCalls'],
+            'mode'          => 'agent',
+            'tenant'        => $this->tenantKey,
+            'resource'      => null,
+            'parameters'    => null,
+            'columns'       => $result['columns'],
+            'analysis'      => $result['analysis'],
+            'confidence'    => $result['confidence'] ?? 'medium',
+            'sources_used'  => $result['sources_used'] ?? [],
+            'items'         => array_slice($rows, 0, AgentAnalysisRun::MAX_RESULT_ROWS),
+            'count'         => $rowCount,
+            'hasMore'       => false,
+            'oracleCalls'   => $result['oracleCalls'],
             'clarification' => null,
-            'error' => $error,
-            'truncated' => $rowCount > AgentAnalysisRun::MAX_RESULT_ROWS,
+            'error'         => $error,
+            'truncated'     => $rowCount > AgentAnalysisRun::MAX_RESULT_ROWS,
         ];
     }
 

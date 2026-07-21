@@ -23,7 +23,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $oracle_tenant_id
  * @property int|null $auth_connection_id
  * @property QueryExportStatus $status
- * @property string $format
+ * @property 'csv'|'xlsx'|'json' $format
+ * @property array<string, mixed>|null $export_options
  * @property int $row_count
  * @property int $max_rows
  * @property bool $truncated
@@ -49,6 +50,7 @@ use Illuminate\Support\Carbon;
     'auth_connection_id',
     'status',
     'format',
+    'export_options',
     'row_count',
     'max_rows',
     'truncated',
@@ -83,6 +85,7 @@ class QueryExport extends Model
     {
         return [
             'status' => QueryExportStatus::class,
+            'export_options' => 'array',
             'row_count' => 'integer',
             'max_rows' => 'integer',
             'truncated' => 'boolean',

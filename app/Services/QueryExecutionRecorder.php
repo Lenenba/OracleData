@@ -9,6 +9,7 @@ use App\Models\QueryTemplate;
 use App\Models\QueryTemplateVersion;
 use App\Models\User;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -21,7 +22,10 @@ use InvalidArgumentException;
  */
 class QueryExecutionRecorder
 {
-    public function __construct(private readonly SemanticLineageService $lineage) {}
+    public function __construct(
+        private readonly SemanticLineageService $lineage,
+        private readonly AggregateRecorder $aggregates,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $payload  Réponse normalisée de run() : `error` null = succès.
@@ -70,17 +74,28 @@ class QueryExecutionRecorder
             ]);
 
             if ($queryId !== null) {
-                $aggregates = [
+                $queryAggregates = [
                     'execution_count' => DB::raw('execution_count + 1'),
                     'last_executed_at' => $finishedAt,
                 ];
 
                 if ($succeeded) {
-                    $aggregates['successful_execution_count'] = DB::raw('successful_execution_count + 1');
-                    $aggregates['last_successful_execution_at'] = $finishedAt;
+                    $queryAggregates['successful_execution_count'] = DB::raw('successful_execution_count + 1');
+                    $queryAggregates['last_successful_execution_at'] = $finishedAt;
                 }
 
-                Query::query()->whereKey($queryId)->update($aggregates);
+                Query::query()->whereKey($queryId)->update($queryAggregates);
+
+                // Lot 10C — update the daily aggregate for temporal comparisons.
+                if ($succeeded) {
+                    $this->aggregates->record(
+                        queryId: $queryId,
+                        periodDate: Carbon::now('UTC')->toDateString(),
+                        rowsCount: count((array) ($payload['items'] ?? [])),
+                        durationMs: max(0, $durationMs),
+                        ranAt: Carbon::instance($finishedAt),
+                    );
+                }
             }
 
             return $execution;

@@ -19,16 +19,19 @@ use RuntimeException;
 class QueryAgent
 {
     /**
-     * Nombre maximum d'allers-retours avec le modèle (garde-fou anti-boucle).
+     * Lot 11A — Nombre maximum d'allers-retours avec le modèle (lu depuis config,
+     * surchargeable par instance pour les tests ou des contextes spécifiques).
      */
-    protected int $maxIterations = 8;
+    protected int $maxIterations;
 
     public function __construct(
         protected ClaudeClient $claude,
         protected OracleQueryTool $tool,
         protected OracleResourceCatalog $catalog,
         protected SemanticCatalogReader $semanticCatalog,
-    ) {}
+    ) {
+        $this->maxIterations = max(1, (int) config('services.anthropic.max_iterations', 8));
+    }
 
     /**
      * Return an agent bound to a single user, for background and explicit-user
@@ -145,20 +148,43 @@ class QueryAgent
     }
 
     /**
+     * Lot 11B — résultat final enrichi avec confiance et provenance.
+     *
      * @param  array<string, mixed>  $input
      * @param  list<array{resource: string, params: array<string, mixed>, count: int}>  $oracleCalls
-     * @return array{columns: list<string>, rows: array<int, mixed>, analysis: string, oracleCalls: list<array{resource: string, params: array<string, mixed>, count: int}>}
+     * @return array{columns: list<string>, rows: array<int, mixed>, analysis: string, confidence: string, sources_used: list<string>, oracleCalls: list<array{resource: string, params: array<string, mixed>, count: int}>}
      */
     protected function finalResult(array $input, array $oracleCalls): array
     {
         /** @var list<string> $columns */
         $columns = array_values(array_map('strval', (array) ($input['columns'] ?? [])));
 
+        // Confidence: high | medium | low — valeur fournie par le modèle ou
+        // déduite du nombre de ressources interrogées si absente.
+        $confidence = (string) ($input['confidence'] ?? '');
+
+        if (! in_array($confidence, ['high', 'medium', 'low'], true)) {
+            $confidence = count($oracleCalls) === 1 ? 'high' : (count($oracleCalls) <= 3 ? 'medium' : 'low');
+        }
+
+        // Sources : liste des clés de ressources Oracle effectivement interrogées.
+        $sourcesFromInput = is_array($input['sources_used'] ?? null)
+            ? array_values(array_map('strval', $input['sources_used']))
+            : [];
+        $sourcesFromCalls = array_values(array_unique(array_map(
+            fn (array $call): string => (string) $call['resource'],
+            $oracleCalls,
+        )));
+
+        $sourcesUsed = $sourcesFromInput !== [] ? $sourcesFromInput : $sourcesFromCalls;
+
         return [
-            'columns' => $columns,
-            'rows' => array_values((array) ($input['rows'] ?? [])),
-            'analysis' => (string) ($input['analysis'] ?? ''),
-            'oracleCalls' => $oracleCalls,
+            'columns'      => $columns,
+            'rows'         => array_values((array) ($input['rows'] ?? [])),
+            'analysis'     => (string) ($input['analysis'] ?? ''),
+            'confidence'   => $confidence,
+            'sources_used' => $sourcesUsed,
+            'oracleCalls'  => $oracleCalls,
         ];
     }
 
@@ -187,15 +213,26 @@ class QueryAgent
             ],
             [
                 'name' => 'submit_result',
-                'description' => 'Renvoie le résultat final composé (tableau + analyse) une fois toutes les lectures faites.',
+                'description' => 'Renvoie le résultat final composé (tableau + analyse) une fois toutes les lectures faites. Inclure le niveau de confiance et les sources interrogées.',
                 'input_schema' => [
                     'type' => 'object',
                     'properties' => [
                         'columns' => ['type' => 'array', 'items' => ['type' => 'string']],
                         'rows' => ['type' => 'array', 'items' => ['type' => 'object']],
-                        'analysis' => ['type' => 'string'],
+                        'analysis' => ['type' => 'string', 'description' => 'Courte analyse en une à trois phrases.'],
+                        // Lot 11B — confiance et provenance.
+                        'confidence' => [
+                            'type' => 'string',
+                            'enum' => ['high', 'medium', 'low'],
+                            'description' => 'high = résultat complet et direct ; medium = agrégation partielle ou hypothèse ; low = approximation ou données manquantes.',
+                        ],
+                        'sources_used' => [
+                            'type' => 'array',
+                            'items' => ['type' => 'string'],
+                            'description' => 'Clés de ressources Oracle utilisées pour produire ce résultat.',
+                        ],
                     ],
-                    'required' => ['columns', 'rows'],
+                    'required' => ['columns', 'rows', 'analysis', 'confidence'],
                 ],
             ],
         ];
@@ -210,7 +247,7 @@ class QueryAgent
         }
 
         return <<<PROMPT
-Tu es un analyste de données Oracle Fusion (lecture seule). À partir d'une demande en français,
+Tu es un analyste de données Oracle Fusion (lecture seule). À partir d'une demande,
 tu lis les ressources nécessaires avec l'outil `oracle_query`, tu joins/agrèges les données toi-même,
 puis tu renvoies le résultat final avec `submit_result`.
 
@@ -220,7 +257,9 @@ Ressources disponibles (n'utilise QUE ces ressources, champs et enfants) :
 Règles :
 - Lecture seule (GET). Appelle `oracle_query` autant de fois que nécessaire.
 - Pour lier deux ressources, récupère-les puis joins-les sur leur clé commune (ex : SupplierId).
-- Termine TOUJOURS par `submit_result` avec des colonnes, des lignes et une courte analyse.
+- Termine TOUJOURS par `submit_result` avec des colonnes, des lignes, une courte analyse et la confiance.
+- Confiance (champ `confidence`) : "high" si le résultat couvre exactement la demande avec des données directes ; "medium" si une agrégation ou hypothèse est nécessaire ; "low" si des données manquent ou si la réponse est une approximation.
+- Sources (champ `sources_used`) : liste les clés de ressources Oracle effectivement interrogées pour produire le résultat.
 PROMPT;
     }
 }

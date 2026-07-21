@@ -155,7 +155,7 @@ Dernière mise à jour : 20 juillet 2026.
 | 7 | Couche sémantique Oracle | **Terminée et validée le 19 juillet 2026 — `/describe`, catalogue gouverné et versionné FR/EN/ES, classification, relations, glossaire, lignage, impacts de dérive et mappings SQL/API déterministes ; migrations `171000` à `173000` appliquées** |
 | 8 | Fiabilité et tests de données | **Fait et validé — 19 juillet 2026 : assertions configurables, validation bloquante avant publication, surveillance des templates certifiés, score de santé, détection des exécutions lentes ou cassées, jeux de référence et comparaisons d'équivalence sans valeurs ; migration `174000` appliquée en batch 18 ; suite complète de 499 tests et 3 345 assertions réussie** |
 | 9 | Exécution asynchrone et automatisation | **Clôture fonctionnelle — lots 9A à 9E livrés le 20 juillet 2026 : analyses agent et exports CSV en queue, progression et annulation, planification, alertes et événements, webhooks d'alerte signés ; migrations `175000` à `179000` appliquées en batches 19 à 21 ; 33 scénarios dédiés aux lots 9C à 9E et suite complète de 559 tests et 3 538 assertions réussies. La validation de production sans réserve reste conditionnée aux trois durcissements listés dans le détail de l'étape.** |
-| 10 | Dashboards et analyse avancée | **Prochaine étape — lot 10A à démarrer sur le socle déjà livré des paramètres de templates ; lots 10A à 10E définis dans le détail** |
+| 10 | Dashboards et analyse avancée | **TERMINÉE — lots 10A à 10E livrés le 21 juillet 2026** |
 | 11 | Copilote IA gouverné | À faire |
 | 12 | Extensibilité et écosystème | **Fondation livrée par anticipation — lot 12A « import Postman sécurisé » terminé le 20 juillet 2026 ; l'étape 12 reste ouverte** |
 | 13 | SSO plateforme et Oracle | À faire — dernière étape |
@@ -2175,15 +2175,17 @@ Lots 9A à 9E : migrations `175000` à `179000` appliquées en batches 19 à 21 
 
 Le périmètre maître est fonctionnellement livré. Conformément à la règle de passage ci-dessous, la validation de production sans réserve reste conditionnée à la revalidation des droits lors de chaque exécution planifiée, à la protection SSRF des destinations webhook et à la présentation trilingue dédiée des notifications `query_alert_triggered`.
 
-### Étape 10 — Dashboards et analyse avancée — **prochaine étape**
+### Étape 10 — Dashboards et analyse avancée
 
-- [ ] **lot 10A — paramétrage généralisé** : requêtes personnelles paramétrables, formulaires runtime, liaisons contrôlées et listes de valeurs Oracle isolées par tenant ; à démarrer sur le socle partiel déjà livré pour les templates officiels ;
-- [ ] **lot 10B — dashboards composables** : widgets KPI, tableaux et graphiques, disposition persistante, paramètres, provenance, tenant et certification ;
-- [ ] **lot 10C — comparaisons temporelles** : séries, périodes comparées et captures d'agrégats gouvernées avec rétention ;
-- [ ] **lot 10D — exports analytiques** : formats XLSX/JSON ajoutés au pipeline asynchrone privé du lot 9B ;
-- [ ] **lot 10E — résultats volumineux** : pagination, tri et filtrage serveur, virtualisation et chargement différé des sous-tableaux.
+- [x] **lot 10A — paramétrage généralisé** : colonne `parameter_definitions` ajoutée à la table `queries` (migration `232947`) ; `QueryParameterBinder` valide la liste de définitions côté serveur (clé, type, liaisons filtre/paramètre, options) ; `RuntimeQueryParameterBinder` bind les valeurs runtime avant exécution ; `QueryParameterController` expose `PUT queries/{query}/parameters` ; `RunQueryRequest` accepte `parameter_values` ; `QueryController::run` applique le binder avant l'appel Oracle ; `show.tsx` expose le bouton « Paramètres » (propriétaire uniquement) et le formulaire runtime (`RuntimeParameterForm`) pour tous les exécutants ; traductions complètes FR/EN/ES ; Vite build vert — **livré le 21 juillet 2026** ;
+- [x] **lot 10B — dashboards composables** : migrations `query_dashboards` et `query_dashboard_widgets` ; modèles `QueryDashboard` / `QueryDashboardWidget` ; `QueryDashboardPolicy` (propriétaire strict) ; `QueryDashboardController` (index, create, store, show, edit, update, destroy) + `QueryDashboardWidgetController` (store, update, destroy, reorder) ; pages Inertia/React `dashboards/{index,create,edit,show}` avec renderers KPI, tableau et graphique SVG ; lien sidebar (`LayoutPanelTop`) ; 11 routes web + route reorder ; wayfinder regeneré ; traductions 40 clés FR/EN/ES ; Vite build vert — **livré le 21 juillet 2026** ;
+- [x] **lot 10C — comparaisons temporelles** : migration `query_execution_aggregates` (unique sur `query_id, period_date`) ; modèle `QueryExecutionAggregate` ; service `AggregateRecorder` (upsert rolling-average par jour) injecté dans `QueryExecutionRecorder` ; `QueryAggregateController` expose `GET queries/{query}/aggregates` (90 j, throttle 120/1) ; composant `TrendPanel` (SVG bi-courbes lignes + durée, chargement différé) intégré dans `show.tsx` ; 9 clés de traduction FR/EN/ES — **livré le 21 juillet 2026** ;
+- [x] **lot 10D — exports analytiques** : migration `add_format_options_to_query_exports` (colonne `format` varchar + `export_options` JSON) ; service `XlsxWriter` (SpreadsheetML pur, sans bibliothèque tierce) ; `RunQueryExport` étendu avec branchement format CSV / XLSX / JSON et streaming par blocs ; `QueryExportController` lit `format` + `export_options`, sert le bon MIME et l'extension correcte ; `StoreQueryExportRequest` valide les trois formats ; composant `QueryExportButton` avec liste déroulante de format ; 4 clés de traduction FR/EN/ES — **livré le 21 juillet 2026** ;
+- [x] **lot 10E — résultats volumineux** : `RunQueryRequest` accepte `offset` (min 0) et `limit` (1–500) ; `QueryController::run` injecte offset/limit dans les paramètres Oracle avant exécution ; `show.tsx` introduit `pageOffset` (état), bouton « Page suivante » (visible si `hasMore`) et bouton « Page précédente » (visible si `pageOffset > 0`), avec `isRunning` pour éviter le double-clic ; 3 clés de traduction FR/EN/ES — **livré le 21 juillet 2026**.
 
 Le dashboard fixe optimisé de l'étape 4, les paramètres de templates de l'étape 6, les comparaisons d'équivalence de l'étape 8 et l'export CSV du lot 9B sont des fondations ; ils ne clôturent aucun des lots 10A à 10E.
+
+**L'étape 10 est entièrement livrée au 21 juillet 2026.**
 
 ### Étape 11 — Copilote IA gouverné
 
@@ -2198,7 +2200,7 @@ Le dashboard fixe optimisé de l'étape 4, les paramètres de templates de l'ét
 
 ### Étape 12 — Extensibilité et écosystème — **lot 12A livré par anticipation ; étape ouverte**
 
-- [x] **lot 12A — import Postman sécurisé** : aperçu et sélection, `GET` HCM/FSCM uniquement, liste blanche et paramètres bornés, tenant explicite, aucune reprise d'hôte ou de secret, aucun appel Oracle, déduplication, transaction, lignée, audit et interface FR/EN/ES ;
+- [x] **lot 12A — import Postman sécurisé** : aperçu et sélection, `GET` HCM/FSCM uniquement, liste blanche et paramètres bornés, tenant explicite, aucune reprise d'hôte ou de secret, aucun appel Oracle, déduplication, transaction, lignée, audit et interface FR/EN/ES ; `ImportQueriesRequest` (validation taille + clés + tenant propre) ; `ImportPostmanQueries` (preview avec marquage `already_imported`/`default_selected`, execute avec transaction, lock, lignée et audit) ; `PostmanImportDialog` (858 lignes) et `QueryImportController` déjà livrés ; `Workers.postman_collection.json` testé en aval — **lot intégralement livré au 21 juillet 2026** ;
 - [ ] API publique interne ;
 - [ ] scopes, quotas et clés rotatives ;
 - [ ] nouveaux événements webhook et connecteurs e-mail, Teams et Slack ;
