@@ -1345,5 +1345,10 @@
     "chains.noResults": "Aucun résultat pour :field dans (:values).",
     "chains.filterApplied": "Filtre appliqué : :q",
     "chains.hasMore": "Il y a plus de résultats — affinez le filtre ou augmentez la limite.",
-    "chains.unnamedChain": "Chaîne sans libellé"
+    "chains.unnamedChain": "Chaîne sans libellé",
+
+    "table.rowsPerPage": "Lignes par page",
+    "table.of": "sur",
+    "table.previous": "Précédent",
+    "table.next": "Suivant"
 }

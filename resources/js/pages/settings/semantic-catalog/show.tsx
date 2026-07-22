@@ -1889,6 +1889,14 @@ export default function SemanticCatalogShow({
                                     rows={resource.fields}
                                     rowKey={(field) => field.id}
                                     empty={t('semanticCatalog.fieldsEmpty')}
+                                    paginated
+                                    defaultPageSize={25}
+                                    paginationLabels={{
+                                        rowsPerPage: t('table.rowsPerPage'),
+                                        of: t('table.of'),
+                                        previous: t('table.previous'),
+                                        next: t('table.next'),
+                                    }}
                                 />
                             </div>
                             {resource.fields.some(
@@ -1954,6 +1962,14 @@ export default function SemanticCatalogShow({
                                     rows={resource.relations}
                                     rowKey={(relation) => relation.id}
                                     empty={t('semanticCatalog.relationsEmpty')}
+                                    paginated
+                                    defaultPageSize={25}
+                                    paginationLabels={{
+                                        rowsPerPage: t('table.rowsPerPage'),
+                                        of: t('table.of'),
+                                        previous: t('table.previous'),
+                                        next: t('table.next'),
+                                    }}
                                 />
                             </div>
                         </CardContent>

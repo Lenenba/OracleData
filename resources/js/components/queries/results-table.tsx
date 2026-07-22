@@ -12,6 +12,7 @@ import { DataTable } from '@/components/data-table';
 import type { DataTableColumn } from '@/components/data-table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useI18n } from '@/i18n/i18n-context';
 
 type Row = Record<string, unknown>;
 
@@ -246,6 +247,7 @@ export function ResultsTable({
     showControls = true,
     defaultDisplayMode = 'hierarchical',
 }: ResultsTableProps) {
+    const { t } = useI18n();
     const [displayMode, setDisplayMode] =
         useState<DisplayMode>(defaultDisplayMode);
     const [filter, setFilter] = useState('');
@@ -423,6 +425,14 @@ export function ResultsTable({
                     rows={sortedItems}
                     rowKey={(_, rowIndex) => rowIndex}
                     empty="Aucun résultat pour ce filtre."
+                    paginated
+                    defaultPageSize={25}
+                    paginationLabels={{
+                        rowsPerPage: t('table.rowsPerPage'),
+                        of: t('table.of'),
+                        previous: t('table.previous'),
+                        next: t('table.next'),
+                    }}
                 />
             </div>
         </div>

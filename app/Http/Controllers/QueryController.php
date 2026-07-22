@@ -168,9 +168,13 @@ class QueryController extends Controller
             default => $queryBuilder->orderByDesc('updated_at'),
         };
 
+        $allowedPerPage = [10, 25, 50, 100];
+        $perPage = (int) $request->integer('per_page', 25);
+        $perPage = in_array($perPage, $allowedPerPage, true) ? $perPage : 25;
+
         $queries = $queryBuilder
             ->orderByDesc('id')
-            ->paginate(25)
+            ->paginate($perPage)
             ->withQueryString()
             ->through(fn (Query $query): array => [
                 'id' => $query->id,

@@ -43,9 +43,9 @@ class ApiTokenController extends Controller
             ]);
 
         return Inertia::render('settings/api-tokens', [
-            'tokens'        => $tokens,
+            'tokens'         => $tokens,
             'allowed_scopes' => self::ALLOWED_SCOPES,
-            'plain_token'   => Inertia::flush('api_token_plain'),
+            'plain_token'    => session('api_token_plain'),
         ]);
     }
 
@@ -77,7 +77,9 @@ class ApiTokenController extends Controller
         ]);
 
         // Flash the plain-text secret once — never stored after this point.
-        Inertia::share('api_token_plain', $plain);
+        // Uses Laravel's native session flash so the value is consumed on the
+        // very next request (the redirect to api-tokens.index) and discarded.
+        session()->flash('api_token_plain', $plain);
 
         return to_route('api-tokens.index');
     }

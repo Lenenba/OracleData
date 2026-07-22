@@ -160,6 +160,7 @@ type PaginatedQueries = {
     from: number | null;
     to: number | null;
     total: number;
+    per_page: number;
     prev_page_url: string | null;
     next_page_url: string | null;
 };
@@ -1162,7 +1163,7 @@ export default function QueriesIndex({
                     />
 
                     {/* Footer */}
-                    <div className="flex items-center justify-between gap-3 border-t px-5 py-3 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-3 text-xs text-muted-foreground">
                         <span>
                             {queryPage.total === 0 ? (
                                 `0 ${t('queries.result')}`
@@ -1173,6 +1174,45 @@ export default function QueriesIndex({
                                 </>
                             )}
                         </span>
+                        <div className="flex items-center gap-2">
+                            <span className="whitespace-nowrap">{t('table.rowsPerPage')}</span>
+                            <Select
+                                value={String(queryPage.per_page)}
+                                onValueChange={(v) => {
+                                    router.visit(
+                                        queries.index({
+                                            query: {
+                                                scope: currentFilters.scope !== 'all' ? currentFilters.scope : undefined,
+                                                search: currentFilters.search || undefined,
+                                                category: currentFilters.category || undefined,
+                                                tag: currentFilters.tag || undefined,
+                                                sort: currentFilters.sort !== 'updated_desc' ? currentFilters.sort : undefined,
+                                                favorite: currentFilters.favorite || undefined,
+                                                pinned: currentFilters.pinned || undefined,
+                                                per_page: Number(v) !== 25 ? v : undefined,
+                                                view: 'none',
+                                            },
+                                        }),
+                                        {
+                                            only: ['queries'],
+                                            preserveState: true,
+                                            preserveScroll: true,
+                                        },
+                                    );
+                                }}
+                            >
+                                <SelectTrigger className="h-7 w-[70px] text-xs">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {[10, 25, 50, 100].map((n) => (
+                                        <SelectItem key={n} value={String(n)} className="text-xs">
+                                            {n}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
                         <div className="flex items-center gap-2">
                             <Button
                                 size="sm"
