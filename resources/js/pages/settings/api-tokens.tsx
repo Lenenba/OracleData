@@ -18,7 +18,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useI18n } from '@/i18n/i18n-context';
 import apiTokensRoutes from '@/routes/api-tokens';
-import SettingsLayout from '@/layouts/settings/layout';
 import type { ReactNode } from 'react';
 
 type ApiToken = {
@@ -184,7 +183,7 @@ export default function ApiTokensPage({ tokens, allowed_scopes, plain_token }: P
     }
 
     return (
-        <SettingsLayout>
+        <>
             <Head title={t('apiTokens.pageTitle')} />
             <div className="space-y-6">
                 <div className="flex items-center justify-between gap-3">
@@ -244,6 +243,15 @@ export default function ApiTokensPage({ tokens, allowed_scopes, plain_token }: P
                     </div>
                 )}
             </div>
-        </SettingsLayout>
+        </>
     );
 }
+
+ApiTokensPage.layout = {
+    breadcrumbs: [
+        {
+            title: 'API & Tokens',
+            href: apiTokensRoutes.index(),
+        },
+    ],
+};
