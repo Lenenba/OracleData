@@ -15,9 +15,17 @@ export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
     const { locales } = usePage().props;
 
     return (
-        <div className="flex items-center gap-2">
+        <div
+            className={
+                compact ? 'flex items-center' : 'flex items-center gap-2'
+            }
+        >
             <Languages
-                className="size-4 text-muted-foreground"
+                className={
+                    compact
+                        ? 'mr-1 size-4 text-muted-foreground'
+                        : 'size-4 text-muted-foreground'
+                }
                 aria-hidden="true"
             />
             {!compact && (
@@ -38,7 +46,11 @@ export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
             >
                 <SelectTrigger
                     size="sm"
-                    className="min-w-24"
+                    className={
+                        compact
+                            ? 'h-9! w-auto min-w-14 border-0 bg-transparent px-1.5 shadow-none hover:border-0'
+                            : 'min-w-24'
+                    }
                     aria-label={t('common.language')}
                 >
                     <SelectValue />

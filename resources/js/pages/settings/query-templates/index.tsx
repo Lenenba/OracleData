@@ -102,9 +102,8 @@ export default function QueryTemplateGovernanceIndex({
             <Head title={t('templateGovernance.pageTitle')} />
             <h1 className="sr-only">{t('templateGovernance.pageTitle')}</h1>
 
-            <div className="space-y-6">
+            <div className="space-y-5">
                 <Heading
-                    variant="small"
                     title={t('templateGovernance.title')}
                     description={t('templateGovernance.description')}
                 />
@@ -174,10 +173,7 @@ export default function QueryTemplateGovernanceIndex({
                                             )}
                                         </SelectItem>
                                         {statuses.map((item) => (
-                                            <SelectItem
-                                                key={item}
-                                                value={item}
-                                            >
+                                            <SelectItem key={item} value={item}>
                                                 {statusLabels[item]}
                                             </SelectItem>
                                         ))}
@@ -231,9 +227,7 @@ export default function QueryTemplateGovernanceIndex({
                                     {t('templateGovernance.emptyTitle')}
                                 </p>
                                 <p className="mt-1 text-sm text-muted-foreground">
-                                    {t(
-                                        'templateGovernance.emptyDescription',
-                                    )}
+                                    {t('templateGovernance.emptyDescription')}
                                 </p>
                             </div>
                         ) : (
@@ -260,9 +254,7 @@ export default function QueryTemplateGovernanceIndex({
                                                 {template.certification
                                                     ?.is_effective && (
                                                     <Badge>
-                                                        <ShieldCheck
-                                                            aria-hidden="true"
-                                                        />
+                                                        <ShieldCheck aria-hidden="true" />
                                                         {t(
                                                             'templateGovernance.certifiedBadge',
                                                         )}
@@ -270,9 +262,7 @@ export default function QueryTemplateGovernanceIndex({
                                                 )}
                                                 {template.is_review_overdue && (
                                                     <Badge variant="destructive">
-                                                        <AlertTriangle
-                                                            aria-hidden="true"
-                                                        />
+                                                        <AlertTriangle aria-hidden="true" />
                                                         {t(
                                                             'templateGovernance.reviewOverdue',
                                                         )}
@@ -284,7 +274,7 @@ export default function QueryTemplateGovernanceIndex({
                                                     href={governanceShowUrl(
                                                         template.slug,
                                                     )}
-                                                    className="font-semibold underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                    className="font-semibold underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                                                 >
                                                     {template.name}
                                                 </Link>
@@ -334,7 +324,8 @@ export default function QueryTemplateGovernanceIndex({
 
                                         <div className="space-y-1 text-sm">
                                             <p className="font-medium">
-                                                {template.business_owner?.name ??
+                                                {template.business_owner
+                                                    ?.name ??
                                                     t(
                                                         'templateGovernance.noBusinessOwner',
                                                     )}
@@ -371,9 +362,7 @@ export default function QueryTemplateGovernanceIndex({
                                                     template.slug,
                                                 )}
                                             >
-                                                {t(
-                                                    'templateGovernance.manage',
-                                                )}
+                                                {t('templateGovernance.manage')}
                                             </Link>
                                         </Button>
                                     </li>

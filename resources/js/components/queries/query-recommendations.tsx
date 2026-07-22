@@ -23,7 +23,9 @@ type Recommendation = {
  */
 export function QueryRecommendations() {
     const { t, formatDate } = useI18n();
-    const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+    const [recommendations, setRecommendations] = useState<Recommendation[]>(
+        [],
+    );
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -52,19 +54,23 @@ export function QueryRecommendations() {
     }
 
     return (
-        <section className="space-y-3">
-            <div>
-                <h3 className="text-sm font-semibold">{t('recommendations.title')}</h3>
-                <p className="text-xs text-muted-foreground">{t('recommendations.description')}</p>
+        <section className="card">
+            <div className="card-header">
+                <div>
+                    <h3 className="card-title">{t('recommendations.title')}</h3>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                        {t('recommendations.description')}
+                    </p>
+                </div>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="card-body grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {recommendations.map((rec) => (
                     <Link
                         key={rec.id}
                         href={`/queries/${rec.id}`}
-                        className="flex flex-col gap-1.5 rounded-lg border bg-card p-3 text-sm transition-colors hover:border-primary/40 hover:bg-primary/5"
+                        className="flex min-h-32 flex-col gap-1.5 rounded border border-border bg-muted/25 p-3 text-sm transition-colors hover:border-primary/40 hover:bg-primary/5"
                     >
-                        <span className="flex items-start gap-1.5 font-medium leading-snug">
+                        <span className="flex items-start gap-1.5 leading-snug font-medium">
                             <BarChart3 className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
                             <span className="line-clamp-2">{rec.name}</span>
                         </span>
@@ -76,17 +82,24 @@ export function QueryRecommendations() {
                         <div className="mt-auto flex items-center gap-2 text-xs text-muted-foreground">
                             <span className="flex items-center gap-1">
                                 <BarChart3 className="size-3" />
-                                {t('recommendations.runCount', { count: rec.execution_count })}
+                                {t('recommendations.runCount', {
+                                    count: rec.execution_count,
+                                })}
                             </span>
                             <span className="flex items-center gap-1">
                                 <Clock className="size-3" />
                                 {rec.last_run_at
-                                    ? t('recommendations.lastRun', { date: formatDate(rec.last_run_at) })
+                                    ? t('recommendations.lastRun', {
+                                          date: formatDate(rec.last_run_at),
+                                      })
                                     : t('recommendations.neverRun')}
                             </span>
                         </div>
                         {rec.access_level === 'organization' && (
-                            <Badge variant="outline" className="w-fit text-[10px]">
+                            <Badge
+                                variant="outline"
+                                className="w-fit text-[10px]"
+                            >
                                 {rec.access_level}
                             </Badge>
                         )}

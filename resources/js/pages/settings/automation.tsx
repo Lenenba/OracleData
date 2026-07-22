@@ -120,7 +120,7 @@ function NewScheduleForm({
     return (
         <form
             onSubmit={submit}
-            className="grid gap-3 rounded-xl border p-4 sm:grid-cols-2"
+            className="grid gap-3 rounded border border-border bg-muted/20 p-4 sm:grid-cols-2"
         >
             <div className="grid gap-1.5">
                 <Label>{t('automation.query')}</Label>
@@ -361,7 +361,7 @@ function ScheduleCard({ schedule }: { schedule: Schedule }) {
     }
 
     return (
-        <div className="space-y-3 rounded-xl border p-4">
+        <div className="space-y-3 rounded border border-border bg-muted/20 p-4">
             <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                     <div className="flex items-center gap-2">
@@ -482,7 +482,7 @@ function NewWebhookForm({ events }: { events: string[] }) {
     return (
         <form
             onSubmit={submit}
-            className="grid gap-3 rounded-xl border p-4 sm:grid-cols-2"
+            className="grid gap-3 rounded border border-border bg-muted/20 p-4 sm:grid-cols-2"
         >
             <div className="grid gap-1.5">
                 <Label>{t('automation.webhookName')}</Label>
@@ -555,7 +555,7 @@ function WebhookCard({ endpoint }: { endpoint: WebhookEndpoint }) {
     }
 
     return (
-        <div className="flex flex-wrap items-start justify-between gap-2 rounded-xl border p-4">
+        <div className="flex flex-wrap items-start justify-between gap-2 rounded border border-border bg-muted/20 p-4">
             <div className="min-w-0">
                 <div className="flex items-center gap-2">
                     <span className="font-medium">{endpoint.name}</span>
@@ -607,48 +607,49 @@ export default function AutomationSettings({
             <Head title={t('automation.title')} />
             <h1 className="sr-only">{t('automation.title')}</h1>
 
-            <div className="space-y-10">
+            <div className="space-y-5">
                 <Heading
-                    variant="small"
                     title={t('automation.title')}
                     description={t('automation.description')}
                 />
 
-                <section className="space-y-4">
-                    <div className="flex items-center gap-2">
+                <section className="card">
+                    <div className="card-header flex items-center gap-2">
                         <CalendarClock className="size-5" />
-                        <h2 className="font-semibold">
+                        <h2 className="card-title">
                             {t('automation.schedules')}
                         </h2>
                     </div>
 
-                    <NewScheduleForm
-                        queries={schedulableQueries}
-                        tenants={tenants}
-                        defaultTenant={defaultTenant}
-                    />
+                    <div className="card-body space-y-4">
+                        <NewScheduleForm
+                            queries={schedulableQueries}
+                            tenants={tenants}
+                            defaultTenant={defaultTenant}
+                        />
 
-                    {schedules.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                            {t('automation.noSchedules')}
-                        </p>
-                    ) : (
-                        <div className="space-y-3">
-                            {schedules.map((schedule) => (
-                                <ScheduleCard
-                                    key={schedule.id}
-                                    schedule={schedule}
-                                />
-                            ))}
-                        </div>
-                    )}
+                        {schedules.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                                {t('automation.noSchedules')}
+                            </p>
+                        ) : (
+                            <div className="space-y-3">
+                                {schedules.map((schedule) => (
+                                    <ScheduleCard
+                                        key={schedule.id}
+                                        schedule={schedule}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </section>
 
-                <section className="space-y-4">
-                    <div className="flex items-center justify-between gap-2">
+                <section className="card">
+                    <div className="card-header flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                             <Webhook className="size-5" />
-                            <h2 className="font-semibold">
+                            <h2 className="card-title">
                                 {t('automation.webhooks')}
                             </h2>
                         </div>
@@ -665,24 +666,26 @@ export default function AutomationSettings({
                         </Button>
                     </div>
 
-                    {showWebhookForm && (
-                        <NewWebhookForm events={webhookEvents} />
-                    )}
+                    <div className="card-body space-y-4">
+                        {showWebhookForm && (
+                            <NewWebhookForm events={webhookEvents} />
+                        )}
 
-                    {webhooks.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                            {t('automation.noWebhooks')}
-                        </p>
-                    ) : (
-                        <div className="space-y-3">
-                            {webhooks.map((endpoint) => (
-                                <WebhookCard
-                                    key={endpoint.id}
-                                    endpoint={endpoint}
-                                />
-                            ))}
-                        </div>
-                    )}
+                        {webhooks.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                                {t('automation.noWebhooks')}
+                            </p>
+                        ) : (
+                            <div className="space-y-3">
+                                {webhooks.map((endpoint) => (
+                                    <WebhookCard
+                                        key={endpoint.id}
+                                        endpoint={endpoint}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </section>
             </div>
         </>

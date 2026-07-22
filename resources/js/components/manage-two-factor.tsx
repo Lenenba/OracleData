@@ -45,70 +45,74 @@ export default function ManageTwoFactor(props: Props) {
     }
 
     return (
-        <div className="space-y-6">
-            <Heading
-                variant="small"
-                title="Two-factor authentication"
-                description="Manage your two-factor authentication settings"
-            />
-            {twoFactorEnabled ? (
-                <div className="flex flex-col items-start justify-start space-y-4">
-                    <p className="text-sm text-muted-foreground">
-                        You will be prompted for a secure, random pin during
-                        login, which you can retrieve from the TOTP-supported
-                        application on your phone.
-                    </p>
+        <div className="card h-full">
+            <div className="card-header">
+                <Heading
+                    variant="small"
+                    title="Authentification à deux facteurs"
+                    description="Ajoutez une validation TOTP à la connexion"
+                />
+            </div>
+            <div className="card-body">
+                {twoFactorEnabled ? (
+                    <div className="flex flex-col items-start justify-start space-y-4">
+                        <p className="text-sm text-muted-foreground">
+                            Votre compte est protégé par un code temporaire
+                            fourni par votre application d'authentification.
+                        </p>
 
-                    <div className="relative inline">
-                        <Form {...disable.form()}>
-                            {({ processing }) => (
-                                <Button
-                                    variant="destructive"
-                                    type="submit"
-                                    disabled={processing}
-                                >
-                                    Disable 2FA
-                                </Button>
-                            )}
-                        </Form>
-                    </div>
-
-                    <TwoFactorRecoveryCodes
-                        recoveryCodesList={recoveryCodesList}
-                        fetchRecoveryCodes={fetchRecoveryCodes}
-                        errors={errors}
-                    />
-                </div>
-            ) : (
-                <div className="flex flex-col items-start justify-start space-y-4">
-                    <p className="text-sm text-muted-foreground">
-                        When you enable two-factor authentication, you will be
-                        prompted for a secure pin during login. This pin can be
-                        retrieved from a TOTP-supported application on your
-                        phone.
-                    </p>
-
-                    <div>
-                        {hasSetupData ? (
-                            <Button onClick={() => setShowSetupModal(true)}>
-                                <ShieldCheck />
-                                Continue setup
-                            </Button>
-                        ) : (
-                            <Form
-                                {...enable.form()}
-                                onSuccess={() => setShowSetupModal(true)}
-                            >
+                        <div className="relative inline">
+                            <Form {...disable.form()}>
                                 {({ processing }) => (
-                                    <Button type="submit" disabled={processing}>
-                                        Enable 2FA
+                                    <Button
+                                        variant="destructive"
+                                        type="submit"
+                                        disabled={processing}
+                                    >
+                                        Désactiver la 2FA
                                     </Button>
                                 )}
                             </Form>
-                        )}
+                        </div>
+
+                        <TwoFactorRecoveryCodes
+                            recoveryCodesList={recoveryCodesList}
+                            fetchRecoveryCodes={fetchRecoveryCodes}
+                            errors={errors}
+                        />
                     </div>
-                </div>
-            )}
+                ) : (
+                    <div className="flex flex-col items-start justify-start space-y-4">
+                        <p className="text-sm text-muted-foreground">
+                            Activez la double authentification pour demander un
+                            code temporaire en complément de votre mot de passe.
+                        </p>
+
+                        <div>
+                            {hasSetupData ? (
+                                <Button onClick={() => setShowSetupModal(true)}>
+                                    <ShieldCheck />
+                                    Continuer la configuration
+                                </Button>
+                            ) : (
+                                <Form
+                                    {...enable.form()}
+                                    onSuccess={() => setShowSetupModal(true)}
+                                >
+                                    {({ processing }) => (
+                                        <Button
+                                            type="submit"
+                                            disabled={processing}
+                                        >
+                                            Activer la 2FA
+                                        </Button>
+                                    )}
+                                </Form>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
 
             <TwoFactorSetupModal
                 isOpen={showSetupModal}

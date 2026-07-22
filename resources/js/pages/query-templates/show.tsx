@@ -203,7 +203,7 @@ export default function ShowQueryTemplate({
         <>
             <Head title={template.name} />
 
-            <div className="space-y-6 px-6 py-6">
+            <div className="space-y-5 p-5">
                 <Heading
                     title={template.name}
                     description={template.description ?? undefined}
@@ -242,9 +242,7 @@ export default function ShowQueryTemplate({
                         </AlertTitle>
                         <AlertDescription className="space-y-1">
                             <p>
-                                {t(
-                                    'templates.certificationTrustDescription',
-                                )}
+                                {t('templates.certificationTrustDescription')}
                             </p>
                             {template.certification_note && (
                                 <p>

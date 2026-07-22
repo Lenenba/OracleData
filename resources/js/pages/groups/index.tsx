@@ -436,7 +436,7 @@ export default function GroupsIndex({
         <>
             <Head title={t('groups.pageTitle')} />
 
-            <div className="px-6 py-6">
+            <div className="p-5">
                 <Heading
                     title={t('groups.title')}
                     description={t('groups.description')}
@@ -448,7 +448,53 @@ export default function GroupsIndex({
                     }
                 />
 
-                <div className="space-y-6">
+                <div className="mb-5 grid gap-5 md:grid-cols-3">
+                    {[
+                        {
+                            label: 'Groupes accessibles',
+                            value: groups.length,
+                            icon: UsersRound,
+                            tone: 'bg-primary/15 text-primary',
+                        },
+                        {
+                            label: 'Membres cumulés',
+                            value: groups.reduce(
+                                (total, group) => total + group.member_count,
+                                0,
+                            ),
+                            icon: UserPlus,
+                            tone: 'bg-info/15 text-info',
+                        },
+                        {
+                            label: 'Groupes administrés',
+                            value: groups.filter(
+                                (group) => group.can_manage_members,
+                            ).length,
+                            icon: Pencil,
+                            tone: 'bg-purple/15 text-purple',
+                        },
+                    ].map(({ label, value, icon: Icon, tone }) => (
+                        <div key={label} className="card">
+                            <div className="card-body flex items-center gap-4">
+                                <span
+                                    className={`grid size-10 place-items-center rounded-full ${tone}`}
+                                >
+                                    <Icon className="size-4.5" />
+                                </span>
+                                <div>
+                                    <p className="text-xs font-bold tracking-wide text-muted-foreground uppercase">
+                                        {label}
+                                    </p>
+                                    <strong className="mt-1 block text-2xl font-semibold tabular-nums">
+                                        {value}
+                                    </strong>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="space-y-5">
                     {feedback && (
                         <Alert
                             variant={
@@ -472,7 +518,7 @@ export default function GroupsIndex({
                         </Alert>
                     )}
 
-                    <div className="grid gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
+                    <div className="grid gap-5 lg:grid-cols-[20rem_minmax(0,1fr)]">
                         <Card className="h-fit">
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">

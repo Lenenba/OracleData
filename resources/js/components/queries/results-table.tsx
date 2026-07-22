@@ -60,7 +60,11 @@ function formatScalar(value: unknown): string {
  */
 function detectChildColumns(items: Row[]): string[] {
     const first = items[0];
-    if (!first) return [];
+
+    if (!first) {
+        return [];
+    }
+
     return Object.keys(first).filter((k) => childRows(first[k]) !== null);
 }
 
@@ -75,11 +79,14 @@ function detectChildColumns(items: Row[]): string[] {
  * Les colonnes enfants brutes sont supprimées du parent dans la ligne aplatie.
  */
 export function flattenItems(items: Row[], childColumnKeys: string[]): Row[] {
-    if (childColumnKeys.length === 0) return items;
+    if (childColumnKeys.length === 0) {
+        return items;
+    }
 
     return items.flatMap((parent) => {
         // Extraire les scalaires du parent (sans les colonnes enfants)
         const parentScalars: Row = {};
+
         for (const [k, v] of Object.entries(parent)) {
             if (!childColumnKeys.includes(k)) {
                 parentScalars[k] = v;
@@ -106,15 +113,19 @@ export function flattenItems(items: Row[], childColumnKeys: string[]): Row[] {
 
             // Croiser chaque ligne existante avec chaque ligne enfant
             const crossed: Row[] = [];
+
             for (const existingRow of expanded) {
                 for (const child of children) {
                     const childPrefixed: Row = {};
+
                     for (const [ck, cv] of Object.entries(child)) {
                         childPrefixed[`${childKey}.${ck}`] = cv;
                     }
+
                     crossed.push({ ...existingRow, ...childPrefixed });
                 }
             }
+
             expanded = crossed;
         }
 
@@ -274,14 +285,16 @@ export function ResultsTable({
 
         return columns && columns.length > 0
             ? columns
-            : Array.from(
-                  new Set(items.flatMap((item) => Object.keys(item))),
-              );
+            : Array.from(new Set(items.flatMap((item) => Object.keys(item))));
     }, [displayMode, hasChildren, displayItems, columns, items]);
 
     const filteredItems = useMemo(() => {
-        if (!filter.trim()) return displayItems;
+        if (!filter.trim()) {
+            return displayItems;
+        }
+
         const lc = filter.toLowerCase();
+
         return displayItems.filter((row) =>
             resolvedColumns.some((col) =>
                 formatScalar(row[col]).toLowerCase().includes(lc),
@@ -290,11 +303,15 @@ export function ResultsTable({
     }, [displayItems, filter, resolvedColumns]);
 
     const sortedItems = useMemo(() => {
-        if (!sortCol || !sortDir) return filteredItems;
+        if (!sortCol || !sortDir) {
+            return filteredItems;
+        }
+
         return [...filteredItems].sort((a, b) => {
             const va = formatScalar(a[sortCol]);
             const vb = formatScalar(b[sortCol]);
             const cmp = va.localeCompare(vb, undefined, { numeric: true });
+
             return sortDir === 'asc' ? cmp : -cmp;
         });
     }, [filteredItems, sortCol, sortDir]);
@@ -401,9 +418,7 @@ export function ResultsTable({
                     <Button
                         variant="outline"
                         size="sm"
-                        onClick={() =>
-                            exportCsv(resolvedColumns, sortedItems)
-                        }
+                        onClick={() => exportCsv(resolvedColumns, sortedItems)}
                         disabled={sortedItems.length === 0}
                     >
                         <Download className="mr-1.5 size-3.5" />
@@ -413,20 +428,22 @@ export function ResultsTable({
             )}
 
             {/* Info ligne count en mode plat */}
-            {displayMode === 'flat' && hasChildren && sortedItems.length !== items.length && (
-                <p className="text-xs text-muted-foreground">
-                    {sortedItems.length} ligne(s) après expansion ({items.length} enregistrement(s) source)
-                </p>
-            )}
+            {displayMode === 'flat' &&
+                hasChildren &&
+                sortedItems.length !== items.length && (
+                    <p className="text-xs text-muted-foreground">
+                        {sortedItems.length} ligne(s) après expansion (
+                        {items.length} enregistrement(s) source)
+                    </p>
+                )}
 
-            <div className="overflow-hidden rounded-xl border bg-card">
+            <div className="card">
                 <DataTable
                     columns={tableColumns}
                     rows={sortedItems}
                     rowKey={(_, rowIndex) => rowIndex}
                     empty="Aucun résultat pour ce filtre."
                     paginated
-                    defaultPageSize={25}
                     paginationLabels={{
                         rowsPerPage: t('table.rowsPerPage'),
                         of: t('table.of'),

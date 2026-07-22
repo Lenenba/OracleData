@@ -14,12 +14,12 @@ import { useState } from 'react';
 import Heading from '@/components/heading';
 import { ChainedQueryPanel } from '@/components/queries/chained-query-panel';
 import { ParameterDefinitionEditor } from '@/components/queries/parameter-definition-editor';
-import { TrendPanel } from '@/components/queries/trend-panel';
 import { QueryAccessLevelBadge } from '@/components/queries/query-access-level-badge';
 import { QueryExportButton } from '@/components/queries/query-export-button';
 import { QueryResultView } from '@/components/queries/query-result';
 import type { QueryResult } from '@/components/queries/query-result';
 import { RuntimeParameterForm } from '@/components/queries/runtime-parameter-form';
+import { TrendPanel } from '@/components/queries/trend-panel';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -106,13 +106,17 @@ export default function ShowQuery({
     const [pageOffset, setPageOffset] = useState(0);
 
     // Lot 10A — runtime parameter values filled by the user before execution.
-    const [paramValues, setParamValues] = useState<Record<string, string | number | boolean | null>>(() => {
+    const [paramValues, setParamValues] = useState<
+        Record<string, string | number | boolean | null>
+    >(() => {
         const defaults: Record<string, string | number | boolean | null> = {};
+
         for (const def of query.parameter_definitions) {
             if (def.default !== undefined && def.default !== null) {
                 defaults[def.key] = def.default;
             }
         }
+
         return defaults;
     });
 
@@ -153,14 +157,21 @@ export default function ShowQuery({
 
         setStatus('loading');
         setFetchError(null);
+
         if (offset === 0) {
             setResult(null);
         }
 
         try {
             const body: Record<string, unknown> = { tenant };
-            if (hasParams) body.parameter_values = paramValues;
-            if (offset > 0) body.offset = offset;
+
+            if (hasParams) {
+                body.parameter_values = paramValues;
+            }
+
+            if (offset > 0) {
+                body.offset = offset;
+            }
 
             const response = await fetch(queries.run.url(query.id), {
                 method: 'POST',
@@ -200,7 +211,7 @@ export default function ShowQuery({
         <>
             <Head title={query.name} />
 
-            <div className="px-6 py-6">
+            <div className="p-5">
                 <Heading
                     title={query.name}
                     description={query.description ?? undefined}
@@ -251,8 +262,8 @@ export default function ShowQuery({
                     }
                 />
 
-                <div className="space-y-6">
-                    <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <div className="space-y-5">
+                    <div className="card card-body flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                         <QueryAccessLevelBadge
                             accessLevel={query.access_level}
                         />
@@ -294,12 +305,14 @@ export default function ShowQuery({
                     </div>
 
                     {query.can.execute ? (
-                        <div className="flex flex-wrap items-end gap-3 rounded-xl border p-4">
+                        <div className="card card-body flex flex-wrap items-end gap-3">
                             {/* Lot 10A — runtime parameter form */}
                             {hasParams && !isAgent && (
                                 <div className="w-full">
                                     <RuntimeParameterForm
-                                        definitions={query.parameter_definitions}
+                                        definitions={
+                                            query.parameter_definitions
+                                        }
                                         values={paramValues}
                                         disabled={status === 'loading'}
                                         onChange={(key, value) =>
@@ -427,7 +440,10 @@ export default function ShowQuery({
                             {/* Lot 10E — server-side pagination controls */}
                             <div className="flex items-center justify-between gap-3 text-sm">
                                 <span className="text-muted-foreground">
-                                    {t('queries.pageOffset', { n: pageOffset, count: result.count })}
+                                    {t('queries.pageOffset', {
+                                        n: pageOffset,
+                                        count: result.count,
+                                    })}
                                 </span>
                                 <div className="flex items-center gap-2">
                                     {pageOffset > 0 && (
@@ -437,7 +453,10 @@ export default function ShowQuery({
                                             size="sm"
                                             disabled={isRunning}
                                             onClick={() => {
-                                                const prev = Math.max(0, pageOffset - result.count);
+                                                const prev = Math.max(
+                                                    0,
+                                                    pageOffset - result.count,
+                                                );
                                                 setPageOffset(prev);
                                                 void run(prev);
                                             }}
@@ -453,7 +472,8 @@ export default function ShowQuery({
                                             size="sm"
                                             disabled={isRunning}
                                             onClick={() => {
-                                                const next = pageOffset + result.count;
+                                                const next =
+                                                    pageOffset + result.count;
                                                 setPageOffset(next);
                                                 void run(next);
                                             }}
@@ -471,7 +491,7 @@ export default function ShowQuery({
                         agentRun &&
                         (agentRun.status === 'queued' ||
                             agentRun.status === 'running') && (
-                            <div className="space-y-3 rounded-xl border p-4">
+                            <div className="card card-body space-y-3">
                                 <div className="flex items-center gap-2 text-sm font-medium">
                                     <Spinner />
                                     {t(
@@ -535,7 +555,11 @@ export default function ShowQuery({
                     {!isAgent && status === 'done' && !fetchError && result && (
                         <ChainedQueryPanel
                             queryId={query.id}
-                            primaryItems={(result.items ?? []) as Array<Record<string, unknown>>}
+                            primaryItems={
+                                (result.items ?? []) as Array<
+                                    Record<string, unknown>
+                                >
+                            }
                             tenant={tenant}
                             tenants={tenants}
                             canManage={query.can.update}

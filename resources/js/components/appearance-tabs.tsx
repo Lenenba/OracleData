@@ -18,26 +18,43 @@ export default function AppearanceToggleTab({
     ];
 
     return (
-        <div
-            className={cn(
-                'inline-flex gap-1 rounded-lg bg-neutral-100 p-1 dark:bg-neutral-800',
-                className,
-            )}
-            {...props}
-        >
+        <div className={cn('grid gap-4 md:grid-cols-3', className)} {...props}>
             {tabs.map(({ value, icon: Icon, label }) => (
                 <button
                     key={value}
                     onClick={() => updateAppearance(value)}
+                    type="button"
+                    aria-pressed={appearance === value}
                     className={cn(
-                        'flex items-center rounded-md px-3.5 py-1.5 transition-colors',
+                        'group overflow-hidden rounded border bg-card text-left transition hover:border-primary/50',
                         appearance === value
-                            ? 'bg-white shadow-xs dark:bg-neutral-700 dark:text-neutral-100'
-                            : 'text-neutral-500 hover:bg-neutral-200/60 hover:text-black dark:text-neutral-400 dark:hover:bg-neutral-700/60',
+                            ? 'border-primary ring-1 ring-primary'
+                            : 'border-border',
                     )}
                 >
-                    <Icon className="-ml-1 h-4 w-4" />
-                    <span className="ml-1.5 text-sm">{label}</span>
+                    <span className="block h-28 bg-muted p-4">
+                        <span className="block h-3 w-2/3 rounded-sm bg-card shadow-sm" />
+                        <span className="mt-3 grid grid-cols-[28px_1fr] gap-2">
+                            <span className="h-16 rounded-sm bg-[#1e1f27]" />
+                            <span className="space-y-2 rounded-sm bg-card p-2 shadow-sm">
+                                <span className="block h-2 w-full rounded-sm bg-muted" />
+                                <span className="block h-7 w-full rounded-sm bg-primary/15" />
+                                <span className="block h-2 w-3/4 rounded-sm bg-muted" />
+                            </span>
+                        </span>
+                    </span>
+                    <span className="flex items-center gap-2 border-t border-border px-4 py-3">
+                        <Icon className="size-4 text-primary" />
+                        <span className="text-sm font-semibold">{label}</span>
+                        <span
+                            className={cn(
+                                'ml-auto size-3 rounded-full border-2',
+                                appearance === value
+                                    ? 'border-primary bg-primary'
+                                    : 'border-muted-foreground/40',
+                            )}
+                        />
+                    </span>
                 </button>
             ))}
         </div>

@@ -70,7 +70,7 @@ function CategoryForm({ category }: { category?: CategoryItem }) {
             {...form}
             options={{ preserveScroll: true }}
             resetOnSuccess={!category}
-            className="space-y-4 rounded-xl border bg-card p-4"
+            className="space-y-4 rounded border border-border bg-muted/20 p-4"
         >
             {({ processing, errors }) => (
                 <>
@@ -227,7 +227,7 @@ function TagForm({ tag }: { tag?: TagItem }) {
             {...form}
             options={{ preserveScroll: true }}
             resetOnSuccess={!tag}
-            className="space-y-4 rounded-xl border bg-card p-4"
+            className="space-y-4 rounded border border-border bg-muted/20 p-4"
         >
             {({ processing, errors }) => (
                 <>
@@ -326,50 +326,55 @@ export default function TaxonomySettings({ categories, tags }: TaxonomyProps) {
             <Head title={t('taxonomy.title')} />
             <h1 className="sr-only">{t('taxonomy.title')}</h1>
 
-            <div className="space-y-10">
+            <div className="space-y-5">
                 <Heading
-                    variant="small"
                     title={t('taxonomy.title')}
                     description={t('taxonomy.description')}
                 />
 
-                <section className="space-y-4">
-                    <div className="flex items-center gap-2">
+                <section className="card">
+                    <div className="card-header flex items-center gap-2">
                         <FolderTree className="size-5" />
-                        <h2 className="font-semibold">
+                        <h2 className="card-title">
                             {t('taxonomy.categories')}
                         </h2>
                         <Badge variant="secondary">{categories.length}</Badge>
                     </div>
-                    <CategoryForm />
-                    {categories.length === 0 ? (
-                        <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                            {t('taxonomy.emptyCategories')}
-                        </p>
-                    ) : (
-                        categories.map((category) => (
-                            <CategoryForm
-                                key={category.id}
-                                category={category}
-                            />
-                        ))
-                    )}
+                    <div className="card-body space-y-4">
+                        <CategoryForm />
+                        {categories.length === 0 ? (
+                            <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                                {t('taxonomy.emptyCategories')}
+                            </p>
+                        ) : (
+                            categories.map((category) => (
+                                <CategoryForm
+                                    key={category.id}
+                                    category={category}
+                                />
+                            ))
+                        )}
+                    </div>
                 </section>
 
-                <section className="space-y-4">
-                    <div className="flex items-center gap-2">
+                <section className="card">
+                    <div className="card-header flex items-center gap-2">
                         <Tags className="size-5" />
-                        <h2 className="font-semibold">{t('taxonomy.tags')}</h2>
+                        <h2 className="card-title">{t('taxonomy.tags')}</h2>
                         <Badge variant="secondary">{tags.length}</Badge>
                     </div>
-                    <TagForm />
-                    {tags.length === 0 ? (
-                        <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                            {t('taxonomy.emptyTags')}
-                        </p>
-                    ) : (
-                        tags.map((tag) => <TagForm key={tag.id} tag={tag} />)
-                    )}
+                    <div className="card-body space-y-4">
+                        <TagForm />
+                        {tags.length === 0 ? (
+                            <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                                {t('taxonomy.emptyTags')}
+                            </p>
+                        ) : (
+                            tags.map((tag) => (
+                                <TagForm key={tag.id} tag={tag} />
+                            ))
+                        )}
+                    </div>
                 </section>
             </div>
         </>

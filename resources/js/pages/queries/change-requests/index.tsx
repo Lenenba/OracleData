@@ -6,7 +6,8 @@ import {
     MessageSquareText,
     Plus,
 } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import { useState } from 'react';
+import type { FormEvent } from 'react';
 import Heading from '@/components/heading';
 import { ChangeRequestStatusBadge } from '@/components/queries/change-request-status-badge';
 import { MentionSelector } from '@/components/queries/mention-selector';
@@ -171,7 +172,7 @@ export default function QueryChangeRequestsIndex({
         <>
             <Head title={t('changeRequests.pageTitle')} />
 
-            <div className="px-6 py-6">
+            <div className="p-5">
                 <Heading
                     title={t('changeRequests.title')}
                     description={t('changeRequests.description', {

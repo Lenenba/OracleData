@@ -22,8 +22,17 @@ const SVG_H = 80;
 const SVG_W = 480;
 const PADDING = { top: 6, right: 12, bottom: 24, left: 44 };
 
-function lerp(value: number, inMin: number, inMax: number, outMin: number, outMax: number): number {
-    if (inMax === inMin) return (outMin + outMax) / 2;
+function lerp(
+    value: number,
+    inMin: number,
+    inMax: number,
+    outMin: number,
+    outMax: number,
+): number {
+    if (inMax === inMin) {
+        return (outMin + outMax) / 2;
+    }
+
     return outMin + ((value - inMin) / (inMax - inMin)) * (outMax - outMin);
 }
 
@@ -34,41 +43,69 @@ function ChartLine({
     points: Array<{ x: number; y: number }>;
     color: string;
 }) {
-    if (points.length < 2) return null;
-    const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
-    return <path d={d} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" />;
+    if (points.length < 2) {
+        return null;
+    }
+
+    const d = points
+        .map(
+            (p, i) =>
+                `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`,
+        )
+        .join(' ');
+
+    return (
+        <path
+            d={d}
+            fill="none"
+            stroke={color}
+            strokeWidth={1.5}
+            strokeLinejoin="round"
+        />
+    );
 }
 
 /**
  * Lot 10C — mini trend chart showing daily row counts and durations over the
  * last 90 days. Data is fetched once on mount via the aggregates endpoint.
  */
-export function TrendPanel({ queryId, aggregatesUrl }: Props) {
+export function TrendPanel({ aggregatesUrl }: Props) {
     const { t, formatNumber } = useI18n();
     const [data, setData] = useState<AggregatePoint[] | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         let cancelled = false;
-        setLoading(true);
 
         fetch(aggregatesUrl, {
-            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            headers: {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
             credentials: 'same-origin',
         })
             .then((r) => (r.ok ? r.json() : null))
             .then((json: unknown) => {
-                if (cancelled || !Array.isArray(json)) return;
+                if (cancelled || !Array.isArray(json)) {
+                    return;
+                }
+
                 setData(json as AggregatePoint[]);
             })
             .catch(() => {
-                if (!cancelled) setData([]);
+                if (!cancelled) {
+                    setData([]);
+                }
             })
             .finally(() => {
-                if (!cancelled) setLoading(false);
+                if (!cancelled) {
+                    setLoading(false);
+                }
             });
 
-        return () => { cancelled = true; };
+        return () => {
+            cancelled = true;
+        };
     }, [aggregatesUrl]);
 
     if (loading) {
@@ -106,22 +143,20 @@ export function TrendPanel({ queryId, aggregatesUrl }: Props) {
     const totalRuns = data.reduce((s, d) => s + d.run_count, 0);
 
     return (
-        <div className="space-y-2 rounded-xl border p-4">
+        <div className="card card-body space-y-2 !p-4">
             <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-1.5 text-sm font-medium">
                     <TrendingUp className="size-4 text-muted-foreground" />
                     {t('queries.trendTitle')}
                 </div>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <span>
-                        {t('queries.trendDays', { n: data.length })}
-                    </span>
-                    <span>
-                        {t('queries.trendRuns', { n: totalRuns })}
-                    </span>
+                    <span>{t('queries.trendDays', { n: data.length })}</span>
+                    <span>{t('queries.trendRuns', { n: totalRuns })}</span>
                     {lastPoint && (
                         <span>
-                            {t('queries.trendLastRows', { n: formatNumber(lastPoint.rows_max) })}
+                            {t('queries.trendLastRows', {
+                                n: formatNumber(lastPoint.rows_max),
+                            })}
                         </span>
                     )}
                 </div>
@@ -167,10 +202,16 @@ export function TrendPanel({ queryId, aggregatesUrl }: Props) {
                 />
 
                 {/* Row-count line (accent blue) */}
-                <ChartLine points={rowPoints} color="var(--color-primary, #3b82d4)" />
+                <ChartLine
+                    points={rowPoints}
+                    color="var(--color-primary, #3b82d4)"
+                />
 
                 {/* Duration line (muted purple) */}
-                <ChartLine points={durPoints} color="var(--color-muted-foreground, #7c5cd8)" />
+                <ChartLine
+                    points={durPoints}
+                    color="var(--color-muted-foreground, #7c5cd8)"
+                />
 
                 {/* X-axis first/last date labels */}
                 {data.length > 0 && (

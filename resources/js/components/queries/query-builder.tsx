@@ -119,7 +119,6 @@ type QueryBuilderProps = {
     initialState?: BuilderInitialState;
 };
 
-
 // ─── FreeformEditor ───────────────────────────────────────────────────────────
 // Minimal editor for custom/Postman queries whose resource_path has no catalogue
 // match. The user edits name, description, tenant, raw q= filter, fields, limit,
@@ -188,7 +187,6 @@ function FreeformEditor({
     setCategoryId,
     categories,
     tags,
-    setTags,
     tagInput,
     setTagInput,
     addTag,
@@ -228,9 +226,18 @@ function FreeformEditor({
             .join(',');
         const parsedLimit = parseLimit(limit);
 
-        if (trimmedQ) params.q = trimmedQ;
-        if (trimmedFields) params.fields = trimmedFields;
-        if (trimmedExpand) params.expand = trimmedExpand;
+        if (trimmedQ) {
+            params.q = trimmedQ;
+        }
+
+        if (trimmedFields) {
+            params.fields = trimmedFields;
+        }
+
+        if (trimmedExpand) {
+            params.expand = trimmedExpand;
+        }
+
         params.limit = parsedLimit;
 
         // Keep setExpand in sync so the parent state is aware of the change
@@ -267,14 +274,20 @@ function FreeformEditor({
                 <FolderOpen className={iconCls} />
                 <div className="flex-1 space-y-1">
                     <p className={titleCls}>
-                        {t(isInfo ? 'queries.freeformTitleDeep' : 'queries.freeformTitle')}
+                        {t(
+                            isInfo
+                                ? 'queries.freeformTitleDeep'
+                                : 'queries.freeformTitle',
+                        )}
                     </p>
                     <p className={descCls}>
-                        {t(isInfo ? 'queries.freeformDescriptionDeep' : 'queries.freeformDescription')}
+                        {t(
+                            isInfo
+                                ? 'queries.freeformDescriptionDeep'
+                                : 'queries.freeformDescription',
+                        )}
                     </p>
-                    <p className={pathCls}>
-                        {rawResourcePath}
-                    </p>
+                    <p className={pathCls}>{rawResourcePath}</p>
                 </div>
                 <Button
                     type="button"
@@ -289,10 +302,10 @@ function FreeformEditor({
 
             <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
                 {/* Left column — config */}
-                <div className="space-y-4 rounded-xl border bg-card p-4">
+                <div className="card card-body space-y-4 !p-4">
                     {/* Tenant */}
                     <div className="flex flex-col gap-1.5">
-                        <Label className="text-xs font-medium flex items-center gap-1.5">
+                        <Label className="flex items-center gap-1.5 text-xs font-medium">
                             <Server className="size-3.5" />
                             {t('queries.tenant')}
                         </Label>
@@ -319,7 +332,7 @@ function FreeformEditor({
                             id="ff-q"
                             value={filterQ}
                             onChange={(e) => setFilterQ(e.target.value)}
-                            placeholder='PersonNumber=25773 AND ...'
+                            placeholder="PersonNumber=25773 AND ..."
                             className="font-mono text-xs"
                         />
                         <p className="text-[11px] text-muted-foreground">
@@ -329,7 +342,10 @@ function FreeformEditor({
 
                     {/* Fields */}
                     <div className="flex flex-col gap-1.5">
-                        <Label htmlFor="ff-fields" className="text-xs font-medium">
+                        <Label
+                            htmlFor="ff-fields"
+                            className="text-xs font-medium"
+                        >
                             {t('queries.fields')}
                         </Label>
                         <Input
@@ -346,7 +362,10 @@ function FreeformEditor({
 
                     {/* Expand */}
                     <div className="flex flex-col gap-1.5">
-                        <Label htmlFor="ff-expand" className="text-xs font-medium">
+                        <Label
+                            htmlFor="ff-expand"
+                            className="text-xs font-medium"
+                        >
                             {t('queries.expand')}
                         </Label>
                         <Input
@@ -363,7 +382,10 @@ function FreeformEditor({
 
                     {/* Limit */}
                     <div className="flex flex-col gap-1.5">
-                        <Label htmlFor="ff-limit" className="text-xs font-medium">
+                        <Label
+                            htmlFor="ff-limit"
+                            className="text-xs font-medium"
+                        >
                             {t('queries.limit')}
                         </Label>
                         <Input
@@ -380,9 +402,12 @@ function FreeformEditor({
 
                 {/* Right column — save card */}
                 <div className="flex flex-col gap-4">
-                    <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+                    <div className="card card-body flex flex-col gap-3 !p-4">
                         <div className="flex flex-col gap-1.5">
-                            <Label htmlFor="ff-name" className="text-xs font-medium">
+                            <Label
+                                htmlFor="ff-name"
+                                className="text-xs font-medium"
+                            >
                                 {t('queries.name')}
                             </Label>
                             <Input
@@ -395,7 +420,10 @@ function FreeformEditor({
 
                         <div className="flex flex-col gap-1.5">
                             <div className="flex items-center justify-between gap-3">
-                                <Label htmlFor="ff-description" className="text-xs font-medium">
+                                <Label
+                                    htmlFor="ff-description"
+                                    className="text-xs font-medium"
+                                >
                                     {t('queries.descriptionLabel')}
                                 </Label>
                                 <span className="text-[11px] text-muted-foreground tabular-nums">
@@ -408,18 +436,31 @@ function FreeformEditor({
                                 onChange={(e) => setDescription(e.target.value)}
                                 maxLength={2000}
                                 rows={3}
-                                placeholder={t('queries.descriptionPlaceholder')}
+                                placeholder={t(
+                                    'queries.descriptionPlaceholder',
+                                )}
                             />
                         </div>
 
                         {/* Access level (read-only in edit) */}
                         <div className="flex flex-col gap-1.5">
-                            <Label className="text-xs font-medium">{t('queries.accessLevel')}</Label>
+                            <Label className="text-xs font-medium">
+                                {t('queries.accessLevel')}
+                            </Label>
                             <div className="flex items-center gap-2">
-                                <QueryAccessLevelBadge accessLevel={accessLevel} />
+                                <QueryAccessLevelBadge
+                                    accessLevel={accessLevel}
+                                />
                                 {queryId !== undefined && (
-                                    <Button asChild type="button" variant="outline" size="sm">
-                                        <Link href={queries.shares.index(queryId)}>
+                                    <Button
+                                        asChild
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                    >
+                                        <Link
+                                            href={queries.shares.index(queryId)}
+                                        >
                                             <Share2 className="size-3.5" />
                                             {t('queries.manageSharing')}
                                         </Link>
@@ -430,7 +471,10 @@ function FreeformEditor({
 
                         {/* Category */}
                         <div className="flex flex-col gap-1.5">
-                            <Label htmlFor="ff-category" className="text-xs font-medium">
+                            <Label
+                                htmlFor="ff-category"
+                                className="text-xs font-medium"
+                            >
                                 {t('queries.category')}
                             </Label>
                             <Select
@@ -440,16 +484,30 @@ function FreeformEditor({
                                 }
                             >
                                 <SelectTrigger id="ff-category">
-                                    <SelectValue placeholder={t('queries.noCategory')} />
+                                    <SelectValue
+                                        placeholder={t('queries.noCategory')}
+                                    />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="none">{t('queries.noCategory')}</SelectItem>
+                                    <SelectItem value="none">
+                                        {t('queries.noCategory')}
+                                    </SelectItem>
                                     {categories.map((cat) => (
-                                        <SelectItem key={cat.id} value={String(cat.id)}>
+                                        <SelectItem
+                                            key={cat.id}
+                                            value={String(cat.id)}
+                                        >
                                             <span className="flex items-center gap-2">
                                                 <span
                                                     className="size-2 rounded-full bg-muted-foreground"
-                                                    style={cat.color ? { backgroundColor: cat.color } : undefined}
+                                                    style={
+                                                        cat.color
+                                                            ? {
+                                                                  backgroundColor:
+                                                                      cat.color,
+                                                              }
+                                                            : undefined
+                                                    }
                                                 />
                                                 {cat.name}
                                             </span>
@@ -461,7 +519,10 @@ function FreeformEditor({
 
                         {/* Tags */}
                         <div className="flex flex-col gap-1.5">
-                            <Label htmlFor="ff-tags" className="text-xs font-medium">
+                            <Label
+                                htmlFor="ff-tags"
+                                className="text-xs font-medium"
+                            >
                                 {t('queries.tags')}
                             </Label>
                             <div className="flex gap-2">
@@ -469,9 +530,14 @@ function FreeformEditor({
                                     id="ff-tags"
                                     list="ff-tag-suggestions"
                                     value={tagInput}
-                                    onChange={(e) => setTagInput(e.target.value)}
+                                    onChange={(e) =>
+                                        setTagInput(e.target.value)
+                                    }
                                     onKeyDown={(e) => {
-                                        if (e.key === 'Enter' || e.key === ',') {
+                                        if (
+                                            e.key === 'Enter' ||
+                                            e.key === ','
+                                        ) {
                                             e.preventDefault();
                                             addTag();
                                         }
@@ -485,14 +551,19 @@ function FreeformEditor({
                                     variant="outline"
                                     size="icon"
                                     onClick={() => addTag()}
-                                    disabled={tagInput.trim() === '' || tags.length >= 10}
+                                    disabled={
+                                        tagInput.trim() === '' ||
+                                        tags.length >= 10
+                                    }
                                 >
                                     <Tag className="size-4" />
                                 </Button>
                             </div>
                             <datalist id="ff-tag-suggestions">
                                 {tagSuggestions.map((s) => (
-                                    <option key={s.slug} value={s.name}>{s.label}</option>
+                                    <option key={s.slug} value={s.name}>
+                                        {s.label}
+                                    </option>
                                 ))}
                             </datalist>
                             {tags.length > 0 && (
@@ -513,7 +584,10 @@ function FreeformEditor({
                         </div>
 
                         {saveErrors.length > 0 && (
-                            <AlertError title={t('common.saveError')} errors={saveErrors} />
+                            <AlertError
+                                title={t('common.saveError')}
+                                errors={saveErrors}
+                            />
                         )}
 
                         <div className="flex gap-2">
@@ -541,7 +615,6 @@ function FreeformEditor({
         </div>
     );
 }
-
 
 /**
  * Query builder live : configuration à gauche, aperçu à droite mis à jour
@@ -618,7 +691,9 @@ export function QueryBuilder({
     const [tagInput, setTagInput] = useState('');
     const [saving, setSaving] = useState(false);
     const [saveErrors, setSaveErrors] = useState<string[]>([]);
-    const [activeTab, setActiveTab] = useState<'preview' | 'sql' | 'agent'>('preview');
+    const [activeTab, setActiveTab] = useState<'preview' | 'sql' | 'agent'>(
+        'preview',
+    );
     const agentPreview = useAgentPreview();
     // Aucun appel Oracle tant que l'utilisateur n'a pas demandé l'aperçu. En
     // édition, la requête existante s'affiche d'emblée (un appel attendu).
@@ -758,10 +833,8 @@ export function QueryBuilder({
         // Merge wizard-managed expand (simple names) with nested dot-path expands
         // (e.g. workRelationships.assignments.managers) that are not editable in
         // the UI but must be preserved when the query was imported from Postman.
-        const allExpand = [
-            ...expand,
-            ...(initialState?.nestedExpand ?? []),
-        ];
+        const allExpand = [...expand, ...(initialState?.nestedExpand ?? [])];
+
         if (allExpand.length > 0) {
             parameters.expand = allExpand.join(',');
         }
@@ -893,11 +966,18 @@ export function QueryBuilder({
                 tenant={tenant}
                 setTenant={setTenant}
                 tenants={tenants}
-                filterQ={filterRows.length > 0 ? filterRowsToQ(filterRows) : (initialState?.filterQ ?? '')}
+                filterQ={
+                    filterRows.length > 0
+                        ? filterRowsToQ(filterRows)
+                        : (initialState?.filterQ ?? '')
+                }
                 fields={fields}
                 expand={expand}
                 setExpand={(raw) => {
-                    const parts = raw.split(',').map((s) => s.trim()).filter(Boolean);
+                    const parts = raw
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter(Boolean);
                     setExpand(parts.filter((e) => !e.includes('.')));
                 }}
                 nestedExpand={initialState?.nestedExpand ?? []}
@@ -932,12 +1012,14 @@ export function QueryBuilder({
                             // update (it is stripped server-side by Arr::forget but
                             // must pass validation).
                             access_level: accessLevel,
-                            category_id: categoryId === '' ? null : Number(categoryId),
+                            category_id:
+                                categoryId === '' ? null : Number(categoryId),
                             tags,
                             parameters: freeformParams,
                         },
                         {
-                            onError: (errors) => setSaveErrors(Object.values(errors)),
+                            onError: (errors) =>
+                                setSaveErrors(Object.values(errors)),
                             onFinish: () => setSaving(false),
                         },
                     );
@@ -984,7 +1066,7 @@ export function QueryBuilder({
 
             {/* ─ Colonne droite : aperçu live + enregistrement ─ */}
             <div className="flex flex-col gap-4 lg:sticky lg:top-4">
-                <div className="overflow-hidden rounded-xl border">
+                <div className="card">
                     {/* Onglets + statut */}
                     <div className="flex items-center border-b bg-muted/30">
                         <button
@@ -1173,19 +1255,31 @@ export function QueryBuilder({
 
                                     {agentPreview.run !== null && (
                                         <div className="space-y-2 text-sm">
-                                            {agentPreview.run.status === 'completed' && agentPreview.run.result !== null ? (
+                                            {agentPreview.run.status ===
+                                                'completed' &&
+                                            agentPreview.run.result !== null ? (
                                                 <QueryResultView
-                                                    result={agentPreview.run.result}
+                                                    result={
+                                                        agentPreview.run.result
+                                                    }
                                                     tenantLabel={tenantLabel}
                                                 />
                                             ) : agentPreview.isActive ? (
                                                 <div className="flex items-center gap-2 text-muted-foreground">
                                                     <Spinner className="size-4" />
                                                     <span>
-                                                        {t('agentPreview.iteration', {
-                                                            current: agentPreview.run.iteration,
-                                                            max: agentPreview.run.max_iterations,
-                                                        })}
+                                                        {t(
+                                                            'agentPreview.iteration',
+                                                            {
+                                                                current:
+                                                                    agentPreview
+                                                                        .run
+                                                                        .iteration,
+                                                                max: agentPreview
+                                                                    .run
+                                                                    .max_iterations,
+                                                            },
+                                                        )}
                                                     </span>
                                                 </div>
                                             ) : (
@@ -1225,21 +1319,24 @@ export function QueryBuilder({
                                                 type="button"
                                                 size="sm"
                                                 variant="outline"
-                                                onClick={() => void agentPreview.cancel()}
+                                                onClick={() =>
+                                                    void agentPreview.cancel()
+                                                }
                                             >
                                                 {t('agentPreview.cancel')}
                                             </Button>
                                         )}
-                                        {agentPreview.run !== null && !agentPreview.isActive && (
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="ghost"
-                                                onClick={agentPreview.reset}
-                                            >
-                                                {t('common.reset')}
-                                            </Button>
-                                        )}
+                                        {agentPreview.run !== null &&
+                                            !agentPreview.isActive && (
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    onClick={agentPreview.reset}
+                                                >
+                                                    {t('common.reset')}
+                                                </Button>
+                                            )}
                                     </div>
                                 </>
                             )}
@@ -1248,7 +1345,7 @@ export function QueryBuilder({
                 </div>
 
                 {/* ─ Enregistrement ─ */}
-                <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+                <div className="card card-body flex flex-col gap-3 !p-4">
                     <div className="flex flex-wrap items-end gap-3">
                         <div className="flex min-w-48 flex-1 flex-col gap-1.5">
                             <Label

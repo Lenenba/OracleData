@@ -1,6 +1,7 @@
 import { usePage } from '@inertiajs/react';
 import { useI18n } from '@/i18n/i18n-context';
-import AuthLayoutTemplate from '@/layouts/auth/auth-simple-layout';
+import AuthSimpleLayout from '@/layouts/auth/auth-simple-layout';
+import AuthSplitLayout from '@/layouts/auth/auth-split-layout';
 
 export default function AuthLayout({
     title = '',
@@ -20,13 +21,15 @@ export default function AuthLayout({
         description ||
         (isOnboarding ? t('onboarding.description') : description);
 
+    const Layout = isOnboarding ? AuthSimpleLayout : AuthSplitLayout;
+
     return (
-        <AuthLayoutTemplate
+        <Layout
             title={resolvedTitle}
             description={resolvedDescription}
             wide={isOnboarding}
         >
             {children}
-        </AuthLayoutTemplate>
+        </Layout>
     );
 }

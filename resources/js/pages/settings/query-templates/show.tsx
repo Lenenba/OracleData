@@ -1479,7 +1479,7 @@ export default function QueryTemplateGovernanceShow({
             <Head title={template.name} />
             <h1 className="sr-only">{template.name}</h1>
 
-            <div className="space-y-6">
+            <div className="space-y-5">
                 <Heading
                     title={template.name}
                     description={t('templateGovernance.detailDescription', {

@@ -818,7 +818,7 @@ export default function QuerySharing({
         <>
             <Head title={t('sharing.pageTitle', { name: query.name })} />
 
-            <div className="px-6 py-6">
+            <div className="p-5">
                 <Heading
                     title={t('sharing.title')}
                     description={t('sharing.description', {

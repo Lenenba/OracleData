@@ -18,9 +18,9 @@ export default function Heading({
     if (variant === 'small') {
         return (
             <header>
-                <h2 className="mb-0.5 text-base font-medium">{title}</h2>
+                <h2 className="mb-0.5 text-[15px] font-semibold">{title}</h2>
                 {description && (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-[13px] leading-5 text-muted-foreground">
                         {description}
                     </p>
                 )}
@@ -29,17 +29,17 @@ export default function Heading({
     }
 
     return (
-        <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
-            <div className="space-y-1">
-                <h2 className="text-2xl font-bold tracking-tight">{title}</h2>
+        <header className="paces-page-title-head mb-5">
+            <div className="min-w-0 space-y-1">
+                <h1 className="paces-page-main-title truncate">{title}</h1>
                 {description && (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="max-w-3xl text-[13px] leading-5 text-muted-foreground">
                         {description}
                     </p>
                 )}
             </div>
             {actions && (
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
                     {actions}
                 </div>
             )}

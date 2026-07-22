@@ -11,7 +11,8 @@ import {
     UserRound,
     X,
 } from 'lucide-react';
-import { type FormEvent, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
 import Heading from '@/components/heading';
 import { ChangeRequestStatusBadge } from '@/components/queries/change-request-status-badge';
 import { MentionSelector } from '@/components/queries/mention-selector';
@@ -235,7 +236,7 @@ export default function QueryChangeRequestShow({
         <>
             <Head title={changeRequest.title} />
 
-            <div className="px-6 py-6">
+            <div className="p-5">
                 <Heading
                     title={changeRequest.title}
                     description={t('changeRequests.threadDescription', {

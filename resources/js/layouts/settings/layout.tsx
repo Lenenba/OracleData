@@ -1,13 +1,22 @@
 import { Link, usePage } from '@inertiajs/react';
+import {
+    Bot,
+    BookOpenCheck,
+    Database,
+    FileStack,
+    KeyRound,
+    Palette,
+    ShieldCheck,
+    Tags,
+    UserRound,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { PropsWithChildren } from 'react';
-import Heading from '@/components/heading';
-import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { useI18n } from '@/i18n/i18n-context';
 import { cn, toUrl } from '@/lib/utils';
-import { edit as editAppearance } from '@/routes/appearance';
 import apiTokens from '@/routes/api-tokens';
+import { edit as editAppearance } from '@/routes/appearance';
 import automation from '@/routes/automation';
 import categories from '@/routes/categories';
 import oracleTenants from '@/routes/oracle-tenants';
@@ -17,45 +26,55 @@ import { edit as editSecurity } from '@/routes/security';
 import semanticCatalog from '@/routes/semantic-catalog';
 import type { NavItem } from '@/types';
 
+type SettingsNavItem = NavItem & { icon: LucideIcon };
+
 export default function SettingsLayout({ children }: PropsWithChildren) {
     const { component, props } = usePage();
     const { isCurrentOrParentUrl } = useCurrentUrl();
     const { t } = useI18n();
-    const isWideSettingsPage =
-        component.startsWith('oracle-tenants/') ||
-        component === 'settings/categories' ||
-        component.startsWith('settings/semantic-catalog') ||
-        component.startsWith('settings/query-templates/');
-    const sidebarNavItems: NavItem[] = [
-        { title: t('settings.profile'), href: edit(), icon: null },
-        { title: t('settings.security'), href: editSecurity(), icon: null },
-        { title: t('settings.appearance'), href: editAppearance(), icon: null },
+
+    if (component === 'settings/profile') {
+        return <>{children}</>;
+    }
+
+    const navItems: SettingsNavItem[] = [
+        { title: t('settings.profile'), href: edit(), icon: UserRound },
+        {
+            title: t('settings.security'),
+            href: editSecurity(),
+            icon: ShieldCheck,
+        },
+        {
+            title: t('settings.appearance'),
+            href: editAppearance(),
+            icon: Palette,
+        },
         {
             title: t('settings.connections'),
             href: oracleTenants.index(),
-            icon: null,
+            icon: Database,
         },
         {
             title: t('settings.automation'),
             href: automation.index(),
-            icon: null,
+            icon: Bot,
         },
         {
             title: t('settings.apiTokens'),
             href: apiTokens.index(),
-            icon: null,
+            icon: KeyRound,
         },
         ...(props.auth.user.is_super_admin
             ? [
                   {
                       title: t('settings.taxonomy'),
                       href: categories.index(),
-                      icon: null,
+                      icon: Tags,
                   },
                   {
                       title: t('settings.semanticCatalog'),
                       href: semanticCatalog.index(),
-                      icon: null,
+                      icon: BookOpenCheck,
                   },
               ]
             : []),
@@ -64,64 +83,40 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                   {
                       title: t('settings.templateGovernance'),
                       href: queryTemplateGovernance.index(),
-                      icon: null,
+                      icon: FileStack,
                   },
               ]
             : []),
     ];
 
     return (
-        <div className="px-4 py-6">
-            <Heading
-                title={t('settings.title')}
-                description={t('settings.description')}
-            />
+        <div className="space-y-5 p-5">
+            <nav
+                className="card flex min-h-14 flex-row items-stretch gap-1 overflow-x-auto px-3"
+                aria-label={t('settings.title')}
+            >
+                {navItems.map((item) => {
+                    const active = isCurrentOrParentUrl(item.href);
+                    const Icon = item.icon;
 
-            <div className="flex flex-col lg:flex-row lg:space-x-12">
-                <aside className="w-full max-w-xl lg:w-48">
-                    <nav
-                        className="flex flex-col space-y-1 space-x-0"
-                        aria-label="Settings"
-                    >
-                        {sidebarNavItems.map((item, index) => (
-                            <Button
-                                key={`${toUrl(item.href)}-${index}`}
-                                size="sm"
-                                variant="ghost"
-                                asChild
-                                className={cn('w-full justify-start', {
-                                    'bg-muted': isCurrentOrParentUrl(item.href),
-                                })}
-                            >
-                                <Link href={item.href}>
-                                    {item.icon && (
-                                        <item.icon className="h-4 w-4" />
-                                    )}
-                                    {item.title}
-                                </Link>
-                            </Button>
-                        ))}
-                    </nav>
-                </aside>
+                    return (
+                        <Link
+                            key={toUrl(item.href)}
+                            href={item.href}
+                            aria-current={active ? 'page' : undefined}
+                            className={cn(
+                                'relative flex shrink-0 items-center gap-2 border-b-2 border-transparent px-3 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-primary',
+                                active && 'border-primary text-primary',
+                            )}
+                        >
+                            <Icon className="size-4" aria-hidden="true" />
+                            <span>{item.title}</span>
+                        </Link>
+                    );
+                })}
+            </nav>
 
-                <Separator className="my-6 lg:hidden" />
-
-                <div
-                    className={cn(
-                        'min-w-0 flex-1',
-                        !isWideSettingsPage && 'md:max-w-2xl',
-                    )}
-                >
-                    <section
-                        className={cn(
-                            'space-y-12',
-                            !isWideSettingsPage && 'max-w-xl',
-                        )}
-                    >
-                        {children}
-                    </section>
-                </div>
-            </div>
+            <section>{children}</section>
         </div>
     );
 }
