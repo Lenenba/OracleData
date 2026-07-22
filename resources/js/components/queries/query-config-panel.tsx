@@ -307,11 +307,11 @@ function Collapsible({
     const [open, setOpen] = useState(defaultOpen);
 
     return (
-        <div className="overflow-hidden rounded-xl border bg-card">
+        <div className="card">
             <button
                 type="button"
                 onClick={() => setOpen(!open)}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40"
+                className="card-header w-full flex-nowrap justify-start text-left transition-colors hover:bg-muted/40"
             >
                 <span className="text-muted-foreground">{icon}</span>
                 <div className="min-w-0 flex-1">
@@ -333,9 +333,7 @@ function Collapsible({
                     className={`size-4 text-muted-foreground transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
                 />
             </button>
-            {open && (
-                <div className="border-t bg-muted/10 px-4 py-4">{children}</div>
-            )}
+            {open && <div className="card-body bg-muted/10">{children}</div>}
         </div>
     );
 }
@@ -639,7 +637,7 @@ export function QueryConfigPanel({
     return (
         <div className="flex flex-col gap-4">
             {/* ─ Ressource choisie ─ */}
-            <div className="flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3">
+            <div className="card card-body flex items-center justify-between gap-3 !p-4">
                 <div className="flex min-w-0 items-center gap-2">
                     <span className="text-lg leading-none">
                         {domainIcon(resource.domain)}
@@ -908,7 +906,7 @@ export function QueryConfigPanel({
             </Collapsible>
 
             {/* ─ Environnement & limite ─ */}
-            <div className="flex flex-wrap gap-3 rounded-xl border bg-card p-4">
+            <div className="card card-body flex flex-wrap gap-3 !p-4">
                 <div className="flex max-w-32 flex-col gap-1.5">
                     <Label htmlFor="qb-limit" className="text-xs font-medium">
                         Limite de lignes

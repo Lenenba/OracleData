@@ -864,15 +864,56 @@ export default function QueriesIndex({
         <>
             <Head title={t('nav.queries')} />
 
-            <div className="px-6 py-6">
+            <div className="p-5">
                 <Heading
                     title={heading.title}
                     description={heading.description}
                 />
 
-                <div className="overflow-hidden rounded-xl border bg-card">
+                <div className="mb-5 grid gap-5 md:grid-cols-3">
+                    {[
+                        {
+                            label: t('queries.all'),
+                            value: summary.all,
+                            icon: Database,
+                            tone: 'bg-primary/15 text-primary',
+                        },
+                        {
+                            label: t('queries.mine'),
+                            value: summary.mine,
+                            icon: User,
+                            tone: 'bg-info/15 text-info',
+                        },
+                        {
+                            label: t('queries.shared'),
+                            value: summary.shared,
+                            icon: Share2,
+                            tone: 'bg-purple/15 text-purple',
+                        },
+                    ].map(({ label, value, icon: Icon, tone }) => (
+                        <div key={label} className="card">
+                            <div className="card-body flex items-center gap-4">
+                                <span
+                                    className={`grid size-10 place-items-center rounded-full ${tone}`}
+                                >
+                                    <Icon className="size-4.5" />
+                                </span>
+                                <div>
+                                    <p className="text-xs font-bold tracking-wide text-muted-foreground uppercase">
+                                        {label}
+                                    </p>
+                                    <strong className="mt-1 block text-2xl font-semibold tabular-nums">
+                                        {formatNumber(value)}
+                                    </strong>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="card overflow-hidden">
                     {/* Toolbar */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3.5">
+                    <div className="card-header flex-wrap justify-between gap-3">
                         <div className="flex flex-wrap items-center gap-2">
                             <div className="relative w-full max-w-xs">
                                 <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -1175,21 +1216,44 @@ export default function QueriesIndex({
                             )}
                         </span>
                         <div className="flex items-center gap-2">
-                            <span className="whitespace-nowrap">{t('table.rowsPerPage')}</span>
+                            <span className="whitespace-nowrap">
+                                {t('table.rowsPerPage')}
+                            </span>
                             <Select
                                 value={String(queryPage.per_page)}
                                 onValueChange={(v) => {
                                     router.visit(
                                         queries.index({
                                             query: {
-                                                scope: currentFilters.scope !== 'all' ? currentFilters.scope : undefined,
-                                                search: currentFilters.search || undefined,
-                                                category: currentFilters.category || undefined,
-                                                tag: currentFilters.tag || undefined,
-                                                sort: currentFilters.sort !== 'updated_desc' ? currentFilters.sort : undefined,
-                                                favorite: currentFilters.favorite || undefined,
-                                                pinned: currentFilters.pinned || undefined,
-                                                per_page: Number(v) !== 25 ? v : undefined,
+                                                scope:
+                                                    currentFilters.scope !==
+                                                    'all'
+                                                        ? currentFilters.scope
+                                                        : undefined,
+                                                search:
+                                                    currentFilters.search ||
+                                                    undefined,
+                                                category:
+                                                    currentFilters.category ||
+                                                    undefined,
+                                                tag:
+                                                    currentFilters.tag ||
+                                                    undefined,
+                                                sort:
+                                                    currentFilters.sort !==
+                                                    'updated_desc'
+                                                        ? currentFilters.sort
+                                                        : undefined,
+                                                favorite:
+                                                    currentFilters.favorite ||
+                                                    undefined,
+                                                pinned:
+                                                    currentFilters.pinned ||
+                                                    undefined,
+                                                per_page:
+                                                    Number(v) !== 25
+                                                        ? v
+                                                        : undefined,
                                                 view: 'none',
                                             },
                                         }),
@@ -1206,7 +1270,11 @@ export default function QueriesIndex({
                                 </SelectTrigger>
                                 <SelectContent>
                                     {[10, 25, 50, 100].map((n) => (
-                                        <SelectItem key={n} value={String(n)} className="text-xs">
+                                        <SelectItem
+                                            key={n}
+                                            value={String(n)}
+                                            className="text-xs"
+                                        >
                                             {n}
                                         </SelectItem>
                                     ))}

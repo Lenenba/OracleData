@@ -798,7 +798,6 @@ export default function OracleTenantSchema({
                                 rows={filteredResources}
                                 rowKey={(resource) => resource.resource_key}
                                 paginated
-                                defaultPageSize={25}
                                 paginationLabels={{
                                     rowsPerPage: t('table.rowsPerPage'),
                                     of: t('table.of'),

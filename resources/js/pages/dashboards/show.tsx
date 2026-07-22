@@ -1,7 +1,15 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { BarChart3, Pencil, Plus, Table2, Trash2, TrendingUp } from 'lucide-react';
+import {
+    BarChart3,
+    Pencil,
+    Plus,
+    Table2,
+    Trash2,
+    TrendingUp,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Heading from '@/components/heading';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -79,14 +87,18 @@ function KpiWidget({
 
     if (result.state === 'error') {
         return (
-            <p className="text-xs text-destructive">{t('dashboards.widgetError')}</p>
+            <p className="text-xs text-destructive">
+                {t('dashboards.widgetError')}
+            </p>
         );
     }
 
     if (result.state === 'done') {
         const row = result.items[0];
         const rawValue =
-            row !== undefined && column !== undefined ? row[column] : result.count;
+            row !== undefined && column !== undefined
+                ? row[column]
+                : result.count;
         const value =
             typeof rawValue === 'number'
                 ? rawValue.toLocaleString()
@@ -128,7 +140,9 @@ function TableWidget({
 
     if (result.state === 'error') {
         return (
-            <p className="text-xs text-destructive">{t('dashboards.widgetError')}</p>
+            <p className="text-xs text-destructive">
+                {t('dashboards.widgetError')}
+            </p>
         );
     }
 
@@ -155,7 +169,8 @@ function TableWidget({
                             <tr key={i} className="border-b last:border-0">
                                 {columns.map((col) => (
                                     <td key={col} className="px-2 py-1">
-                                        {row[col] !== null && row[col] !== undefined
+                                        {row[col] !== null &&
+                                        row[col] !== undefined
                                             ? String(row[col])
                                             : '—'}
                                     </td>
@@ -169,7 +184,9 @@ function TableWidget({
     }
 
     return (
-        <p className="text-xs text-muted-foreground">{t('dashboards.chartNoData')}</p>
+        <p className="text-xs text-muted-foreground">
+            {t('dashboards.chartNoData')}
+        </p>
     );
 }
 
@@ -191,7 +208,9 @@ function ChartWidget({
 
     if (result.state === 'error') {
         return (
-            <p className="text-xs text-destructive">{t('dashboards.widgetError')}</p>
+            <p className="text-xs text-destructive">
+                {t('dashboards.widgetError')}
+            </p>
         );
     }
 
@@ -291,7 +310,9 @@ function AddWidgetDialog({
     }
 
     function submit() {
-        if (queryId === '' || saving) return;
+        if (queryId === '' || saving) {
+            return;
+        }
 
         setSaving(true);
 
@@ -311,7 +332,14 @@ function AddWidgetDialog({
     }
 
     return (
-        <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
+        <Dialog
+            open={open}
+            onOpenChange={(o) => {
+                if (!o) {
+                    handleClose();
+                }
+            }}
+        >
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>{t('dashboards.addWidgetTitle')}</DialogTitle>
@@ -338,21 +366,31 @@ function AddWidgetDialog({
                         <Label>{t('dashboards.widgetType')}</Label>
                         <Select
                             value={widgetType}
-                            onValueChange={(v) => setWidgetType(v as WidgetType)}
+                            onValueChange={(v) =>
+                                setWidgetType(v as WidgetType)
+                            }
                         >
                             <SelectTrigger>
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="kpi">{t('dashboards.widgetTypeKpi')}</SelectItem>
-                                <SelectItem value="table">{t('dashboards.widgetTypeTable')}</SelectItem>
-                                <SelectItem value="chart">{t('dashboards.widgetTypeChart')}</SelectItem>
+                                <SelectItem value="kpi">
+                                    {t('dashboards.widgetTypeKpi')}
+                                </SelectItem>
+                                <SelectItem value="table">
+                                    {t('dashboards.widgetTypeTable')}
+                                </SelectItem>
+                                <SelectItem value="chart">
+                                    {t('dashboards.widgetTypeChart')}
+                                </SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
 
                     <div className="grid gap-2">
-                        <Label htmlFor="wtitle">{t('dashboards.widgetTitle')}</Label>
+                        <Label htmlFor="wtitle">
+                            {t('dashboards.widgetTitle')}
+                        </Label>
                         <Input
                             id="wtitle"
                             value={title}
@@ -362,12 +400,16 @@ function AddWidgetDialog({
 
                     {(widgetType === 'kpi' || widgetType === 'chart') && (
                         <div className="grid gap-2">
-                            <Label htmlFor="wcol">{t('dashboards.widgetColumn')}</Label>
+                            <Label htmlFor="wcol">
+                                {t('dashboards.widgetColumn')}
+                            </Label>
                             <Input
                                 id="wcol"
                                 value={column}
                                 onChange={(e) => setColumn(e.target.value)}
-                                placeholder={t('dashboards.widgetColumnPlaceholder')}
+                                placeholder={t(
+                                    'dashboards.widgetColumnPlaceholder',
+                                )}
                             />
                         </div>
                     )}
@@ -402,11 +444,9 @@ function WidgetCard({
     t: (k: TranslationKey, p?: Record<string, string | number>) => string;
     formatNumber: (n: number) => string;
 }) {
-    const [result, setResult] = useState<WidgetResult>({ state: 'idle' });
+    const [result, setResult] = useState<WidgetResult>({ state: 'loading' });
 
     useEffect(() => {
-        setResult({ state: 'loading' });
-
         fetch(queries.run.url(widget.query.id), {
             method: 'POST',
             headers: {
@@ -417,7 +457,9 @@ function WidgetCard({
             },
             credentials: 'same-origin',
             body: JSON.stringify({
-                limit: widget.widget_options.limit ?? (widget.widget_type === 'kpi' ? 1 : 20),
+                limit:
+                    widget.widget_options.limit ??
+                    (widget.widget_type === 'kpi' ? 1 : 20),
             }),
         })
             .then((r) => (r.ok ? r.json() : Promise.reject(r)))
@@ -431,9 +473,12 @@ function WidgetCard({
                 });
             })
             .catch(() => {
-                setResult({ state: 'error', message: t('dashboards.widgetError') });
+                setResult({
+                    state: 'error',
+                    message: t('dashboards.widgetError'),
+                });
             });
-    }, [widget.id]);
+    }, [t, widget.query.id, widget.widget_options.limit, widget.widget_type]);
 
     const widgetIcon =
         widget.widget_type === 'kpi' ? (
@@ -445,7 +490,7 @@ function WidgetCard({
         );
 
     return (
-        <div className="flex flex-col rounded-xl border bg-card p-4 shadow-sm">
+        <div className="card card-body flex flex-col !p-4">
             <div className="mb-3 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 text-sm font-medium">
                     {widgetIcon}
@@ -515,7 +560,7 @@ export default function DashboardsShow({
         <>
             <Head title={dashboard.name} />
 
-            <div className="px-6 py-6">
+            <div className="p-5">
                 <Heading
                     title={dashboard.name}
                     description={dashboard.description ?? undefined}
@@ -539,35 +584,51 @@ export default function DashboardsShow({
                     }
                 />
 
-                {dashboard.widgets.length === 0 ? (
-                    <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-12 text-center">
-                        <BarChart3 className="size-10 text-muted-foreground/40" />
-                        <p className="text-sm font-medium">
-                            {t('dashboards.widgetEmpty')}
-                        </p>
-                        <Button
-                            type="button"
-                            size="sm"
-                            className="mt-2"
-                            onClick={() => setAddOpen(true)}
-                        >
-                            <Plus className="size-4" />
-                            {t('dashboards.addWidget')}
-                        </Button>
+                <section className="card">
+                    <div className="card-header justify-between">
+                        <div>
+                            <h2 className="card-title">
+                                Widgets du tableau de bord
+                            </h2>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                                Visualisations et indicateurs alimentés par vos
+                                requêtes
+                            </p>
+                        </div>
+                        <Badge variant="secondary">
+                            {dashboard.widgets.length} widget(s)
+                        </Badge>
                     </div>
-                ) : (
-                    <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        {dashboard.widgets.map((widget) => (
-                            <WidgetCard
-                                key={widget.id}
-                                widget={widget}
-                                dashboardId={dashboard.id}
-                                t={t}
-                                formatNumber={formatNumber}
-                            />
-                        ))}
-                    </div>
-                )}
+                    {dashboard.widgets.length === 0 ? (
+                        <div className="card-body flex min-h-72 flex-col items-center justify-center gap-3 text-center">
+                            <BarChart3 className="size-10 text-muted-foreground/40" />
+                            <p className="text-sm font-medium">
+                                {t('dashboards.widgetEmpty')}
+                            </p>
+                            <Button
+                                type="button"
+                                size="sm"
+                                className="mt-2"
+                                onClick={() => setAddOpen(true)}
+                            >
+                                <Plus className="size-4" />
+                                {t('dashboards.addWidget')}
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className="card-body grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                            {dashboard.widgets.map((widget) => (
+                                <WidgetCard
+                                    key={widget.id}
+                                    widget={widget}
+                                    dashboardId={dashboard.id}
+                                    t={t}
+                                    formatNumber={formatNumber}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </section>
             </div>
 
             <AddWidgetDialog

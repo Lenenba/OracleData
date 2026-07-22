@@ -30,7 +30,7 @@ export default function CreateQuery({
         <>
             <Head title={t('queries.create')} />
 
-            <div className="px-6 py-6">
+            <div className="p-5">
                 <Heading
                     title={t('queries.create')}
                     description={t('queries.createDescription')}

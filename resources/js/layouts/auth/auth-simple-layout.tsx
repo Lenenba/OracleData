@@ -14,22 +14,22 @@ export default function AuthSimpleLayout({
     return (
         <div
             className={cn(
-                'flex min-h-svh flex-col items-center gap-6 bg-background p-6 md:p-10',
+                'relative flex min-h-svh flex-col items-center gap-6 bg-background p-6 md:p-10',
                 wide ? 'justify-start xl:justify-center' : 'justify-center',
             )}
         >
             <div className="absolute top-4 right-4">
                 <LanguageSwitcher compact />
             </div>
-            <div className={cn('w-full', wide ? 'max-w-xl' : 'max-w-sm')}>
-                <div className="flex flex-col gap-8">
+            <div className={cn('w-full', wide ? 'max-w-xl' : 'max-w-md')}>
+                <div className="card flex flex-col gap-8 p-7 sm:p-10">
                     <div className="flex flex-col items-center gap-4">
                         <Link
                             href={home()}
                             className="flex flex-col items-center gap-2 font-medium"
                         >
-                            <div className="mb-1 flex h-9 w-9 items-center justify-center rounded-md">
-                                <AppLogoIcon className="size-9 fill-current text-[var(--foreground)] dark:text-white" />
+                            <div className="paces-brand-mark mb-1">
+                                <AppLogoIcon aria-hidden="true" />
                             </div>
                             <span className="sr-only">{title}</span>
                         </Link>

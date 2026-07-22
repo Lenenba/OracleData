@@ -907,7 +907,9 @@ function RelationDialog({
                 : (childResources[0]?.key ?? '')),
         source_field:
             relation?.source_field ??
-            (initialKind === 'join' ? (initialJoinTarget?.local_key ?? '') : ''),
+            (initialKind === 'join'
+                ? (initialJoinTarget?.local_key ?? '')
+                : ''),
         target_field:
             relation?.target_field ??
             (initialKind === 'join'
@@ -1058,8 +1060,10 @@ function RelationDialog({
                                         kind,
                                         target_key:
                                             kind === 'join'
-                                                ? (joinTarget?.resource_key ?? '')
-                                                : (childResources[0]?.key ?? ''),
+                                                ? (joinTarget?.resource_key ??
+                                                  '')
+                                                : (childResources[0]?.key ??
+                                                  ''),
                                         source_field:
                                             kind === 'join'
                                                 ? (joinTarget?.local_key ?? '')
@@ -1108,7 +1112,8 @@ function RelationDialog({
                                             source_field:
                                                 selectedTarget?.local_key ?? '',
                                             target_field:
-                                                selectedTarget?.remote_key ?? '',
+                                                selectedTarget?.remote_key ??
+                                                '',
                                         }));
                                     }}
                                     disabled={Boolean(relation)}
@@ -1586,7 +1591,7 @@ export default function SemanticCatalogShow({
             <Head title={resourceName} />
             <h1 className="sr-only">{resourceName}</h1>
 
-            <div className="space-y-6">
+            <div className="space-y-5">
                 <div>
                     <Button asChild size="sm" variant="ghost" className="mb-3">
                         <Link href={semanticCatalog.index()}>
@@ -1890,7 +1895,6 @@ export default function SemanticCatalogShow({
                                     rowKey={(field) => field.id}
                                     empty={t('semanticCatalog.fieldsEmpty')}
                                     paginated
-                                    defaultPageSize={25}
                                     paginationLabels={{
                                         rowsPerPage: t('table.rowsPerPage'),
                                         of: t('table.of'),
@@ -1963,7 +1967,6 @@ export default function SemanticCatalogShow({
                                     rowKey={(relation) => relation.id}
                                     empty={t('semanticCatalog.relationsEmpty')}
                                     paginated
-                                    defaultPageSize={25}
                                     paginationLabels={{
                                         rowsPerPage: t('table.rowsPerPage'),
                                         of: t('table.of'),

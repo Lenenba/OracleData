@@ -267,7 +267,7 @@ export default function OracleTenantsIndex({
         <>
             <Head title={t('connections.title')} />
 
-            <div className="space-y-6">
+            <div className="space-y-5">
                 <Heading
                     title={t('connections.title')}
                     description={t('connections.description')}
@@ -279,13 +279,67 @@ export default function OracleTenantsIndex({
                     }
                 />
 
-                <div className="overflow-hidden rounded-xl border bg-card">
+                <div className="grid gap-5 md:grid-cols-3">
+                    {[
+                        {
+                            label: 'Connexions configurées',
+                            value: tenants.length,
+                            icon: Server,
+                            tone: 'bg-primary/15 text-primary',
+                        },
+                        {
+                            label: 'Connexions actives',
+                            value: activeConnectionCount,
+                            icon: CheckCircle2,
+                            tone: 'bg-success/15 text-success',
+                        },
+                        {
+                            label: 'À vérifier',
+                            value: tenants.length - activeConnectionCount,
+                            icon: ShieldAlert,
+                            tone: 'bg-warning/15 text-warning',
+                        },
+                    ].map(({ label, value, icon: Icon, tone }) => (
+                        <div key={label} className="card">
+                            <div className="card-body flex items-center gap-4">
+                                <span
+                                    className={`grid size-10 place-items-center rounded-full ${tone}`}
+                                >
+                                    <Icon className="size-4.5" />
+                                </span>
+                                <div>
+                                    <p className="text-xs font-bold tracking-wide text-muted-foreground uppercase">
+                                        {label}
+                                    </p>
+                                    <strong className="mt-1 block text-2xl font-semibold tabular-nums">
+                                        {value}
+                                    </strong>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="card overflow-hidden">
+                    <div className="card-header justify-between">
+                        <div>
+                            <h2 className="card-title">
+                                Environnements Oracle
+                            </h2>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                                Identifiants, état et accès au catalogue de
+                                chaque tenant
+                            </p>
+                        </div>
+                        <Badge variant="secondary">
+                            {tenants.length} environnement(s)
+                        </Badge>
+                    </div>
                     <DataTable
                         columns={columns}
                         rows={tenants}
                         rowKey={(tenant) => tenant.id}
                         paginated
-                        defaultPageSize={25}
                         paginationLabels={{
                             rowsPerPage: t('table.rowsPerPage'),
                             of: t('table.of'),

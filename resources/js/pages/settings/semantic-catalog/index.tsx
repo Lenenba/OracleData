@@ -849,9 +849,8 @@ export default function SemanticCatalogIndex({
             <Head title={t('semanticCatalog.pageTitle')} />
             <h1 className="sr-only">{t('semanticCatalog.pageTitle')}</h1>
 
-            <div className="space-y-6">
+            <div className="space-y-5">
                 <Heading
-                    variant="small"
                     title={t('semanticCatalog.title')}
                     description={t('semanticCatalog.description')}
                     actions={
@@ -1013,7 +1012,6 @@ export default function SemanticCatalogIndex({
                                 rows={resources}
                                 rowKey={(resource) => resource.id}
                                 paginated
-                                defaultPageSize={25}
                                 paginationLabels={{
                                     rowsPerPage: t('table.rowsPerPage'),
                                     of: t('table.of'),
@@ -1071,7 +1069,6 @@ export default function SemanticCatalogIndex({
                                 rows={glossary}
                                 rowKey={(term) => term.id}
                                 paginated
-                                defaultPageSize={25}
                                 paginationLabels={{
                                     rowsPerPage: t('table.rowsPerPage'),
                                     of: t('table.of'),

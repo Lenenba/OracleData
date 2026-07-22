@@ -68,13 +68,56 @@ export default function QueryTemplateIndex({
         <>
             <Head title={t('templates.title')} />
 
-            <div className="space-y-6 px-6 py-6">
+            <div className="space-y-5 p-5">
                 <Heading
                     title={t('templates.title')}
                     description={t('templates.description')}
                 />
 
-                <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="grid gap-5 md:grid-cols-3">
+                    {[
+                        {
+                            label: 'Modèles disponibles',
+                            value: templates.length,
+                            icon: FileSliders,
+                            tone: 'bg-primary/15 text-primary',
+                        },
+                        {
+                            label: 'Modèles certifiés',
+                            value: templates.filter(
+                                (template) => template.is_certified,
+                            ).length,
+                            icon: ShieldCheck,
+                            tone: 'bg-success/15 text-success',
+                        },
+                        {
+                            label: 'Catégories',
+                            value: categories.length,
+                            icon: Search,
+                            tone: 'bg-purple/15 text-purple',
+                        },
+                    ].map(({ label, value, icon: Icon, tone }) => (
+                        <div key={label} className="card">
+                            <div className="card-body flex items-center gap-4">
+                                <span
+                                    className={`grid size-10 place-items-center rounded-full ${tone}`}
+                                >
+                                    <Icon className="size-4.5" />
+                                </span>
+                                <div>
+                                    <p className="text-xs font-bold tracking-wide text-muted-foreground uppercase">
+                                        {label}
+                                    </p>
+                                    <strong className="mt-1 block text-2xl font-semibold tabular-nums">
+                                        {value}
+                                    </strong>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="card card-body flex flex-col gap-3 sm:flex-row">
                     <div className="relative min-w-0 flex-1">
                         <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
@@ -110,7 +153,7 @@ export default function QueryTemplateIndex({
                         {t('templates.empty')}
                     </div>
                 ) : (
-                    <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
                         {filtered.map((template) => (
                             <Card key={template.slug} className="gap-4">
                                 <CardHeader className="gap-3">

@@ -45,7 +45,10 @@ type EditQueryProps = {
  * FreeformEditor should show an informational banner rather than a warning.
  */
 function isDeepOraclePath(path: string | null): boolean {
-    if (path === null) return false;
+    if (path === null) {
+        return false;
+    }
+
     // Root catalogue paths have exactly 4 segments:
     //   /hcmRestApi/resources/<version>/<resourceName>
     // Deep paths have more segments (tenant IDs, /child/, etc.)
@@ -68,7 +71,9 @@ export default function EditQuery({
     // resource_key can come from parameters (wizard-created query) or from the
     // backend resolution against the catalogue (Postman/custom-imported query).
     const resolvedResourceKey =
-        (typeof params.resource_key === 'string' ? params.resource_key : null) ??
+        (typeof params.resource_key === 'string'
+            ? params.resource_key
+            : null) ??
         query.resolved_resource_key ??
         undefined;
 
@@ -80,7 +85,9 @@ export default function EditQuery({
     const nestedExpand = allExpand.filter((e) => e.includes('.'));
 
     const rawPath =
-        resolvedResourceKey == null ? (query.resource_path ?? undefined) : undefined;
+        resolvedResourceKey == null
+            ? (query.resource_path ?? undefined)
+            : undefined;
 
     const initialState = {
         queryId: query.id,
@@ -108,7 +115,7 @@ export default function EditQuery({
         <>
             <Head title={t('queries.editTitle', { name: query.name })} />
 
-            <div className="px-6 py-6">
+            <div className="p-5">
                 <Heading
                     title={t('queries.editTitle', { name: query.name })}
                     description={t('queries.editDescription')}

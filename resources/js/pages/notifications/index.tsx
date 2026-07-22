@@ -524,11 +524,57 @@ export default function NotificationsIndex({
         <>
             <Head title={t('notifications.pageTitle')} />
 
-            <div className="px-6 py-6">
+            <div className="p-5">
                 <Heading
                     title={t('notifications.title')}
                     description={t('notifications.description')}
                 />
+
+                <div className="mb-5 grid gap-5 md:grid-cols-3">
+                    {[
+                        {
+                            label: 'Notifications',
+                            value: notifications.meta.total,
+                            icon: Inbox,
+                            tone: 'bg-primary/15 text-primary',
+                        },
+                        {
+                            label: 'Non lues',
+                            value: unreadCount,
+                            icon: BellRing,
+                            tone: 'bg-destructive/15 text-destructive',
+                        },
+                        {
+                            label: 'Collaborations',
+                            value: notifications.data.filter(
+                                (item) =>
+                                    item.kind.startsWith(
+                                        'query_change_request_',
+                                    ) || item.kind.startsWith('query_share_'),
+                            ).length,
+                            icon: MessageSquareText,
+                            tone: 'bg-purple/15 text-purple',
+                        },
+                    ].map(({ label, value, icon: Icon, tone }) => (
+                        <div key={label} className="card">
+                            <div className="card-body flex items-center gap-4">
+                                <span
+                                    className={`grid size-10 place-items-center rounded-full ${tone}`}
+                                >
+                                    <Icon className="size-4.5" />
+                                </span>
+                                <div>
+                                    <p className="text-xs font-bold tracking-wide text-muted-foreground uppercase">
+                                        {label}
+                                    </p>
+                                    <strong className="mt-1 block text-2xl font-semibold tabular-nums">
+                                        {value}
+                                    </strong>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
 
                 <div className="space-y-5">
                     {feedback && (

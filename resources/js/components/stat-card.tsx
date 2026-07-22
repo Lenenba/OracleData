@@ -49,8 +49,7 @@ export type StatTrend = {
 };
 
 /**
- * Carte de statistique façon Preline : libellé discret, valeur en évidence,
- * tendance réelle optionnelle et sparkline optionnelle.
+ * Carte de statistique Paces : titre compact, valeur forte et tendance légère.
  */
 export function StatCard({
     label,
@@ -66,42 +65,48 @@ export function StatCard({
     series?: number[];
 }) {
     return (
-        <div className="flex flex-col gap-3 rounded-xl border bg-card p-5">
-            <p className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-                {label}
-            </p>
+        <div className="card h-full">
+            <div className="card-body flex h-full flex-col gap-3">
+                <p className="text-[13px] font-bold tracking-wide text-muted-foreground uppercase">
+                    {label}
+                </p>
 
-            <div className="flex items-end justify-between gap-3">
-                <span className="text-3xl font-semibold tracking-tight tabular-nums">
-                    {value}
-                </span>
-                {series && series.length > 1 && <Sparkline series={series} />}
-            </div>
-
-            {(trend || caption) && (
-                <div className="flex items-center gap-2 text-xs">
-                    {trend && (
-                        <span
-                            className={[
-                                'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-medium',
-                                trend.direction === 'up'
-                                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400'
-                                    : 'bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-400',
-                            ].join(' ')}
-                        >
-                            {trend.direction === 'up' ? (
-                                <TrendingUp className="size-3" />
-                            ) : (
-                                <TrendingDown className="size-3" />
-                            )}
-                            {trend.label}
-                        </span>
-                    )}
-                    {caption && (
-                        <span className="text-muted-foreground">{caption}</span>
+                <div className="flex items-end justify-between gap-3">
+                    <span className="text-2xl font-semibold tracking-tight text-foreground tabular-nums">
+                        {value}
+                    </span>
+                    {series && series.length > 1 && (
+                        <Sparkline series={series} />
                     )}
                 </div>
-            )}
+
+                {(trend || caption) && (
+                    <div className="flex items-center gap-2 text-xs">
+                        {trend && (
+                            <span
+                                className={[
+                                    'inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold',
+                                    trend.direction === 'up'
+                                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400'
+                                        : 'bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-400',
+                                ].join(' ')}
+                            >
+                                {trend.direction === 'up' ? (
+                                    <TrendingUp className="size-3" />
+                                ) : (
+                                    <TrendingDown className="size-3" />
+                                )}
+                                {trend.label}
+                            </span>
+                        )}
+                        {caption && (
+                            <span className="text-muted-foreground">
+                                {caption}
+                            </span>
+                        )}
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
