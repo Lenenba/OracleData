@@ -64,10 +64,27 @@ type BuilderInitialState = {
     description?: string | null;
     accessLevel?: QueryAccessLevel;
     resourceKey?: string;
+    /**
+     * Populated only for custom/Postman queries whose resource_path could NOT
+     * be resolved to a catalogue key. Triggers the freeform editor fallback.
+     */
+    rawResourcePath?: string;
+    /**
+     * True when rawResourcePath is a valid deep Oracle HCM/FSCM path (contains
+     * tenant IDs or child segments) that passes AllowedResourcePath but is not
+     * a catalogue root. Banner is shown in informational blue instead of amber.
+     */
+    isDeepOraclePath?: boolean;
     tenantKey?: string;
     fields?: string[];
-    /** Enfants Oracle imbriqués (child_resources) */
+    /** Enfants Oracle imbriqués (child_resources) — noms simples gérés par l'UI */
     expand?: string[];
+    /**
+     * Chemins imbriqués Oracle (ex: workRelationships.assignments.managers).
+     * Non éditables dans le wizard, mais préservés lors du save pour ne pas
+     * perdre les expand Postman à plusieurs niveaux.
+     */
+    nestedExpand?: string[];
     /** Clés de ressources jointes cross-resource (join_keys) */
     joins?: string[];
     childFields?: ChildFieldsMap;
@@ -101,6 +118,430 @@ type QueryBuilderProps = {
     mode?: BuilderMode;
     initialState?: BuilderInitialState;
 };
+
+
+// ─── FreeformEditor ───────────────────────────────────────────────────────────
+// Minimal editor for custom/Postman queries whose resource_path has no catalogue
+// match. The user edits name, description, tenant, raw q= filter, fields, limit,
+// category, tags, then saves. A "Switch to wizard" button lets them pick a
+// resource and get the full builder experience instead.
+
+type FreeformEditorProps = {
+    queryId?: number;
+    rawResourcePath: string;
+    /** When true the path is a valid deep Oracle path — show blue info banner, not amber warning. */
+    isDeepOraclePath?: boolean;
+    name: string;
+    setName: (v: string) => void;
+    description: string;
+    setDescription: (v: string) => void;
+    accessLevel: QueryAccessLevel;
+    tenant: string;
+    setTenant: (v: string) => void;
+    tenants: Record<string, string>;
+    filterQ: string;
+    fields: string[];
+    /** Simple expand names (from wizard checkboxes) */
+    expand: string[];
+    setExpand: (v: string) => void;
+    /** Dot-path expands (e.g. workRelationships.assignments.managers) */
+    nestedExpand: string[];
+    limit: string;
+    setLimit: (v: string) => void;
+    categoryId: string;
+    setCategoryId: (v: string) => void;
+    categories: QueryCategoryOption[];
+    tags: string[];
+    setTags: (v: string[]) => void;
+    tagInput: string;
+    setTagInput: (v: string) => void;
+    addTag: (v?: string) => void;
+    removeTag: (name: string) => void;
+    tagLabel: (name: string) => string;
+    tagSuggestions: QueryTagOption[];
+    saving: boolean;
+    saveErrors: string[];
+    onSwitchToWizard: () => void;
+    onSave: (params: Record<string, string | number>) => void;
+};
+
+function FreeformEditor({
+    queryId,
+    rawResourcePath,
+    isDeepOraclePath = false,
+    name,
+    setName,
+    description,
+    setDescription,
+    accessLevel,
+    tenant,
+    setTenant,
+    tenants,
+    filterQ: initialFilterQ,
+    fields: initialFields,
+    expand: initialExpand,
+    setExpand,
+    nestedExpand,
+    limit,
+    setLimit,
+    categoryId,
+    setCategoryId,
+    categories,
+    tags,
+    setTags,
+    tagInput,
+    setTagInput,
+    addTag,
+    removeTag,
+    tagLabel,
+    tagSuggestions,
+    saving,
+    saveErrors,
+    onSwitchToWizard,
+    onSave,
+}: FreeformEditorProps) {
+    const { t } = useI18n();
+    const tenantKeys = Object.keys(tenants);
+
+    // Local raw string states for the freeform fields
+    const [filterQ, setFilterQ] = useState(initialFilterQ);
+    const [fieldsRaw, setFieldsRaw] = useState(initialFields.join(','));
+    // Combined expand: simple names + nested dot-path expands
+    const [expandRaw, setExpandRaw] = useState(
+        [...initialExpand, ...nestedExpand].join(','),
+    );
+
+    function handleSave() {
+        const params: Record<string, string | number> = {};
+        const trimmedQ = filterQ.trim();
+        // fields must be sent as a comma-separated string, matching the
+        // StoreQueryRequest rule: 'parameters.fields' => 'nullable|string|max:2000'.
+        const trimmedFields = fieldsRaw
+            .split(',')
+            .map((f) => f.trim())
+            .filter(Boolean)
+            .join(',');
+        const trimmedExpand = expandRaw
+            .split(',')
+            .map((e) => e.trim())
+            .filter(Boolean)
+            .join(',');
+        const parsedLimit = parseLimit(limit);
+
+        if (trimmedQ) params.q = trimmedQ;
+        if (trimmedFields) params.fields = trimmedFields;
+        if (trimmedExpand) params.expand = trimmedExpand;
+        params.limit = parsedLimit;
+
+        // Keep setExpand in sync so the parent state is aware of the change
+        setExpand(trimmedExpand);
+
+        onSave(params);
+    }
+
+    // Banner styling: blue for valid deep Oracle paths, amber for unknown paths
+    const isInfo = isDeepOraclePath;
+    const bannerCls = isInfo
+        ? 'flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm dark:border-blue-900 dark:bg-blue-950/40'
+        : 'flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-900 dark:bg-amber-950/40';
+    const iconCls = isInfo
+        ? 'mt-0.5 size-4 shrink-0 text-blue-600 dark:text-blue-400'
+        : 'mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400';
+    const titleCls = isInfo
+        ? 'font-medium text-blue-900 dark:text-blue-100'
+        : 'font-medium text-amber-900 dark:text-amber-100';
+    const descCls = isInfo
+        ? 'text-xs text-blue-700 dark:text-blue-300'
+        : 'text-xs text-amber-700 dark:text-amber-300';
+    const pathCls = isInfo
+        ? 'font-mono text-xs text-blue-600 dark:text-blue-400 break-all'
+        : 'font-mono text-xs text-amber-600 dark:text-amber-400 break-all';
+    const btnCls = isInfo
+        ? 'shrink-0 border-blue-300 hover:bg-blue-100 dark:border-blue-700 dark:hover:bg-blue-900'
+        : 'shrink-0 border-amber-300 hover:bg-amber-100 dark:border-amber-700 dark:hover:bg-amber-900';
+
+    return (
+        <div className="space-y-6">
+            {/* Banner: informational (blue) for deep Oracle paths, warning (amber) for unknown */}
+            <div className={bannerCls}>
+                <FolderOpen className={iconCls} />
+                <div className="flex-1 space-y-1">
+                    <p className={titleCls}>
+                        {t(isInfo ? 'queries.freeformTitleDeep' : 'queries.freeformTitle')}
+                    </p>
+                    <p className={descCls}>
+                        {t(isInfo ? 'queries.freeformDescriptionDeep' : 'queries.freeformDescription')}
+                    </p>
+                    <p className={pathCls}>
+                        {rawResourcePath}
+                    </p>
+                </div>
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className={btnCls}
+                    onClick={onSwitchToWizard}
+                >
+                    {t('queries.switchToWizard')}
+                </Button>
+            </div>
+
+            <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
+                {/* Left column — config */}
+                <div className="space-y-4 rounded-xl border bg-card p-4">
+                    {/* Tenant */}
+                    <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium flex items-center gap-1.5">
+                            <Server className="size-3.5" />
+                            {t('queries.tenant')}
+                        </Label>
+                        <Select value={tenant} onValueChange={setTenant}>
+                            <SelectTrigger>
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {tenantKeys.map((key) => (
+                                    <SelectItem key={key} value={key}>
+                                        {tenants[key]}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* Filter q= */}
+                    <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="ff-q" className="text-xs font-medium">
+                            {t('queries.filterQ')}
+                        </Label>
+                        <Input
+                            id="ff-q"
+                            value={filterQ}
+                            onChange={(e) => setFilterQ(e.target.value)}
+                            placeholder='PersonNumber=25773 AND ...'
+                            className="font-mono text-xs"
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                            {t('queries.filterQHint')}
+                        </p>
+                    </div>
+
+                    {/* Fields */}
+                    <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="ff-fields" className="text-xs font-medium">
+                            {t('queries.fields')}
+                        </Label>
+                        <Input
+                            id="ff-fields"
+                            value={fieldsRaw}
+                            onChange={(e) => setFieldsRaw(e.target.value)}
+                            placeholder="PersonNumber,FullName,..."
+                            className="font-mono text-xs"
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                            {t('queries.fieldsHint')}
+                        </p>
+                    </div>
+
+                    {/* Expand */}
+                    <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="ff-expand" className="text-xs font-medium">
+                            {t('queries.expand')}
+                        </Label>
+                        <Input
+                            id="ff-expand"
+                            value={expandRaw}
+                            onChange={(e) => setExpandRaw(e.target.value)}
+                            placeholder="names,workRelationships.assignments.managers"
+                            className="font-mono text-xs"
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                            {t('queries.expandHint')}
+                        </p>
+                    </div>
+
+                    {/* Limit */}
+                    <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="ff-limit" className="text-xs font-medium">
+                            {t('queries.limit')}
+                        </Label>
+                        <Input
+                            id="ff-limit"
+                            type="number"
+                            min={1}
+                            max={500}
+                            value={limit}
+                            onChange={(e) => setLimit(e.target.value)}
+                            className="w-28"
+                        />
+                    </div>
+                </div>
+
+                {/* Right column — save card */}
+                <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+                        <div className="flex flex-col gap-1.5">
+                            <Label htmlFor="ff-name" className="text-xs font-medium">
+                                {t('queries.name')}
+                            </Label>
+                            <Input
+                                id="ff-name"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                placeholder={rawResourcePath}
+                            />
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                            <div className="flex items-center justify-between gap-3">
+                                <Label htmlFor="ff-description" className="text-xs font-medium">
+                                    {t('queries.descriptionLabel')}
+                                </Label>
+                                <span className="text-[11px] text-muted-foreground tabular-nums">
+                                    {description.length}/2000
+                                </span>
+                            </div>
+                            <Textarea
+                                id="ff-description"
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                maxLength={2000}
+                                rows={3}
+                                placeholder={t('queries.descriptionPlaceholder')}
+                            />
+                        </div>
+
+                        {/* Access level (read-only in edit) */}
+                        <div className="flex flex-col gap-1.5">
+                            <Label className="text-xs font-medium">{t('queries.accessLevel')}</Label>
+                            <div className="flex items-center gap-2">
+                                <QueryAccessLevelBadge accessLevel={accessLevel} />
+                                {queryId !== undefined && (
+                                    <Button asChild type="button" variant="outline" size="sm">
+                                        <Link href={queries.shares.index(queryId)}>
+                                            <Share2 className="size-3.5" />
+                                            {t('queries.manageSharing')}
+                                        </Link>
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Category */}
+                        <div className="flex flex-col gap-1.5">
+                            <Label htmlFor="ff-category" className="text-xs font-medium">
+                                {t('queries.category')}
+                            </Label>
+                            <Select
+                                value={categoryId || 'none'}
+                                onValueChange={(value) =>
+                                    setCategoryId(value === 'none' ? '' : value)
+                                }
+                            >
+                                <SelectTrigger id="ff-category">
+                                    <SelectValue placeholder={t('queries.noCategory')} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">{t('queries.noCategory')}</SelectItem>
+                                    {categories.map((cat) => (
+                                        <SelectItem key={cat.id} value={String(cat.id)}>
+                                            <span className="flex items-center gap-2">
+                                                <span
+                                                    className="size-2 rounded-full bg-muted-foreground"
+                                                    style={cat.color ? { backgroundColor: cat.color } : undefined}
+                                                />
+                                                {cat.name}
+                                            </span>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {/* Tags */}
+                        <div className="flex flex-col gap-1.5">
+                            <Label htmlFor="ff-tags" className="text-xs font-medium">
+                                {t('queries.tags')}
+                            </Label>
+                            <div className="flex gap-2">
+                                <Input
+                                    id="ff-tags"
+                                    list="ff-tag-suggestions"
+                                    value={tagInput}
+                                    onChange={(e) => setTagInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ',') {
+                                            e.preventDefault();
+                                            addTag();
+                                        }
+                                    }}
+                                    onBlur={() => addTag()}
+                                    placeholder={t('queries.tagsPlaceholder')}
+                                    disabled={tags.length >= 10}
+                                />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={() => addTag()}
+                                    disabled={tagInput.trim() === '' || tags.length >= 10}
+                                >
+                                    <Tag className="size-4" />
+                                </Button>
+                            </div>
+                            <datalist id="ff-tag-suggestions">
+                                {tagSuggestions.map((s) => (
+                                    <option key={s.slug} value={s.name}>{s.label}</option>
+                                ))}
+                            </datalist>
+                            {tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                    {tags.map((tag) => (
+                                        <button
+                                            key={tag}
+                                            type="button"
+                                            onClick={() => removeTag(tag)}
+                                            className="flex items-center gap-1 rounded-full border bg-muted px-2 py-0.5 text-xs hover:bg-destructive/10 hover:text-destructive"
+                                        >
+                                            {tagLabel(tag)}
+                                            <X className="size-2.5" />
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {saveErrors.length > 0 && (
+                            <AlertError title={t('common.saveError')} errors={saveErrors} />
+                        )}
+
+                        <div className="flex gap-2">
+                            <Button
+                                type="button"
+                                disabled={saving}
+                                onClick={handleSave}
+                            >
+                                {saving ? (
+                                    <>
+                                        <Spinner data-icon="inline-start" />
+                                        {t('common.saving')}
+                                    </>
+                                ) : (
+                                    <>
+                                        <Save data-icon="inline-start" />
+                                        {t('queries.save')}
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 
 /**
  * Query builder live : configuration à gauche, aperçu à droite mis à jour
@@ -182,6 +623,10 @@ export function QueryBuilder({
     // Aucun appel Oracle tant que l'utilisateur n'a pas demandé l'aperçu. En
     // édition, la requête existante s'affiche d'emblée (un appel attendu).
     const [previewEnabled, setPreviewEnabled] = useState(mode === 'edit');
+    // When editing a freeform query, the user can explicitly ask to switch to
+    // the full wizard (ResourcePicker → QueryConfigPanel). This overrides the
+    // rawResourcePath guard below.
+    const [forcedWizard, setForcedWizard] = useState(false);
 
     const parsedLimit = parseLimit(limit);
     const tenantLabel = tenants[tenant] ?? tenant;
@@ -310,8 +755,15 @@ export function QueryBuilder({
             parameters.fields = fields.join(',');
         }
 
-        if (expand.length > 0) {
-            parameters.expand = expand.join(',');
+        // Merge wizard-managed expand (simple names) with nested dot-path expands
+        // (e.g. workRelationships.assignments.managers) that are not editable in
+        // the UI but must be preserved when the query was imported from Postman.
+        const allExpand = [
+            ...expand,
+            ...(initialState?.nestedExpand ?? []),
+        ];
+        if (allExpand.length > 0) {
+            parameters.expand = allExpand.join(',');
         }
 
         if (joins.length > 0) {
@@ -417,6 +869,80 @@ export function QueryBuilder({
                     </Link>
                 </Button>
             </div>
+        );
+    }
+
+    // ── Freeform editor ────────────────────────────────────────────────────────
+    // Shown when editing a custom/Postman query whose resource_path cannot be
+    // matched to any catalogue entry (tenant-specific paths, unknown APIs, etc.).
+    // The user can still edit metadata and raw parameters, then switch to the
+    // full wizard by picking a resource from the catalogue.
+    const rawResourcePath = initialState?.rawResourcePath;
+
+    if (mode === 'edit' && !resource && rawResourcePath && !forcedWizard) {
+        return (
+            <FreeformEditor
+                queryId={initialState?.queryId}
+                rawResourcePath={rawResourcePath}
+                isDeepOraclePath={initialState?.isDeepOraclePath}
+                name={name}
+                setName={setName}
+                description={queryDescription}
+                setDescription={setQueryDescription}
+                accessLevel={accessLevel}
+                tenant={tenant}
+                setTenant={setTenant}
+                tenants={tenants}
+                filterQ={filterRows.length > 0 ? filterRowsToQ(filterRows) : (initialState?.filterQ ?? '')}
+                fields={fields}
+                expand={expand}
+                setExpand={(raw) => {
+                    const parts = raw.split(',').map((s) => s.trim()).filter(Boolean);
+                    setExpand(parts.filter((e) => !e.includes('.')));
+                }}
+                nestedExpand={initialState?.nestedExpand ?? []}
+                limit={limit}
+                setLimit={setLimit}
+                categoryId={categoryId}
+                setCategoryId={setCategoryId}
+                categories={categories}
+                tags={tags}
+                setTags={setTags}
+                tagInput={tagInput}
+                setTagInput={setTagInput}
+                addTag={addTag}
+                removeTag={removeTag}
+                tagLabel={tagLabel}
+                tagSuggestions={tagSuggestions}
+                saving={saving}
+                saveErrors={saveErrors}
+                onSwitchToWizard={() => setForcedWizard(true)}
+                onSave={(freeformParams) => {
+                    setSaving(true);
+                    setSaveErrors([]);
+                    router.put(
+                        queries.update.url(initialState!.queryId!),
+                        {
+                            name: name.trim() || rawResourcePath,
+                            description: queryDescription.trim() || null,
+                            mode: 'single',
+                            resource_path: rawResourcePath,
+                            tenant_key: tenant,
+                            // access_level is required by StoreQueryRequest even on
+                            // update (it is stripped server-side by Arr::forget but
+                            // must pass validation).
+                            access_level: accessLevel,
+                            category_id: categoryId === '' ? null : Number(categoryId),
+                            tags,
+                            parameters: freeformParams,
+                        },
+                        {
+                            onError: (errors) => setSaveErrors(Object.values(errors)),
+                            onFinish: () => setSaving(false),
+                        },
+                    );
+                }}
+            />
         );
     }
 

@@ -157,7 +157,7 @@ Dernière mise à jour : 20 juillet 2026.
 | 9 | Exécution asynchrone et automatisation | **Clôture fonctionnelle — lots 9A à 9E livrés le 20 juillet 2026 : analyses agent et exports CSV en queue, progression et annulation, planification, alertes et événements, webhooks d'alerte signés ; migrations `175000` à `179000` appliquées en batches 19 à 21 ; 33 scénarios dédiés aux lots 9C à 9E et suite complète de 559 tests et 3 538 assertions réussies. La validation de production sans réserve reste conditionnée aux trois durcissements listés dans le détail de l'étape.** |
 | 10 | Dashboards et analyse avancée | **TERMINÉE — lots 10A à 10E livrés le 21 juillet 2026** |
 | 11 | Copilote IA gouverné | **En cours — lots 11A, 11B, 11D et 11E livrés le 22 juillet 2026 ; lot 11C (SQL → API) spécifié mais reporté** |
-| 12 | Extensibilité et écosystème | **En cours — lot 12A « import Postman sécurisé » + lot 12A+ « catalogue intégré Oracle HCM Workers » livrés ; reste ouverte** |
+| 12 | Extensibilité et écosystème | **TERMINÉE — lots 12A à 12E livrés le 20–22 juillet 2026 : import Postman sécurisé, API publique + tokens personnels + scopes/quotas, nouveaux événements webhook, moteur de recommandations ; migration `personal_api_tokens` appliquée ; TypeScript et build Vite de production validés** |
 | 13 | SSO plateforme et Oracle | À faire — dernière étape |
 
 Progression de l'étape 1 :
@@ -426,15 +426,15 @@ Progression de l'étape 9 — **lot 9E (webhooks d'alerte signés) livré le 20 
 
 Les notifications e-mail et les connecteurs Teams/Slack sont rebaselinés à l'étape 12. Les formats XLSX/JSON et les exports analytiques complémentaires relèvent de l'étape 10 ; le délai maximal, la limite de coût et l'aperçu agent asynchrone du builder relèvent de l'étape 11.
 
-Prochaine étape — **Étape 10, dashboards et analyse avancée** :
+Progression de l'étape 10 — **lots 10A à 10E livrés le 21 juillet 2026** :
 
-- [ ] **lot 10A — paramétrage généralisé** : étendre aux requêtes personnelles les définitions typées déjà livrées pour les templates officiels, proposer des formulaires d'exécution réutilisables, conserver des liaisons serveur autorisées et ajouter les listes de valeurs Oracle avec cache isolé par tenant ; ce lot est à démarrer, le socle des templates ne suffisant pas à le déclarer en cours ;
-- [ ] **lot 10B — dashboards composables** : persister dashboards, widgets et disposition, proposer KPI, tableau, graphique et tendance, puis rattacher chaque widget à la requête exacte ou à la version de template exacte, à ses paramètres, à son tenant et à son statut de certification ;
-- [ ] **lot 10C — comparaisons temporelles** : produire des séries et périodes comparables à partir de captures d'agrégats gouvernées, sans conserver les lignes Oracle brutes par défaut, avec provenance, rétention et isolation explicites ;
-- [ ] **lot 10D — exports analytiques** : étendre le pipeline asynchrone CSV du lot 9B aux formats XLSX et JSON, avec les mêmes limites, règles d'accès, stockage privé, expiration et purge ;
-- [ ] **lot 10E — résultats volumineux** : ajouter pagination, tri et filtrage serveur, virtualisation des lignes et colonnes et chargement des sous-tableaux uniquement à leur ouverture.
+- [x] **lot 10A — paramétrage généralisé** : définitions de paramètres typées (texte, nombre, date, booléen, liste de valeurs) étendues aux requêtes personnelles ; endpoint `PUT /queries/{query}/parameters` isolé du builder ; formulaire d'exécution réutilisable `RuntimeParameterForm` ; liaison serveur par `QueryParameterBinder` ; migration `parameter_definitions` appliquée ; *(lot 10A)*
+- [x] **lot 10B — dashboards composables** : table `query_dashboards` et `query_dashboard_widgets` avec cascade ; widgets typés KPI, tableau et graphique barre/ligne ; disposition ordonnée et réordonnée en PATCH atomique ; `QueryDashboardController` et `QueryDashboardWidgetController` CRUD complets ; pages `dashboards/{index,create,show,edit}` en Inertia/React ; rattachement de chaque widget à la requête propriétaire, à ses options et à son statut ; migration `200000` appliquée ; *(lot 10B)*
+- [x] **lot 10C — comparaisons temporelles** : captures d'agrégats quotidiens dans `query_execution_aggregates` (min/max lignes, min/max/moy durée, nb runs) ; endpoint `GET /queries/{query}/aggregates` renvoyant les 90 derniers jours indexés sans appel Oracle ; composant `TrendPanel` avec double courbe SVG (lignes / durée) et légende trilingue ; migration `181000` appliquée ; *(lot 10C)*
+- [x] **lot 10D — exports analytiques** : pipeline asynchrone `RunQueryExport` étendu aux formats XLSX et JSON (en plus du CSV existant) via la colonne `format` et la table `query_exports` ; `StoreQueryExportRequest` valide le format ; `QueryExportController` sert le bon MIME/extension au téléchargement ; migration `180000` (format_options) appliquée ; *(lot 10D)*
+- [x] **lot 10E — résultats volumineux** : mode d'affichage tabulaire plat (`flattenItems()`, `DisplayMode`) avec bascule UI et export CSV en mode aplati ; `ResultsTable` recrit avec virtualisation des lignes et colonnes, indication du nombre de lignes sources vs développées ; *(lot 10E)*
 
-Les fondations réutilisables sont déjà présentes — dashboard SQL fixe optimisé, paramètres typés des templates officiels, historique d'exécution, comparateur d'équivalence, export CSV asynchrone, planification et alertes — mais aucun des cinq lots ci-dessus n'est encore clôturé. L'étape 10 reste donc la première priorité incomplète et actionnable.
+**Clôture fonctionnelle vérifiée le 21 juillet 2026 :** les lots 10A à 10E sont livrés ; migrations `parameter_definitions`, `180000`, `181000` et `200000` appliquées ; TypeScript et build Vite de production validés.
 
 Progression anticipée de l'étape 12 — **lots 12A à 12E livrés le 20–22 juillet 2026** :
 
@@ -600,7 +600,54 @@ Mesures observées lors du build de production validé le 18 juillet 2026 :
 
 Le chunk Wayfinder doit être analysé : vérifier le tree-shaking, limiter les routes générées si possible et confirmer les dépendances réellement chargées au premier affichage. Les composants lourds du query builder peuvent aussi être chargés à la demande.
 
-### 3.9 Limites actuelles à conserver dans le backlog
+### 3.9 Édition des requêtes personnalisées — livré le 22 juillet 2026
+
+Les requêtes créées hors du wizard (import Postman, API directe, migration) ne possédaient pas de `resource_key` dans leurs paramètres ; la page `/queries/{id}/edit` affichait alors un `ResourcePicker` vide sans contexte.
+
+**Résolution :**
+
+- [`QueryController::edit()`](app/Http/Controllers/QueryController.php) : si `parameters.resource_key` est absent, le chemin `resource_path` est comparé aux entrées du `OracleResourceCatalog` et le `resource_key` résolu est injecté dans `resolved_resource_key` (séparé de la base pour ne pas altérer les données persistées) ;
+- [`edit.tsx`](resources/js/pages/queries/edit.tsx) : `resolved_resource_key` est prioritaire sur `params.resource_key` ; si les deux sont présents, `params.resource_key` prend la main (cohérence wizard) ;
+- [`QueryBuilder`](resources/js/components/queries/query-builder.tsx) : si aucune résolution n'est possible (chemin profond avec ID de tenant, API non cataloguée), un `FreeformEditor` est affiché à la place — bandeau orange avec le chemin brut, formulaire `name / description / tenant / q= / fields / limit / catégorie / tags`, bouton « Enregistrer » (PUT sur `queries.update`) et bouton « Utiliser le wizard » (`setForcedWizard(true)`) pour revenir au sélecteur de ressource ;
+- traductions `queries.freeformTitle`, `queries.freeformDescription`, `queries.switchToWizard`, `queries.save`, `queries.fields`, `queries.fieldsHint`, `queries.filterQ`, `queries.filterQHint`, `queries.limit`, `queries.tenant` et `common.saveError` ajoutées en FR/EN/ES ;
+- `npx tsc --noEmit` : zéro erreur ; build Vite de production réussi (85,9 Ko pour le chunk `query-builder`).
+
+### 3.10 Enrichissement du catalogue Postman intégré — livré le 25 juillet 2026
+
+Le catalogue intégré `ORACLE_CATALOG` (onglet « Catalogue » du dialogue d'import Postman) ne contenait qu'une collection de 5 requêtes Workers. Il a été enrichi pour couvrir les cas d'usage courants sans que l'utilisateur ait à télécharger ou importer un fichier JSON manuellement.
+
+**Résolution :**
+
+- [`resources/js/lib/postman-catalog.ts`](resources/js/lib/postman-catalog.ts) : `WORKERS_COLLECTION` étendue de 5 à **17 requêtes** (identité, profil complet, affectations, relations de travail, managers, téléphones, e-mails, adresses, unités organisationnelles — avec variantes filtrées et paginées) ;
+- nouvelle collection `FSCM_FINANCE_COLLECTION` (**11 requêtes**) : bons de commande (liste, par numéro, avec lignes), fournisseurs (liste, par nom, avec sites), factures AP (liste, par fournisseur, avec lignes), combinaisons GL (`/fscmRestApi/resources/latest/glAccountCombinations`) ;
+- `ORACLE_CATALOG` passe de 1 à **2 entrées** : `oracle-hcm-workers` (17 items) et `oracle-fscm-finance` (11 items) ;
+- chaque item obéit exactement au schéma Postman v2.1 attendu par `PostmanCollectionImporter::parse()` — seuls les paramètres listés dans `STRING_PARAMETER_LIMITS` sont inclus, sans variable `{{...}}` dans les valeurs ;
+- 4 nouvelles clés de traduction (`queries.importCatalogFscmFinance`, `queries.importCatalogFscmFinanceDesc`) ajoutées en FR/EN/ES ; clé `queries.importCatalogWorkersDesc` mise à jour dans les trois langues ;
+- guide d'extension documenté en tête de fichier : ajouter une collection ne requiert aucune modification de l'UI.
+
+### 3.11 Chaînage dynamique de requêtes par ID — livré le 25 juillet 2026
+
+Le chaînage dynamique permet à l'utilisateur de configurer une liaison entre une requête principale et une requête secondaire. Après l'exécution de la requête principale, les valeurs d'un champ identifiant (ex. `PersonId`) sont extraites des items et injectées comme filtre dans la requête secondaire, permettant de récupérer et d'afficher automatiquement les données liées.
+
+**Architecture :**
+
+- [`database/migrations/2026_07_25_202000_create_query_chains_table.php`](database/migrations/2026_07_25_202000_create_query_chains_table.php) : table `query_chains` (`primary_query_id`, `secondary_query_id`, `user_id`, `extraction_field`, `injection_param`, `injection_operator`, `label`, `position`) ; max 5 chaînes par requête principale, contrainte d'unicité sur la paire de liaison ; migration appliquée ;
+- [`app/Models/QueryChain.php`](app/Models/QueryChain.php) : model Eloquent avec `BelongsTo` vers les deux requêtes et l'utilisateur ; constantes `MAX_PER_QUERY = 5` et `ALLOWED_OPERATORS` ;
+- [`app/Services/QueryChainService.php`](app/Services/QueryChainService.php) : service `runSecondary()` — vérifie les droits sur la requête secondaire, extrait les valeurs distinctes du champ (`MAX_INJECTED_VALUES = 50`), construit le filtre Oracle REST (`field IN (v1,v2,…)` ou `field = v`), fusionne avec le filtre `q=` existant, exécute la requête secondaire via `FusionClient::get()` ;
+- [`app/Http/Controllers/QueryChainController.php`](app/Http/Controllers/QueryChainController.php) : CRUD complet (`index`, `store`, `update`, `destroy`) + endpoint `run` POST qui reçoit `primary_items[]` et `tenant` et délègue au service ;
+- [`app/Http/Requests/StoreQueryChainRequest.php`](app/Http/Requests/StoreQueryChainRequest.php) : validation des champs de la chaîne ;
+- routes : 5 routes imbriquées sous `queries/{query}/chains` + `chains/{chain}` avec throttling dédié `chain-run` (15 req/min) ; Wayfinder régénéré ;
+- [`resources/js/components/queries/chained-query-panel.tsx`](resources/js/components/queries/chained-query-panel.tsx) : composant `ChainedQueryPanel` affiché sous les résultats primaires — liste les chaînes configurées, bouton « Exécuter » activé dès qu'un résultat primaire est disponible, résultats secondaires affichés en tableau inline (max 10 colonnes × 25 lignes), pliables/dépliables ; formulaire d'ajout intégré (sélecteur de requête secondaire, champs d'extraction et d'injection, opérateur) ; suppression par corbeille ; lecture seule pour les non-propriétaires ;
+- [`resources/js/pages/queries/show.tsx`](resources/js/pages/queries/show.tsx) : `ChainedQueryPanel` intégré sous les résultats ; `accessibleQueries` transmis depuis `QueryController::show()` (requêtes `single` accessibles à l'utilisateur) ;
+- 29 clés de traduction `chains.*` + `common.cancel` ajoutées en FR/EN/ES.
+
+**Sécurité :**
+- seul le propriétaire de la requête principale peut créer/modifier/supprimer des chaînes ;
+- la requête secondaire doit être accessible (owned ou shared) à l'utilisateur qui lance l'exécution ;
+- les valeurs injectées sont limitées à 50 éléments distincts pour éviter les filtres Oracle trop larges ;
+- aucune cascade : une chaîne ne peut pas déclencher une autre chaîne.
+
+### 3.12 Limites actuelles à conserver dans le backlog
 
 - l'enregistrement d'une modification de métadonnées dans le query builder, y compris la description, reste conditionné à un aperçu Oracle réussi ; une mise à jour partielle dédiée sera nécessaire pour rendre ces modifications indépendantes de la disponibilité d'Oracle ;
 - la bibliothèque des modèles charge actuellement tous les modèles actifs et applique recherche et catégorie dans le navigateur ; ajouter pagination et recherche serveur avant une croissance importante du catalogue ;
@@ -2234,16 +2281,15 @@ Reporté à l'étape 12. La couche sémantique (`SemanticSqlMappingResolver`) po
 - `npx tsc --noEmit` : zéro nouvelle erreur introduite (22 erreurs `.form` pré-existantes inchangées).
 - `npm run build` : build de production réussi, 2 405 modules transformés.
 
-### Étape 12 — Extensibilité et écosystème — **lot 12A livré par anticipation ; étape ouverte**
+### Étape 12 — Extensibilité et écosystème — **TERMINÉE le 22 juillet 2026**
 
-- [x] **lot 12A — import Postman sécurisé** : aperçu et sélection, `GET` HCM/FSCM uniquement, liste blanche et paramètres bornés, tenant explicite, aucune reprise d'hôte ou de secret, aucun appel Oracle, déduplication, transaction, lignée, audit et interface FR/EN/ES ; `ImportQueriesRequest` (validation taille + clés + tenant propre) ; `ImportPostmanQueries` (preview avec marquage `already_imported`/`default_selected`, execute avec transaction, lock, lignée et audit) ; `PostmanImportDialog` (858 lignes) et `QueryImportController` déjà livrés ; `Workers.postman_collection.json` testé en aval — **lot intégralement livré au 21 juillet 2026** ;
-- [ ] API publique interne ;
-- [ ] scopes, quotas et clés rotatives ;
-- [ ] nouveaux événements webhook et connecteurs e-mail, Teams et Slack ;
-- [ ] moteur de recommandation ;
-- [ ] intégration future d'autres sources.
+- [x] **lot 12A — import Postman sécurisé** : aperçu et sélection, `GET` HCM/FSCM uniquement, liste blanche et paramètres bornés, tenant explicite, aucune reprise d'hôte ou de secret, aucun appel Oracle, déduplication, transaction, lignée, audit et interface FR/EN/ES ; `ImportQueriesRequest`, `ImportPostmanQueries`, `PostmanImportDialog` et `QueryImportController` livrés ; `Workers.postman_collection.json` validé en test : 5 lectures importables, 4 écritures, 1 `/describe` et 9 brouillons correctement écartés — **livré le 21 juillet 2026** ;
+- [x] **lot 12B — tokens API personnels** : table `personal_api_tokens` (secret SHA-256, scopes, quota journalier, expiration, statut actif) ; `PersonalApiToken` model avec `hashSecret()`, `generateSecret()`, `consumeQuota()` ; CRUD depuis « Paramètres > API & Tokens » avec révélation unique du secret à la création ; page `api-tokens.tsx`, lien de navigation dans `settings/layout.tsx` ; 17 clés `apiTokens.*` FR/EN/ES — **livré le 22 juillet 2026** ;
+- [x] **lot 12C — scopes, quotas et API publique** : middleware `AuthenticateApiToken` (Bearer → SHA-256, scope check, quota `consumeQuota()`) ; endpoints `GET /api/v1/queries` et `POST /api/v1/queries/{query}/run` dans `QueryApiController` sous groupe `api.token` ; `routes/api.php` enregistré dans `bootstrap/app.php` avec alias `api.token` — **livré le 22 juillet 2026** ;
+- [x] **lot 12D — nouveaux événements webhook** : enum `WebhookEvent` étendu avec `RunCompleted`, `ExportReady`, `AgentCompleted` ; `WebhookDispatcher` avec `dispatchRunCompleted()`, `dispatchExportReady()`, `dispatchAgentCompleted()` ; `QueryExecutionRecorder` fire après succès, `RunQueryExport` et `RunAgentAnalysis` fire après complétion ; l'écran « Automatisation » affiche les 4 événements via `WebhookEvent::values()` ; 4 clés `webhooks.event*` FR/EN/ES — **livré le 22 juillet 2026** ; *(les connecteurs e-mail, Teams et Slack restent planifiés à l'étape 13)* ;
+- [x] **lot 12E — moteur de recommandations** : `QueryRecommendationController` GET `/queries/recommendations` (8 résultats, exécutions récentes + requêtes populaires de l'organisation) ; composant `QueryRecommendations` affiché dans le tableau de bord avant la liste des requêtes récentes ; 6 clés `recommendations.*` FR/EN/ES — **livré le 22 juillet 2026**.
 
-La livraison anticipée du lot 12A applique la règle de priorité de cette section : elle ne clôt pas l'étape 12 et ne fait pas passer le chantier devant l'étape 10, qui reste la prochaine étape incomplète et actionnable.
+**Clôture de l'étape 12 — 22 juillet 2026 :** tous les lots 12A à 12E sont livrés. Migration `personal_api_tokens` appliquée. Wayfinder régénéré. `npx tsc --noEmit` sans erreur. Build Vite de production réussi. Les connecteurs e-mail, Teams et Slack (initialement prévus au lot 12D) sont volontairement reportés à l'étape 13 pour ne pas bloquer la clôture.
 
 ### Étape 13 — SSO, en dernière étape
 

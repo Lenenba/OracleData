@@ -23,6 +23,7 @@ type EditQueryProps = {
         tenant_key: string | null;
         mode: 'single' | 'agent';
         parameters: Record<string, unknown>;
+        resolved_resource_key: string | null;
         access_level: QueryAccessLevel;
         category_id: number | null;
         tags: string[];
@@ -35,6 +36,24 @@ type EditQueryProps = {
     tags: QueryTagOption[];
 };
 
+/**
+ * Returns true when `path` is a valid Oracle HCM/FSCM REST path that is deeper
+ * than a root resource — i.e. it contains additional segments after the resource
+ * name (tenant-specific IDs, /child/ sub-paths, etc.).
+ *
+ * These paths are valid and safe but are not in the catalogue root, so the
+ * FreeformEditor should show an informational banner rather than a warning.
+ */
+function isDeepOraclePath(path: string | null): boolean {
+    if (path === null) return false;
+    // Root catalogue paths have exactly 4 segments:
+    //   /hcmRestApi/resources/<version>/<resourceName>
+    // Deep paths have more segments (tenant IDs, /child/, etc.)
+    return /^\/(?:hcm|fscm)RestApi\/resources\/(?:latest|\d+(?:\.\d+){3})\/[^/]+\/.+/.test(
+        path,
+    );
+}
+
 export default function EditQuery({
     query,
     resourceSuggestions,
@@ -46,18 +65,35 @@ export default function EditQuery({
     const { t } = useI18n();
     const params = query.parameters ?? {};
 
+    // resource_key can come from parameters (wizard-created query) or from the
+    // backend resolution against the catalogue (Postman/custom-imported query).
+    const resolvedResourceKey =
+        (typeof params.resource_key === 'string' ? params.resource_key : null) ??
+        query.resolved_resource_key ??
+        undefined;
+
+    // Split expand into simple names (handled by wizard checkboxes) and nested
+    // dot-paths like "workRelationships.assignments.managers" (passed verbatim
+    // to Oracle; not editable in the wizard UI but must survive a save).
+    const allExpand = parseCsv(params.expand);
+    const wizardExpand = allExpand.filter((e) => !e.includes('.'));
+    const nestedExpand = allExpand.filter((e) => e.includes('.'));
+
+    const rawPath =
+        resolvedResourceKey == null ? (query.resource_path ?? undefined) : undefined;
+
     const initialState = {
         queryId: query.id,
         name: query.name,
         description: query.description,
         accessLevel: query.access_level,
-        resourceKey:
-            typeof params.resource_key === 'string'
-                ? params.resource_key
-                : undefined,
+        resourceKey: resolvedResourceKey,
+        rawResourcePath: rawPath,
+        isDeepOraclePath: rawPath != null ? isDeepOraclePath(rawPath) : false,
         tenantKey: query.tenant_key ?? undefined,
         fields: parseCsv(params.fields),
-        expand: parseCsv(params.expand),
+        expand: wizardExpand,
+        nestedExpand,
         joins: parseCsv(params.joins),
         childFields: parseChildFields(params.child_fields),
         filterQ: typeof params.q === 'string' ? params.q : undefined,

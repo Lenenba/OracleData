@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import Heading from '@/components/heading';
+import { ChainedQueryPanel } from '@/components/queries/chained-query-panel';
 import { ParameterDefinitionEditor } from '@/components/queries/parameter-definition-editor';
 import { TrendPanel } from '@/components/queries/trend-panel';
 import { QueryAccessLevelBadge } from '@/components/queries/query-access-level-badge';
@@ -79,12 +80,15 @@ type ShowProps = {
     query: QueryDetail;
     tenants: Record<string, string>;
     defaultTenant: string;
+    /** Queries accessible to the current user, for the chain secondary picker. */
+    accessibleQueries: Array<{ id: number; name: string }>;
 };
 
 export default function ShowQuery({
     query,
     tenants,
     defaultTenant,
+    accessibleQueries,
 }: ShowProps) {
     const { t } = useI18n();
     const tenantKeys = Object.keys(tenants);
@@ -526,6 +530,18 @@ export default function ShowQuery({
                                 }
                             />
                         )}
+
+                    {/* Lot chaining — dynamic chained queries panel */}
+                    {!isAgent && status === 'done' && !fetchError && result && (
+                        <ChainedQueryPanel
+                            queryId={query.id}
+                            primaryItems={(result.items ?? []) as Array<Record<string, unknown>>}
+                            tenant={tenant}
+                            tenants={tenants}
+                            canManage={query.can.update}
+                            accessibleQueries={accessibleQueries}
+                        />
+                    )}
 
                     {/* Lot 10C — daily execution trend panel */}
                     <TrendPanel

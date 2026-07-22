@@ -154,7 +154,7 @@ class OracleQueryTool
         $joins = $this->normalizeList($query['joins'] ?? null);
         $allowedChildren = $this->normalizeList($resource['child_resources'] ?? null);
         $allowedJoins = $this->normalizeList(array_keys((array) ($resource['join_keys'] ?? [])));
-        $this->assertKnown($expand, $allowedChildren, 'relation gouvernée (expand)', $resourceKey);
+        $this->assertKnownExpand($expand, $allowedChildren, $resourceKey);
         $this->assertKnown($joins, $allowedJoins, 'relation gouvernée (join)', $resourceKey);
 
         $orderBy = trim((string) ($query['orderBy'] ?? ''));
@@ -170,8 +170,11 @@ class OracleQueryTool
         $childFields = is_array($query['child_fields'] ?? null) ? $query['child_fields'] : [];
 
         foreach ([...$expand, ...$joins] as $target) {
+            // For nested expand paths (e.g. "workRelationships.assignments.managers"),
+            // look up child_fields using the root segment only.
+            $rootSegment = explode('.', $target)[0];
             $allowed = $this->normalizeList(in_array($target, $expand, true)
-                ? data_get($resource, "child_fields.{$target}", [])
+                ? data_get($resource, "child_fields.{$rootSegment}", [])
                 : data_get($resources->get($target), 'fields', []));
             $targetFields = $this->normalizeList($childFields[$target] ?? null);
 
@@ -562,10 +565,13 @@ class OracleQueryTool
             }
 
             if (in_array($key, $expand, true)) {
-                $known = $resource['child_fields'][$key] ?? [];
+                // For nested expand paths (e.g. "workRelationships.assignments.managers"),
+                // look up child_fields using the root segment only.
+                $rootKey = explode('.', $key)[0];
+                $known = $resource['child_fields'][$rootKey] ?? [];
 
                 if ($known !== []) {
-                    $this->assertKnownFields($fields, $known, "champ de l'enfant « {$key} »", $tenantKey, $resource['key'], $key, $resource['key']);
+                    $this->assertKnownFields($fields, $known, "champ de l'enfant « {$key} »", $tenantKey, $resource['key'], $rootKey, $resource['key']);
                 }
             } elseif (in_array($key, $joins, true)) {
                 $target = $this->catalog->find($key);
@@ -641,7 +647,7 @@ class OracleQueryTool
 
         $expand = $this->normalizeList($query['expand'] ?? null);
         if ($expand !== []) {
-            $this->assertKnown($expand, $allowedChildren, 'ressource enfant (expand)', $resource['key']);
+            $this->assertKnownExpand($expand, $allowedChildren, $resource['key']);
             $params['expand'] = implode(',', $expand);
         }
 
@@ -730,6 +736,30 @@ class OracleQueryTool
         $fields = $matches[1];
 
         return array_values(array_unique($fields));
+    }
+
+    /**
+     * Validates expand values against allowed child resources.
+     *
+     * Oracle REST supports nested expand paths like "workRelationships.assignments.managers"
+     * where only the root segment needs to match a declared child_resource. The nested
+     * segments are passed through verbatim to Oracle and validated by the Oracle server.
+     *
+     * @param  list<string>  $expand
+     * @param  list<string>  $allowedChildren
+     *
+     * @throws InvalidArgumentException
+     */
+    protected function assertKnownExpand(array $expand, array $allowedChildren, string $resourceKey): void
+    {
+        foreach ($expand as $value) {
+            // For nested paths like "workRelationships.assignments.managers", only
+            // the root segment "workRelationships" must appear in the catalogue.
+            $root = explode('.', $value)[0];
+            if (! in_array($root, $allowedChildren, true)) {
+                throw new InvalidArgumentException("La relation gouvernée (expand) « {$value} » n'existe pas pour la ressource [{$resourceKey}].");
+            }
+        }
     }
 
     /**

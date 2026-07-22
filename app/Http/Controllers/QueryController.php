@@ -445,6 +445,19 @@ class QueryController extends Controller
         $query->loadMissing('queryTemplate.translations');
         $fusion = $fusion->forUser($request->user());
 
+        // If the query was created outside the wizard (e.g. Postman import),
+        // parameters may lack a resource_key. Attempt to resolve it from
+        // resource_path by matching against the catalogue paths.
+        $params = is_array($query->parameters) ? $query->parameters : [];
+        $resolvedResourceKey = $params['resource_key'] ?? null;
+
+        if ($resolvedResourceKey === null && $query->resource_path !== null) {
+            $resolvedResourceKey = $this->resolveResourceKeyFromPath(
+                (string) $query->resource_path,
+                $catalog,
+            );
+        }
+
         return Inertia::render('queries/edit', [
             'query' => [
                 'id' => $query->id,
@@ -455,7 +468,10 @@ class QueryController extends Controller
                     ? $query->tenant_key
                     : null,
                 'mode' => $query->mode,
-                'parameters' => (object) ($query->parameters ?? []),
+                'parameters' => (object) $params,
+                // Resolved separately so the frontend can pre-select the
+                // resource in the wizard even for custom/Postman-imported queries.
+                'resolved_resource_key' => $resolvedResourceKey,
                 'access_level' => $query->access_level,
                 'category_id' => $query->category_id,
                 'tags' => $query->tags->pluck('name')->values(),
@@ -472,6 +488,29 @@ class QueryController extends Controller
             'categories' => $this->categoryOptions(app()->getLocale()),
             'tags' => $this->tagOptions(app()->getLocale(), $request->user()),
         ]);
+    }
+
+    /**
+     * Attempt to find the catalogue resource key that matches a stored
+     * resource_path (used to pre-fill the wizard for custom/Postman queries).
+     *
+     * Only root-level paths are matched (e.g. /hcmRestApi/…/workers) so that
+     * child or tenant-specific paths (containing an extra ID segment) are
+     * deliberately left unresolved and handled via the freeform editor.
+     */
+    private function resolveResourceKeyFromPath(string $path, OracleResourceCatalog $catalog): ?string
+    {
+        // Normalise: strip trailing slash and version segment variations
+        // so "/hcmRestApi/resources/latest/workers" also matches.
+        $normPath = rtrim($path, '/');
+
+        foreach ($catalog->all() as $resource) {
+            if (rtrim((string) $resource['path'], '/') === $normPath) {
+                return $resource['key'];
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -767,6 +806,14 @@ class QueryController extends Controller
             ],
             'tenants' => $fusion->available(),
             'defaultTenant' => $ownerPreferredTenant ?: $fusion->defaultKey(),
+            // Lot chaining — queries the current user may use as chain targets.
+            'accessibleQueries' => \App\Models\Query::query()
+                ->accessibleTo($request->user())
+                ->where('mode', 'single')
+                ->orderBy('name')
+                ->get(['id', 'name'])
+                ->map(fn (\App\Models\Query $q): array => ['id' => $q->id, 'name' => $q->name])
+                ->values(),
         ]);
     }
 

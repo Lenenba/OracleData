@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AgentAnalysisRunController;
+use App\Http\Controllers\QueryChainController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GroupController;
 use App\Http\Controllers\GroupMemberController;
@@ -195,6 +196,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('queries/resource-fields', [QueryController::class, 'resourceFields'])
             ->middleware('throttle:60,1,resource-fields')
             ->name('queries.resource-fields');
+
+        // Lot chaining — chaînes de requêtes dynamiques par ID.
+        Route::get('queries/{query}/chains', [QueryChainController::class, 'index'])
+            ->middleware('throttle:60,1')
+            ->name('queries.chains.index');
+        Route::post('queries/{query}/chains', [QueryChainController::class, 'store'])
+            ->name('queries.chains.store');
+        Route::patch('queries/{query}/chains/{chain}', [QueryChainController::class, 'update'])
+            ->name('queries.chains.update');
+        Route::delete('queries/{query}/chains/{chain}', [QueryChainController::class, 'destroy'])
+            ->name('queries.chains.destroy');
+        Route::post('queries/{query}/chains/{chain}/run', [QueryChainController::class, 'run'])
+            ->middleware('throttle:15,1,chain-run')
+            ->name('queries.chains.run');
 
         Route::get('queries/{query}', [QueryController::class, 'show'])->name('queries.show');
         // Lot 10C — lightweight temporal aggregates, no Oracle call.
