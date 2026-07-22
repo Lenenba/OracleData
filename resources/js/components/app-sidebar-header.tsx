@@ -352,7 +352,7 @@ export function AppSidebarHeader({
                                 >
                                     <Avatar className="size-8">
                                         <AvatarImage
-                                            src={auth.user.avatar}
+                                            src={auth.user.avatar ?? undefined}
                                             alt={auth.user.name}
                                         />
                                         <AvatarFallback className="bg-primary text-xs font-semibold text-primary-foreground">

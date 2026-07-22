@@ -1,14 +1,18 @@
 import { Form, Head, Link, usePage } from '@inertiajs/react';
 import {
     CalendarDays,
+    Camera,
     Clock3,
     Globe2,
     Mail,
     MapPin,
     Palette,
     ShieldCheck,
+    Trash2,
+    Upload,
     UserRound,
 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import DeleteUser from '@/components/delete-user';
 import Heading from '@/components/heading';
@@ -28,6 +32,162 @@ import { send } from '@/routes/verification';
 import type { Auth } from '@/types';
 
 type PageProps = { auth: Auth };
+
+function ProfilePhotoForm({ user }: { user: Auth['user'] }) {
+    const { t } = useI18n();
+    const initials = useInitials();
+    const inputRef = useRef<HTMLInputElement>(null);
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const avatarUrl = previewUrl ?? user.avatar ?? undefined;
+
+    useEffect(() => {
+        return () => {
+            if (previewUrl !== null) {
+                URL.revokeObjectURL(previewUrl);
+            }
+        };
+    }, [previewUrl]);
+
+    const clearSelection = () => {
+        if (inputRef.current !== null) {
+            inputRef.current.value = '';
+        }
+
+        setPreviewUrl(null);
+    };
+
+    return (
+        <div className="border-b border-border pb-8">
+            <div className="mb-5 flex items-center justify-center gap-2 rounded border border-dashed border-border bg-muted/45 px-3 py-1.5 text-[11px] font-bold tracking-[0.08em] uppercase">
+                <Camera className="size-4" aria-hidden="true" />
+                {t('profile.photo')}
+            </div>
+
+            <div className="flex flex-col gap-5 rounded border border-border bg-muted/20 p-4 sm:flex-row sm:items-center">
+                <Avatar className="size-24 shrink-0 shadow-sm ring-4 ring-card">
+                    <AvatarImage
+                        src={avatarUrl}
+                        alt={user.name}
+                        className="object-cover"
+                    />
+                    <AvatarFallback className="bg-primary text-xl font-bold text-primary-foreground">
+                        {initials(user.name)}
+                    </AvatarFallback>
+                </Avatar>
+
+                <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-semibold">
+                        {t('profile.photoDescription')}
+                    </h3>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        {t('profile.photoHelp')}
+                    </p>
+
+                    <div className="mt-4 flex flex-wrap items-start gap-2">
+                        <Form
+                            {...ProfileController.updateAvatar.form()}
+                            encType="multipart/form-data"
+                            options={{
+                                preserveScroll: true,
+                            }}
+                            resetOnSuccess
+                            onSuccess={clearSelection}
+                            className="flex flex-wrap items-start gap-2"
+                        >
+                            {({ processing, errors }) => (
+                                <>
+                                    <input
+                                        ref={inputRef}
+                                        id="avatar"
+                                        name="avatar"
+                                        type="file"
+                                        accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                                        className="sr-only"
+                                        required
+                                        onChange={(event) => {
+                                            const file =
+                                                event.target.files?.[0];
+
+                                            setPreviewUrl(
+                                                file
+                                                    ? URL.createObjectURL(file)
+                                                    : null,
+                                            );
+                                        }}
+                                    />
+
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() =>
+                                            inputRef.current?.click()
+                                        }
+                                    >
+                                        <Camera className="size-4" />
+                                        {user.avatar
+                                            ? t('profile.changePhoto')
+                                            : t('profile.choosePhoto')}
+                                    </Button>
+
+                                    {previewUrl !== null && (
+                                        <>
+                                            <Button
+                                                type="submit"
+                                                size="sm"
+                                                disabled={processing}
+                                            >
+                                                <Upload className="size-4" />
+                                                {processing
+                                                    ? t(
+                                                          'profile.uploadingPhoto',
+                                                      )
+                                                    : t('profile.uploadPhoto')}
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                disabled={processing}
+                                                onClick={clearSelection}
+                                            >
+                                                {t('common.cancel')}
+                                            </Button>
+                                        </>
+                                    )}
+
+                                    <InputError
+                                        className="basis-full"
+                                        message={errors.avatar}
+                                    />
+                                </>
+                            )}
+                        </Form>
+
+                        {user.avatar && previewUrl === null && (
+                            <Form
+                                {...ProfileController.destroyAvatar.form()}
+                                options={{ preserveScroll: true }}
+                            >
+                                {({ processing }) => (
+                                    <Button
+                                        type="submit"
+                                        variant="destructive"
+                                        size="sm"
+                                        disabled={processing}
+                                    >
+                                        <Trash2 className="size-4" />
+                                        {t('profile.removePhoto')}
+                                    </Button>
+                                )}
+                            </Form>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 function InfoRow({
     icon: Icon,
@@ -118,7 +278,7 @@ export default function Profile({
                                 <div className="mb-[30px] flex items-center gap-4">
                                     <Avatar className="size-[72px] shrink-0 ring-4 ring-card">
                                         <AvatarImage
-                                            src={auth.user.avatar}
+                                            src={auth.user.avatar ?? undefined}
                                             alt={auth.user.name}
                                             className="object-cover"
                                         />
@@ -229,6 +389,8 @@ export default function Profile({
                             </div>
 
                             <div className="card-body space-y-8">
+                                <ProfilePhotoForm user={auth.user} />
+
                                 <Form
                                     {...ProfileController.update.form()}
                                     options={{ preserveScroll: true }}
