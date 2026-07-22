@@ -567,13 +567,17 @@ class OracleResourceCatalog
                 // emails et affectations sont dans les enfants (names, emails, assignments).
                 'fields' => ['PersonId', 'PersonNumber', 'DateOfBirth', 'CountryOfBirth', 'CorrespondenceLanguage', 'ApplicantNumber', 'CreationDate', 'LastUpdateDate'],
                 'preview_fields' => ['PersonId', 'PersonNumber', 'CreationDate'],
-                'child_resources' => ['assignments', 'addresses', 'emails', 'phones', 'names'],
+                'child_resources' => ['assignments', 'addresses', 'emails', 'phones', 'names', 'workRelationships'],
                 'child_fields' => [
                     'assignments' => ['AssignmentId', 'AssignmentNumber', 'JobTitle', 'DepartmentName', 'LocationName', 'GradeCode', 'ManagerName', 'AssignmentStatus', 'EffectiveStartDate', 'EffectiveEndDate'],
                     'addresses' => ['AddressId', 'AddressType', 'AddressLine1', 'City', 'State', 'PostalCode', 'Country', 'PrimaryFlag'],
                     'emails' => ['EmailId', 'EmailType', 'EmailAddress', 'PrimaryFlag'],
                     'phones' => ['PhoneId', 'PhoneType', 'PhoneNumber', 'PrimaryFlag'],
                     'names' => ['PersonNameId', 'NameType', 'FirstName', 'LastName', 'MiddleName', 'Title'],
+                    // workRelationships : contrats de travail, affectations imbriquées et managers.
+                    // Les chemins imbriqués Oracle (workRelationships.assignments.managers) sont
+                    // gérés via le paramètre expand brut ; cette liste couvre le premier niveau.
+                    'workRelationships' => ['WorkRelationshipId', 'LegalEntityName', 'WorkerType', 'PrimaryWorkerFlag', 'WorkRelationshipStartDate', 'WorkRelationshipTerminatedDate', 'CurrentWorker'],
                 ],
                 'join_keys' => [
                     // workers.PersonNumber (majuscule) ↔ absences.personNumber (minuscule).
