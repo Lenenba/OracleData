@@ -284,6 +284,14 @@ export default function OracleTenantsIndex({
                         columns={columns}
                         rows={tenants}
                         rowKey={(tenant) => tenant.id}
+                        paginated
+                        defaultPageSize={25}
+                        paginationLabels={{
+                            rowsPerPage: t('table.rowsPerPage'),
+                            of: t('table.of'),
+                            previous: t('table.previous'),
+                            next: t('table.next'),
+                        }}
                         empty={
                             <div className="space-y-3">
                                 <div>

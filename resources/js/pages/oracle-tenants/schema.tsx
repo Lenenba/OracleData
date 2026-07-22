@@ -797,6 +797,14 @@ export default function OracleTenantSchema({
                                 columns={columns}
                                 rows={filteredResources}
                                 rowKey={(resource) => resource.resource_key}
+                                paginated
+                                defaultPageSize={25}
+                                paginationLabels={{
+                                    rowsPerPage: t('table.rowsPerPage'),
+                                    of: t('table.of'),
+                                    previous: t('table.previous'),
+                                    next: t('table.next'),
+                                }}
                                 empty={
                                     <div className="space-y-1">
                                         <p className="font-medium text-foreground">
