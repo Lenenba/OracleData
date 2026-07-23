@@ -1346,7 +1346,7 @@ export function QueryBuilder({
 
                 {/* ─ Enregistrement ─ */}
                 <div className="card card-body flex flex-col gap-3 !p-4">
-                    <div className="flex flex-wrap items-end gap-3">
+                    <div className="flex flex-wrap items-start gap-3">
                         <div className="flex min-w-48 flex-1 flex-col gap-1.5">
                             <Label
                                 htmlFor="qb-name"
