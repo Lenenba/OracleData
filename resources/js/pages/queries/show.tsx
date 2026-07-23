@@ -263,143 +263,213 @@ export default function ShowQuery({
                 />
 
                 <div className="space-y-5">
-                    <div className="card card-body flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                        <QueryAccessLevelBadge
-                            accessLevel={query.access_level}
-                        />
-                        <Badge variant="outline">
-                            {query.mode === 'agent'
-                                ? t('queries.analysis')
-                                : t('queries.queryMode')}
-                        </Badge>
-                        {query.category && (
-                            <Badge
-                                variant="outline"
-                                style={
-                                    query.category.color
-                                        ? {
-                                              borderColor: query.category.color,
-                                              color: query.category.color,
-                                          }
-                                        : undefined
-                                }
-                            >
-                                {query.category.name}
-                            </Badge>
-                        )}
-                        {query.tags.map((tag) => (
-                            <Badge key={tag.slug} variant="secondary">
-                                {tag.name}
-                            </Badge>
-                        ))}
-                        <Badge variant="outline">
-                            {tenants[query.tenant_key ?? ''] ??
-                                query.tenant_key ??
-                                t('queries.noEnvironment')}
-                        </Badge>
-                        {query.resource_path && (
-                            <code className="text-xs">
-                                {query.resource_path}
-                            </code>
-                        )}
-                    </div>
-
-                    {query.can.execute ? (
-                        <div className="card card-body flex flex-wrap items-end gap-3">
-                            {/* Lot 10A — runtime parameter form */}
-                            {hasParams && !isAgent && (
-                                <div className="w-full">
-                                    <RuntimeParameterForm
-                                        definitions={
-                                            query.parameter_definitions
-                                        }
-                                        values={paramValues}
-                                        disabled={status === 'loading'}
-                                        onChange={(key, value) =>
-                                            setParamValues((prev) => ({
-                                                ...prev,
-                                                [key]: value,
-                                            }))
-                                        }
-                                    />
-                                </div>
-                            )}
-                            <div className="grid gap-2">
-                                <Label htmlFor="tenant">
-                                    {t('queries.environment')}
-                                </Label>
-                                <Select
-                                    value={tenant}
-                                    onValueChange={setTenant}
-                                >
-                                    <SelectTrigger id="tenant" className="w-64">
-                                        <SelectValue
-                                            placeholder={t(
-                                                'queries.chooseEnvironment',
-                                            )}
-                                        />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {tenantKeys.map((key) => (
-                                            <SelectItem key={key} value={key}>
-                                                {tenants[key]}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                    <div className="grid items-start gap-5 xl:grid-cols-2">
+                        <section className="card">
+                            <div className="card-header">
+                                <h2 className="card-title">
+                                    {t('queries.information')}
+                                </h2>
+                                <QueryAccessLevelBadge
+                                    accessLevel={query.access_level}
+                                />
                             </div>
 
-                            <Button
-                                onClick={execute}
-                                disabled={
-                                    (isAgent
-                                        ? agent.isActive
-                                        : status === 'loading') || tenant === ''
-                                }
-                            >
-                                {(
-                                    isAgent
-                                        ? agent.isActive
-                                        : status === 'loading'
-                                ) ? (
-                                    <Spinner />
-                                ) : isAgent ? (
-                                    <Sparkles className="size-4" />
-                                ) : null}
-                                {isAgent
-                                    ? t('queries.runAnalysis')
-                                    : t('queries.run')}
-                            </Button>
-                            {isAgent && agent.isActive && (
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => void agent.cancel()}
-                                >
-                                    <X className="size-4" />
-                                    {t('queries.cancelAnalysis')}
-                                </Button>
-                            )}
+                            <div className="card-body space-y-4">
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="rounded border border-border bg-muted/25 px-4 py-3">
+                                        <span className="block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">
+                                            {t('queries.modeLabel')}
+                                        </span>
+                                        <div className="mt-2">
+                                            <Badge variant="outline">
+                                                {query.mode === 'agent'
+                                                    ? t('queries.analysis')
+                                                    : t('queries.queryMode')}
+                                            </Badge>
+                                        </div>
+                                    </div>
 
-                            {!isAgent && (
-                                <QueryExportButton
-                                    queryId={query.id}
-                                    tenant={tenant}
-                                    disabled={tenant === ''}
-                                />
-                            )}
-                        </div>
-                    ) : (
-                        <Alert>
-                            <Eye />
-                            <AlertTitle>
-                                {t('sharing.viewOnlyTitle')}
-                            </AlertTitle>
-                            <AlertDescription>
-                                {t('sharing.viewOnlyDescription')}
-                            </AlertDescription>
-                        </Alert>
-                    )}
+                                    <div className="rounded border border-border bg-muted/25 px-4 py-3">
+                                        <span className="block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">
+                                            {t('queries.environment')}
+                                        </span>
+                                        <p className="mt-2 truncate text-sm font-semibold text-foreground">
+                                            {tenants[query.tenant_key ?? ''] ??
+                                                query.tenant_key ??
+                                                t('queries.noEnvironment')}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {query.resource_path && (
+                                    <div className="rounded border border-border px-4 py-3">
+                                        <span className="block text-[11px] font-bold tracking-wide text-muted-foreground uppercase">
+                                            {t('queries.oracleResource')}
+                                        </span>
+                                        <code className="mt-2 block text-xs break-all text-primary">
+                                            {query.resource_path}
+                                        </code>
+                                    </div>
+                                )}
+
+                                {(query.category || query.tags.length > 0) && (
+                                    <div className="flex flex-wrap items-center gap-2 border-t border-dashed border-border pt-4">
+                                        {query.category && (
+                                            <Badge
+                                                variant="outline"
+                                                style={
+                                                    query.category.color
+                                                        ? {
+                                                              borderColor:
+                                                                  query.category
+                                                                      .color,
+                                                              color: query
+                                                                  .category
+                                                                  .color,
+                                                          }
+                                                        : undefined
+                                                }
+                                            >
+                                                {query.category.name}
+                                            </Badge>
+                                        )}
+                                        {query.tags.map((tag) => (
+                                            <Badge
+                                                key={tag.slug}
+                                                variant="secondary"
+                                            >
+                                                {tag.name}
+                                            </Badge>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+
+                        {query.can.execute ? (
+                            <section className="card">
+                                <div className="card-header">
+                                    <h2 className="card-title">
+                                        {t('queries.executionPanel')}
+                                    </h2>
+                                    <Badge variant="secondary">
+                                        {tenantLabel ||
+                                            t('queries.noEnvironment')}
+                                    </Badge>
+                                </div>
+
+                                <div className="card-body space-y-5">
+                                    {/* Lot 10A — runtime parameter form */}
+                                    {hasParams && !isAgent && (
+                                        <RuntimeParameterForm
+                                            definitions={
+                                                query.parameter_definitions
+                                            }
+                                            values={paramValues}
+                                            disabled={status === 'loading'}
+                                            onChange={(key, value) =>
+                                                setParamValues((prev) => ({
+                                                    ...prev,
+                                                    [key]: value,
+                                                }))
+                                            }
+                                        />
+                                    )}
+
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                                        <div className="grid min-w-0 flex-1 gap-2">
+                                            <Label htmlFor="tenant">
+                                                {t('queries.environment')}
+                                            </Label>
+                                            <Select
+                                                value={tenant}
+                                                onValueChange={setTenant}
+                                            >
+                                                <SelectTrigger
+                                                    id="tenant"
+                                                    className="w-full"
+                                                >
+                                                    <SelectValue
+                                                        placeholder={t(
+                                                            'queries.chooseEnvironment',
+                                                        )}
+                                                    />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {tenantKeys.map((key) => (
+                                                        <SelectItem
+                                                            key={key}
+                                                            value={key}
+                                                        >
+                                                            {tenants[key]}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        <Button
+                                            className="sm:shrink-0"
+                                            onClick={execute}
+                                            disabled={
+                                                (isAgent
+                                                    ? agent.isActive
+                                                    : status === 'loading') ||
+                                                tenant === ''
+                                            }
+                                        >
+                                            {(
+                                                isAgent
+                                                    ? agent.isActive
+                                                    : status === 'loading'
+                                            ) ? (
+                                                <Spinner />
+                                            ) : isAgent ? (
+                                                <Sparkles className="size-4" />
+                                            ) : null}
+                                            {isAgent
+                                                ? t('queries.runAnalysis')
+                                                : t('queries.run')}
+                                        </Button>
+
+                                        {isAgent && agent.isActive && (
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                className="sm:shrink-0"
+                                                onClick={() =>
+                                                    void agent.cancel()
+                                                }
+                                            >
+                                                <X className="size-4" />
+                                                {t('queries.cancelAnalysis')}
+                                            </Button>
+                                        )}
+                                    </div>
+
+                                    {!isAgent && (
+                                        <div className="flex justify-end border-t border-dashed border-border pt-4">
+                                            <QueryExportButton
+                                                queryId={query.id}
+                                                tenant={tenant}
+                                                disabled={tenant === ''}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            </section>
+                        ) : (
+                            <Alert>
+                                <Eye />
+                                <AlertTitle>
+                                    {t('sharing.viewOnlyTitle')}
+                                </AlertTitle>
+                                <AlertDescription>
+                                    {t('sharing.viewOnlyDescription')}
+                                </AlertDescription>
+                            </Alert>
+                        )}
+                    </div>
 
                     {!isAgent && status === 'loading' && (
                         <div className="space-y-2">

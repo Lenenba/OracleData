@@ -2,33 +2,23 @@ import { Link, router, usePage } from '@inertiajs/react';
 import {
     AppWindow,
     Database,
-    Expand,
     Gauge,
-    Grid2X2,
     LayoutPanelTop,
     Menu,
-    Moon,
     Search,
     Server,
-    Settings,
-    Sun,
     UsersRound,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Breadcrumbs } from '@/components/breadcrumbs';
 import { LanguageSwitcher } from '@/components/language-switcher';
-import { NotificationBell } from '@/components/notifications/notification-bell';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
     DropdownMenu,
     DropdownMenuContent,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { UserMenuContent } from '@/components/user-menu-content';
-import { useAppearance } from '@/hooks/use-appearance';
 import { useInitials } from '@/hooks/use-initials';
 import { useI18n } from '@/i18n/i18n-context';
 import { toUrl } from '@/lib/utils';
@@ -36,7 +26,6 @@ import { dashboard } from '@/routes';
 import dashboards from '@/routes/dashboards';
 import groupRoutes from '@/routes/groups';
 import oracleTenants from '@/routes/oracle-tenants';
-import { edit as editProfile } from '@/routes/profile';
 import queries from '@/routes/queries';
 import queryTemplates from '@/routes/query-templates';
 import type { BreadcrumbItem as BreadcrumbItemType, NavItem } from '@/types';
@@ -52,14 +41,9 @@ type QuickLink = NavItem & {
     description?: string;
 };
 
-export function AppSidebarHeader({
-    breadcrumbs = [],
-    collapsed,
-    onToggle,
-}: Props) {
+export function AppSidebarHeader({ collapsed, onToggle }: Props) {
     const { auth } = usePage().props;
     const { t } = useI18n();
-    const { resolvedAppearance, updateAppearance } = useAppearance();
     const getInitials = useInitials();
     const [search, setSearch] = useState('');
     const [searchFocused, setSearchFocused] = useState(false);
@@ -114,16 +98,6 @@ export function AppSidebarHeader({
             setSearchFocused(false);
         }
     }
-
-    async function toggleFullscreen() {
-        if (document.fullscreenElement) {
-            await document.exitFullscreen();
-        } else {
-            await document.documentElement.requestFullscreen();
-        }
-    }
-
-    const isDark = resolvedAppearance === 'dark';
 
     return (
         <header className="paces-app-header">
@@ -195,149 +169,9 @@ export function AppSidebarHeader({
                             </div>
                         )}
                     </div>
-
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <button
-                                type="button"
-                                className="paces-topbar-text-button hidden lg:flex"
-                            >
-                                Mega Menu
-                                <span aria-hidden="true">⌄</span>
-                            </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                            align="start"
-                            className="paces-mega-menu"
-                        >
-                            <DropdownMenuLabel>
-                                {t('nav.platform')}
-                            </DropdownMenuLabel>
-                            <div className="grid gap-1 p-1 sm:grid-cols-2">
-                                {quickLinks.slice(0, 4).map((item) => {
-                                    const Icon = item.icon;
-
-                                    return (
-                                        <Link
-                                            key={item.title}
-                                            href={item.href}
-                                            className="paces-mega-link"
-                                        >
-                                            <Icon aria-hidden="true" />
-                                            <span>{item.title}</span>
-                                        </Link>
-                                    );
-                                })}
-                            </div>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <button
-                                type="button"
-                                className="paces-topbar-text-button hidden xl:flex"
-                            >
-                                Apps <span aria-hidden="true">⌄</span>
-                            </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="w-64 p-2">
-                            <div className="grid grid-cols-2 gap-2">
-                                {quickLinks.slice(2).map((item) => {
-                                    const Icon = item.icon;
-
-                                    return (
-                                        <Link
-                                            key={item.title}
-                                            href={item.href}
-                                            className="paces-app-grid-link"
-                                        >
-                                            <Icon aria-hidden="true" />
-                                            <span>{item.title}</span>
-                                        </Link>
-                                    );
-                                })}
-                            </div>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-
-                    {breadcrumbs.length > 0 && (
-                        <div className="paces-topbar-breadcrumbs hidden 2xl:block">
-                            <Breadcrumbs breadcrumbs={breadcrumbs} />
-                        </div>
-                    )}
                 </div>
 
                 <div className="paces-topbar-actions">
-                    <button
-                        type="button"
-                        className="paces-topbar-icon"
-                        onClick={() =>
-                            updateAppearance(isDark ? 'light' : 'dark')
-                        }
-                        aria-label={t('settings.appearance')}
-                    >
-                        {isDark ? (
-                            <Sun aria-hidden="true" />
-                        ) : (
-                            <Moon aria-hidden="true" />
-                        )}
-                    </button>
-
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <button
-                                type="button"
-                                className="paces-topbar-icon hidden sm:flex"
-                                aria-label="Apps"
-                            >
-                                <Grid2X2 aria-hidden="true" />
-                            </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-64 p-2">
-                            <DropdownMenuLabel>Apps</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            <div className="grid grid-cols-2 gap-2 pt-1">
-                                {quickLinks.slice(0, 4).map((item) => {
-                                    const Icon = item.icon;
-
-                                    return (
-                                        <Link
-                                            key={item.title}
-                                            href={item.href}
-                                            className="paces-app-grid-link"
-                                        >
-                                            <Icon aria-hidden="true" />
-                                            <span>{item.title}</span>
-                                        </Link>
-                                    );
-                                })}
-                            </div>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-
-                    <div className="paces-notification-button">
-                        <NotificationBell />
-                    </div>
-
-                    <button
-                        type="button"
-                        className="paces-topbar-icon hidden md:flex"
-                        onClick={() => void toggleFullscreen()}
-                        aria-label="Fullscreen"
-                    >
-                        <Expand aria-hidden="true" />
-                    </button>
-
-                    <Link
-                        href={editProfile()}
-                        className="paces-topbar-icon hidden md:flex"
-                        aria-label={t('nav.settings')}
-                    >
-                        <Settings aria-hidden="true" />
-                        <span className="paces-settings-dot" />
-                    </Link>
-
                     <div className="hidden lg:block">
                         <LanguageSwitcher compact />
                     </div>
