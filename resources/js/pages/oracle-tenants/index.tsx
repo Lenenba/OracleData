@@ -42,6 +42,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { useI18n } from '@/i18n/i18n-context';
 import oracleSchema from '@/routes/oracle-schema';
@@ -119,6 +126,7 @@ export default function OracleTenantsIndex({
     const { t, formatDate } = useI18n();
     const [addDialogOpen, setAddDialogOpen] = useState(false);
     const [isDefault, setIsDefault] = useState(false);
+    const [newTenantType, setNewTenantType] = useState<'fusion' | 'oic'>('fusion');
     const [testRevision, setTestRevision] = useState(0);
     const activeConnectionCount = tenants.filter(
         (tenant) => tenant.is_active,
@@ -141,7 +149,15 @@ export default function OracleTenantsIndex({
                 <div className="flex items-center gap-3">
                     <TableAvatar label={tenant.label} />
                     <div className="min-w-0">
-                        <div className="font-medium">{tenant.label}</div>
+                        <div className="flex items-center gap-2 font-medium">
+                            {tenant.label}
+                            <Badge
+                                variant={tenant.type === 'oic' ? 'secondary' : 'outline'}
+                                className="text-[10px]"
+                            >
+                                {tenant.type === 'oic' ? 'OIC' : 'Fusion'}
+                            </Badge>
+                        </div>
                         <code className="text-xs text-muted-foreground">
                             {tenant.key}
                         </code>
@@ -375,6 +391,7 @@ export default function OracleTenantsIndex({
 
                         if (!open) {
                             setIsDefault(false);
+                            setNewTenantType('fusion');
                         }
                     }}
                 >
@@ -502,6 +519,31 @@ export default function OracleTenantsIndex({
                                     </div>
 
                                     <InputError message={errors.connection} />
+
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="new-type">
+                                            {t('connections.type')}
+                                        </Label>
+                                        <input type="hidden" name="type" value={newTenantType} />
+                                        <Select
+                                            value={newTenantType}
+                                            onValueChange={(v) =>
+                                                setNewTenantType(v as 'fusion' | 'oic')
+                                            }
+                                        >
+                                            <SelectTrigger id="new-type">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="fusion">
+                                                    {t('connections.typeFusion')}
+                                                </SelectItem>
+                                                <SelectItem value="oic">
+                                                    {t('connections.typeOic')}
+                                                </SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
 
                                     <input
                                         name="is_default"

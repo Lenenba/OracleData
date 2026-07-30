@@ -27,7 +27,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $last_run_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
- * @property-read Query $query
+ * @property-read Query $ownedQuery
  */
 #[Fillable([
     'query_id',
@@ -56,8 +56,12 @@ class QueryExecutionAggregate extends Model
         ];
     }
 
-    /** @return BelongsTo<Query, $this> */
-    public function query(): BelongsTo
+    /**
+     * `query()` is reserved by Eloquent's static builder — use an explicit name.
+     *
+     * @return BelongsTo<Query, $this>
+     */
+    public function ownedQuery(): BelongsTo
     {
         return $this->belongsTo(Query::class);
     }

@@ -28,12 +28,17 @@ return [
     'allowed_path_prefixes' => [
         '/hcmRestApi/',
         '/fscmRestApi/',
+        '/ic/api/',
     ],
 
     'http' => [
         'connect_timeout' => (float) env('FUSION_CONNECT_TIMEOUT', 5),
         'timeout' => (float) env('FUSION_REQUEST_TIMEOUT', 30),
         'retry_delays' => [200, 500],
+    ],
+
+    'oic' => [
+        'http_timeout' => (float) env('OIC_REQUEST_TIMEOUT', 20),
     ],
 
     /*

@@ -70,6 +70,7 @@ export default function OnboardingConnection() {
                                 value="basic"
                             />
                             <input type="hidden" name="is_default" value="1" />
+                            <input type="hidden" name="type" value="fusion" />
 
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <div className="grid content-start gap-2">

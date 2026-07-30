@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AgentAnalysisRunController;
+use App\Http\Controllers\OicMonitorController;
 use App\Http\Controllers\QueryChainController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GroupController;
@@ -216,6 +217,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('queries/{query}/aggregates', [QueryAggregateController::class, 'index'])
             ->middleware('throttle:120,1,query-aggregates')
             ->name('queries.aggregates.index');
+
+        // OIC Monitoring — Oracle Integration Cloud
+        Route::get('oracle-tenants/{oracleTenant}/oic-monitor', [OicMonitorController::class, 'index'])
+            ->middleware('throttle:30,1,oic-monitor')
+            ->name('oic-monitor.index');
+        Route::get('oracle-tenants/{oracleTenant}/oic-monitor/errors', [OicMonitorController::class, 'errors'])
+            ->middleware('throttle:30,1,oic-monitor')
+            ->name('oic-monitor.errors');
+        Route::get('oracle-tenants/{oracleTenant}/oic-monitor/{integrationId}', [OicMonitorController::class, 'show'])
+            ->middleware('throttle:30,1,oic-monitor')
+            ->name('oic-monitor.show');
 
         // Lot 10B — composable personal dashboards.
         Route::get('dashboards', [QueryDashboardController::class, 'index'])->name('dashboards.index');
