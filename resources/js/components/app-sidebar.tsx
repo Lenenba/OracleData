@@ -19,6 +19,7 @@ import {
     Tags,
     UserRound,
     UsersRound,
+    Workflow,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import AppLogoIcon from '@/components/app-logo-icon';
@@ -200,6 +201,9 @@ export function AppSidebar({ collapsed, mobileOpen, onNavigate }: Props) {
     const path = currentPath(url);
 
     const sections = useMemo<PacesNavSection[]>(() => {
+        const oicTenants: Array<{ id: number; label: string; key: string }> =
+            (props.oicTenants as Array<{ id: number; label: string; key: string }> | undefined) ?? [];
+
         const settingsChildren: PacesNavItem[] = [
             {
                 key: 'profile',
@@ -306,6 +310,25 @@ export function AppSidebar({ collapsed, mobileOpen, onNavigate }: Props) {
                         href: dashboards.index(),
                         icon: LayoutPanelTop,
                     },
+                    ...(oicTenants.length > 0
+                        ? [
+                              {
+                                  key: 'oic-monitor',
+                                  title: t('nav.oicMonitor'),
+                                  href: `/oracle-tenants/${oicTenants[0].id}/oic-monitor`,
+                                  icon: Workflow,
+                                  ...(oicTenants.length > 1
+                                      ? {
+                                            children: oicTenants.map((ot) => ({
+                                                key: `oic-${ot.id}`,
+                                                title: ot.label,
+                                                href: `/oracle-tenants/${ot.id}/oic-monitor`,
+                                            })),
+                                        }
+                                      : {}),
+                              },
+                          ]
+                        : []),
                 ],
             },
             {

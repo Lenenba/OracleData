@@ -22,6 +22,14 @@ class DatabaseSeeder extends Seeder
             QueryTemplateSeeder::class,
             QuerySeeder::class,
             SemanticLayerSeeder::class,
+            // — enrichment seeders (depend on the above) —
+            GroupSeeder::class,
+            SharingSeeder::class,
+            ChangeRequestSeeder::class,
+            DashboardSeeder::class,
+            AutomationSeeder::class,
+            ApiTokenSeeder::class,
+            QueryExecutionSeeder::class,
         ]);
     }
 }

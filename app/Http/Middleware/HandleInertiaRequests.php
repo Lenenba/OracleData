@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\OracleTenant;
 use App\Models\QueryTemplate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -63,6 +64,14 @@ class HandleInertiaRequests extends Middleware
             'notificationSummary' => [
                 'unread_count' => $user?->unreadNotifications()->count() ?? 0,
             ],
+            'oicTenants' => $user === null ? [] : OracleTenant::query()
+                ->where('user_id', $user->id)
+                ->where('type', 'oic')
+                ->where('is_active', true)
+                ->orderByDesc('is_default')
+                ->orderBy('label')
+                ->get(['id', 'key', 'label'])
+                ->toArray(),
             'locale' => app()->getLocale(),
             'locales' => config('app.supported_locales'),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',

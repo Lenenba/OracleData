@@ -9,6 +9,13 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { useI18n } from '@/i18n/i18n-context';
 import oracleTenants from '@/routes/oracle-tenants';
@@ -22,6 +29,7 @@ export default function EditOracleTenant({ tenant }: TenantEditProps) {
     const { t, formatDate } = useI18n();
     const [isDefault, setIsDefault] = useState(tenant.is_default);
     const [isActive, setIsActive] = useState(tenant.is_active);
+    const [tenantType, setTenantType] = useState<'fusion' | 'oic'>(tenant.type ?? 'fusion');
 
     return (
         <>
@@ -95,6 +103,31 @@ export default function EditOracleTenant({ tenant }: TenantEditProps) {
                                         </Badge>
                                     </div>
                                 </div>
+                            </div>
+
+                            <div className="grid gap-2">
+                                <Label htmlFor="type">
+                                    {t('connections.type')}
+                                </Label>
+                                <input type="hidden" name="type" value={tenantType} />
+                                <Select
+                                    value={tenantType}
+                                    onValueChange={(v) =>
+                                        setTenantType(v as 'fusion' | 'oic')
+                                    }
+                                >
+                                    <SelectTrigger id="type">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="fusion">
+                                            {t('connections.typeFusion')}
+                                        </SelectItem>
+                                        <SelectItem value="oic">
+                                            {t('connections.typeOic')}
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
                             </div>
 
                             <div className="grid gap-2">

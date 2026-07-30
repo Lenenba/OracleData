@@ -44,6 +44,7 @@ export function OracleConnectionTestButton({
             base_url: String(data.get('base_url') ?? '').trim(),
             username: String(data.get('username') ?? '').trim(),
             password: String(data.get('password') ?? ''),
+            type: String(data.get('type') ?? 'fusion'),
         };
 
         if (!payload.base_url || !payload.username || !payload.password) {

@@ -5,9 +5,11 @@ namespace App\Services;
 use App\Models\AuthConnection;
 use App\Models\OracleTenant;
 use App\Models\User;
+use App\Services\OicClient;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
 
 /**
  * Owns the transactional lifecycle of a user's Oracle environment and its
@@ -23,11 +25,23 @@ class TenantConnectionService
     public function create(User $user, array $data, bool $completeOnboarding = false): OracleTenant
     {
         $testedAt = now();
+        $type = $data['type'] ?? 'fusion';
 
-        if (! $this->testCredentials($data['base_url'], $data['username'], $data['password'])) {
-            throw ValidationException::withMessages([
-                'connection' => __("Impossible de valider cette connexion Oracle. Vérifiez l'URL et les identifiants."),
-            ]);
+        // OIC uses OAuth/IDCS for its admin APIs — we cannot probe credentials
+        // at registration time. Credentials are accepted as-is and validated on
+        // the first real monitoring call.
+        if ($type !== 'oic') {
+            try {
+                $credentialsOk = $this->testCredentials($data['base_url'], $data['username'], $data['password'], $type);
+            } catch (RuntimeException $e) {
+                throw ValidationException::withMessages(['connection' => $e->getMessage()]);
+            }
+
+            if (! $credentialsOk) {
+                throw ValidationException::withMessages([
+                    'connection' => __("Impossible de valider cette connexion Oracle. Vérifiez l'URL et les identifiants."),
+                ]);
+            }
         }
 
         return DB::transaction(function () use ($user, $data, $completeOnboarding, $testedAt): OracleTenant {
@@ -58,11 +72,12 @@ class TenantConnectionService
             }
 
             $tenant = $owner->oracleTenants()->create([
-                'key' => $data['key'],
-                'label' => $data['label'],
-                'base_url' => rtrim($data['base_url'], '/'),
+                'key'        => $data['key'],
+                'type'       => $data['type'] ?? 'fusion',
+                'label'      => $data['label'],
+                'base_url'   => rtrim($data['base_url'], '/'),
                 'is_default' => $makeDefault,
-                'is_active' => true,
+                'is_active'  => true,
             ]);
 
             $tenant->authConnections()->create([
@@ -112,13 +127,25 @@ class TenantConnectionService
             || filled($data['password'] ?? null);
 
         $testedAt = null;
-        $requiresTest = $isActive
+        $effectiveType = $data['type'] ?? $tenant->type;
+
+        // OIC credentials are not probed at save time — validated on first real call.
+        $requiresTest = $effectiveType !== 'oic'
+            && $isActive
             && (! $connection->is_active || $credentialsChanged || $connection->verified_at === null);
 
-        if ($requiresTest && ! $this->testCredentials($data['base_url'], $data['username'], $secret)) {
-            throw ValidationException::withMessages([
-                'connection' => __("Impossible de valider cette connexion Oracle. Les modifications n'ont pas été enregistrées."),
-            ]);
+        if ($requiresTest) {
+            try {
+                $credentialsOk = $this->testCredentials($data['base_url'], $data['username'], $secret, $effectiveType);
+            } catch (RuntimeException $e) {
+                throw ValidationException::withMessages(['connection' => $e->getMessage()]);
+            }
+
+            if (! $credentialsOk) {
+                throw ValidationException::withMessages([
+                    'connection' => __("Impossible de valider cette connexion Oracle. Les modifications n'ont pas été enregistrées."),
+                ]);
+            }
         }
 
         if ($requiresTest) {
@@ -146,6 +173,7 @@ class TenantConnectionService
 
             $tenant->update([
                 'label' => $data['label'],
+                'type' => $data['type'] ?? $tenant->type,
                 'base_url' => rtrim($data['base_url'], '/'),
                 'is_default' => $makeDefault,
                 'is_active' => $isActive,
@@ -236,10 +264,16 @@ class TenantConnectionService
         });
     }
 
-    public function testCredentials(string $baseUrl, string $username, string $password): bool
+    public function testCredentials(string $baseUrl, string $username, string $password, string $type = 'fusion'): bool
     {
+        $baseUrl = rtrim($baseUrl, '/');
+
+        if ($type === 'oic') {
+            return (new OicClient($baseUrl, $username, $password))->testConnection();
+        }
+
         return (new FusionClient(
-            baseUrl: rtrim($baseUrl, '/'),
+            baseUrl: $baseUrl,
             username: $username,
             password: $password,
         ))->testConnection();
