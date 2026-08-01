@@ -2,12 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Query;
 use App\Models\QueryDashboard;
 use App\Models\QueryDashboardWidget;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -33,11 +33,11 @@ class QueryDashboardController extends Controller
 
         return Inertia::render('dashboards/index', [
             'dashboards' => $dashboards->map(fn (QueryDashboard $d): array => [
-                'id'          => $d->id,
-                'name'        => $d->name,
+                'id' => $d->id,
+                'name' => $d->name,
                 'description' => $d->description,
                 'widget_count' => (int) $d->widgets_count,
-                'updated_at'  => $d->updated_at?->toIso8601String(),
+                'updated_at' => $d->updated_at?->toIso8601String(),
             ]),
         ]);
     }
@@ -56,13 +56,13 @@ class QueryDashboardController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'name'        => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:1000'],
         ]);
 
         $dashboard = QueryDashboard::create([
-            'user_id'     => $request->user()->id,
-            'name'        => $validated['name'],
+            'user_id' => $request->user()->id,
+            'name' => $validated['name'],
             'description' => $validated['description'] ?? null,
         ]);
 
@@ -85,30 +85,30 @@ class QueryDashboardController extends Controller
         ]);
 
         // All queries owned by the user (for the add-widget picker).
-        $userQueries = \App\Models\Query::query()
+        $userQueries = Query::query()
             ->where('user_id', $user->id)
             ->orderBy('name')
             ->get(['id', 'name', 'resource_path'])
-            ->map(fn (\App\Models\Query $q): array => [
-                'id'            => $q->id,
-                'name'          => $q->name,
+            ->map(fn (Query $q): array => [
+                'id' => $q->id,
+                'name' => $q->name,
                 'resource_path' => $q->resource_path,
             ]);
 
         return Inertia::render('dashboards/show', [
             'dashboard' => [
-                'id'          => $dashboard->id,
-                'name'        => $dashboard->name,
+                'id' => $dashboard->id,
+                'name' => $dashboard->name,
                 'description' => $dashboard->description,
-                'widgets'     => $dashboard->widgets->map(fn (QueryDashboardWidget $w): array => [
-                    'id'             => $w->id,
-                    'widget_type'    => $w->widget_type,
-                    'title'          => $w->title,
-                    'position'       => $w->position,
+                'widgets' => $dashboard->widgets->map(fn (QueryDashboardWidget $w): array => [
+                    'id' => $w->id,
+                    'widget_type' => $w->widget_type,
+                    'title' => $w->title,
+                    'position' => $w->position,
                     'widget_options' => $w->widget_options ?? [],
-                    'query'          => [
-                        'id'            => $w->sourceQuery->id,
-                        'name'          => $w->sourceQuery->name,
+                    'query' => [
+                        'id' => $w->sourceQuery->id,
+                        'name' => $w->sourceQuery->name,
                         'resource_path' => $w->sourceQuery->resource_path,
                     ],
                 ]),
@@ -126,8 +126,8 @@ class QueryDashboardController extends Controller
 
         return Inertia::render('dashboards/edit', [
             'dashboard' => [
-                'id'          => $dashboard->id,
-                'name'        => $dashboard->name,
+                'id' => $dashboard->id,
+                'name' => $dashboard->name,
                 'description' => $dashboard->description,
             ],
         ]);
@@ -141,7 +141,7 @@ class QueryDashboardController extends Controller
         Gate::authorize('update', $dashboard);
 
         $validated = $request->validate([
-            'name'        => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:1000'],
         ]);
 

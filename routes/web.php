@@ -1,26 +1,27 @@
 <?php
 
 use App\Http\Controllers\AgentAnalysisRunController;
-use App\Http\Controllers\OicMonitorController;
-use App\Http\Controllers\QueryChainController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GroupController;
 use App\Http\Controllers\GroupMemberController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\OicMonitorController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\OracleSchemaController;
 use App\Http\Controllers\OracleTenantController;
+use App\Http\Controllers\QueryAgentPreviewController;
 use App\Http\Controllers\QueryAggregateController;
+use App\Http\Controllers\QueryChainController;
 use App\Http\Controllers\QueryChangeRequestCommentController;
 use App\Http\Controllers\QueryChangeRequestController;
 use App\Http\Controllers\QueryController;
+use App\Http\Controllers\QueryCopilotController;
 use App\Http\Controllers\QueryDashboardController;
 use App\Http\Controllers\QueryDashboardWidgetController;
+use App\Http\Controllers\QueryExecutionController;
 use App\Http\Controllers\QueryExportController;
 use App\Http\Controllers\QueryGroupShareController;
-use App\Http\Controllers\QueryAgentPreviewController;
-use App\Http\Controllers\QueryCopilotController;
 use App\Http\Controllers\QueryImportController;
 use App\Http\Controllers\QueryParameterController;
 use App\Http\Controllers\QueryPreferenceController;
@@ -198,6 +199,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->middleware('throttle:60,1,resource-fields')
             ->name('queries.resource-fields');
 
+        // Resource Graph — enfants disponibles pour le Query Builder hiérarchique.
+        Route::get('queries/child-resources', [QueryController::class, 'childResources'])
+            ->middleware('throttle:120,1,child-resources')
+            ->name('queries.child-resources');
+
         // Lot chaining — chaînes de requêtes dynamiques par ID.
         Route::get('queries/{query}/chains', [QueryChainController::class, 'index'])
             ->middleware('throttle:60,1')
@@ -228,6 +234,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('oracle-tenants/{oracleTenant}/oic-monitor/{integrationId}', [OicMonitorController::class, 'show'])
             ->middleware('throttle:30,1,oic-monitor')
             ->name('oic-monitor.show');
+
+        // Observability — journal des exécutions de requêtes.
+        Route::get('executions', [QueryExecutionController::class, 'index'])
+            ->middleware('throttle:60,1,executions')
+            ->name('executions.index');
+        Route::get('executions/{queryExecution}', [QueryExecutionController::class, 'show'])
+            ->middleware('throttle:120,1,executions')
+            ->name('executions.show');
 
         // Lot 10B — composable personal dashboards.
         Route::get('dashboards', [QueryDashboardController::class, 'index'])->name('dashboards.index');

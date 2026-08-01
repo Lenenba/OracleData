@@ -38,19 +38,23 @@ class QueryTemplateReferenceDatasetFactory extends Factory
         return [
             'query_template_id' => QueryTemplate::factory(),
             'query_template_version_id' => fn (array $attributes): int => QueryTemplate::query()
-                ->findOrFail($attributes['query_template_id'])
+                ->whereKey($attributes['query_template_id'])
+                ->firstOrFail()
                 ->publishedVersion()
                 ->sole()
                 ->id,
             'oracle_tenant_id' => OracleTenant::factory(),
             'auth_connection_id' => function (array $attributes): int {
-                $tenant = OracleTenant::query()->findOrFail($attributes['oracle_tenant_id']);
+                $tenant = OracleTenant::query()
+                    ->whereKey($attributes['oracle_tenant_id'])
+                    ->firstOrFail();
 
                 return $tenant->authConnections()->value('id')
                     ?? AuthConnection::factory()->forTenant($tenant)->create()->id;
             },
             'captured_by_user_id' => fn (array $attributes): int => OracleTenant::query()
-                ->findOrFail($attributes['oracle_tenant_id'])
+                ->whereKey($attributes['oracle_tenant_id'])
+                ->firstOrFail()
                 ->user_id,
             'name' => fake()->unique()->sentence(3),
             'scenario' => ReferenceScenarioType::Baseline,

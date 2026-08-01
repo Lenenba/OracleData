@@ -12,6 +12,7 @@ use App\Models\SemanticCatalogVersion;
 use App\Models\SemanticResource;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use UnexpectedValueException;
 
 class SemanticLineageService
 {
@@ -229,7 +230,7 @@ class SemanticLineageService
             $matches,
         );
 
-        return array_values(array_unique($matches[1] ?? []));
+        return array_values(array_unique($matches[1]));
     }
 
     /** @return list<string> */
@@ -252,11 +253,17 @@ class SemanticLineageService
     /** @return array<string, mixed> */
     private function serializeDependency(QuerySemanticResource|QueryTemplateVersionSemanticResource $dependency): array
     {
+        $usage = $dependency->getAttribute('usage');
+
+        if (! $usage instanceof SemanticLineageUsage) {
+            throw new UnexpectedValueException('La dépendance sémantique contient un type d’usage invalide.');
+        }
+
         return [
             'resource_key' => $dependency->resource_key,
             'child_key' => $dependency->child_key,
             'field_key' => $dependency->field_key,
-            'usage' => $dependency->usage->value,
+            'usage' => $usage->value,
         ];
     }
 

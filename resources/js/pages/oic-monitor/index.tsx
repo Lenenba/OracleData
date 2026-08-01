@@ -36,9 +36,11 @@ function StatusBadge({ status }: { status: string }) {
             </Badge>
         );
     }
+
     if (status === 'CONFIGURED') {
         return <Badge variant="secondary">Configurée</Badge>;
     }
+
     return <Badge variant="outline">{status}</Badge>;
 }
 
@@ -48,7 +50,9 @@ function SuccessRate({ integration }: { integration: OicIntegration }) {
         integration.failed_count +
         integration.aborted_count;
 
-    if (total === 0) return <span className="text-muted-foreground">—</span>;
+    if (total === 0) {
+        return <span className="text-muted-foreground">—</span>;
+    }
 
     const rate = Math.round((integration.completed_count / total) * 100);
     const color =
@@ -75,10 +79,7 @@ export default function OicMonitorIndex({
         0,
     );
     const totalFailed = integrations.reduce((s, i) => s + i.failed_count, 0);
-    const totalAborted = integrations.reduce(
-        (s, i) => s + i.aborted_count,
-        0,
-    );
+    const totalAborted = integrations.reduce((s, i) => s + i.aborted_count, 0);
     const totalProcessing = integrations.reduce(
         (s, i) => s + i.processing_count,
         0,
@@ -142,7 +143,7 @@ export default function OicMonitorIndex({
                 ].map(({ label, value, color }) => (
                     <div key={label} className="card">
                         <div className="card-body">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                 {label}
                             </p>
                             <p
@@ -207,13 +208,13 @@ export default function OicMonitorIndex({
                                             integration={integration}
                                         />
                                     </td>
-                                    <td className="text-right tabular-nums text-emerald-600 dark:text-emerald-400">
+                                    <td className="text-right text-emerald-600 tabular-nums dark:text-emerald-400">
                                         {integration.completed_count}
                                     </td>
-                                    <td className="text-right tabular-nums text-red-600 dark:text-red-400">
+                                    <td className="text-right text-red-600 tabular-nums dark:text-red-400">
                                         {integration.failed_count}
                                     </td>
-                                    <td className="text-right tabular-nums text-blue-600 dark:text-blue-400">
+                                    <td className="text-right text-blue-600 tabular-nums dark:text-blue-400">
                                         {integration.processing_count}
                                     </td>
                                     <td className="text-right">

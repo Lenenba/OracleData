@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Domain\Query\QueryTraversalPolicy;
+use App\Domain\Resource\FieldDefinition;
+use App\Domain\Resource\RelationDefinition;
+use App\Domain\Resource\ResourceDefinition;
 use App\Enums\OracleExecutionPolicy;
 use App\Http\Requests\RunQueryRequest;
 use App\Http\Requests\StoreQueryRequest;
@@ -20,6 +24,7 @@ use App\Services\QueryChangeRequestService;
 use App\Services\QueryExecutionRecorder;
 use App\Services\QueryResolver;
 use App\Services\QueryShareLifecycleService;
+use App\Services\ResourceDefinitionRegistry;
 use App\Services\RuntimeQueryParameterBinder;
 use App\Services\SemanticCatalogReader;
 use App\Services\SemanticLineageService;
@@ -674,6 +679,90 @@ class QueryController extends Controller
         return response()->json($result);
     }
 
+    /**
+     * Retourne les enfants disponibles d'une ResourceDefinition selon la QueryTraversalPolicy.
+     *
+     * Utilisé par le Query Builder pour alimenter le menu "Ajouter un enfant".
+     *
+     * GET /queries/child-resources?resource_id=hcm.workers&depth=1
+     *
+     * Retour :
+     * {
+     *   "resource": { id, name, label, capabilities, fields },
+     *   "children": [ { relation: {...}, resource: {...} }, ... ],
+     *   "canGrowDeeper": true,
+     *   "policy": { maxDepth: 6 }
+     * }
+     */
+    public function childResources(Request $request, ResourceDefinitionRegistry $registry): JsonResponse
+    {
+        abort_unless(
+            (bool) config('fusion.query_graph.resource_graph_enabled', false),
+            404,
+        );
+
+        $policy = new QueryTraversalPolicy;
+        $validated = $request->validate([
+            'resource_id' => ['required', 'string', 'max:255'],
+            'depth' => ['nullable', 'integer', 'min:1', 'max:2147483647'],
+            'node_count' => ['nullable', 'integer', 'min:1', 'max:2147483647'],
+        ]);
+
+        $resourceId = $validated['resource_id'];
+        $depth = (int) ($validated['depth'] ?? 1);
+        $nodeCount = (int) ($validated['node_count'] ?? 1);
+
+        $resource = $registry->find($resourceId);
+
+        if ($resource === null) {
+            return response()->json(['message' => "Resource '{$resourceId}' not found."], 404);
+        }
+
+        $canAddChild = $policy->canAddChildFor($depth, $nodeCount);
+        $children = $canAddChild ? $registry->childrenOf($resourceId) : [];
+
+        $childPayload = array_map(function (ResourceDefinition $child) use ($resource): array {
+            // Trouver la RelationDefinition qui lie parent→enfant
+            $relation = collect($resource->children())
+                ->first(fn (RelationDefinition $r) => $r->targetId === $child->id);
+
+            return [
+                'relation' => $relation?->toArray(),
+                'resource' => [
+                    'id' => $child->id,
+                    'name' => $child->name,
+                    'label' => $child->label,
+                    'description' => $child->description,
+                    'capabilities' => $child->capabilities->toArray(),
+                    'fields' => array_map(
+                        fn (FieldDefinition $f) => $f->toArray(),
+                        $child->fields,
+                    ),
+                    'identifiers' => array_map(
+                        fn (FieldDefinition $f) => $f->name,
+                        $child->identifierFields(),
+                    ),
+                    'hasChildren' => count($child->children()) > 0,
+                ],
+            ];
+        }, $children);
+
+        return response()->json([
+            'resource' => [
+                'id' => $resource->id,
+                'name' => $resource->name,
+                'label' => $resource->label,
+                'description' => $resource->description,
+            ],
+            'children' => $childPayload,
+            'canGrowDeeper' => $canAddChild,
+            'policy' => [
+                'maxDepth' => $policy->maxDepth,
+                'maxNodes' => $policy->maxNodes,
+            ],
+        ]);
+    }
+
     public function directPreview(Request $request, FusionManager $fusion, OracleQueryTool $tool): JsonResponse
     {
         $fusion = $fusion->forUser($request->user());
@@ -811,12 +900,12 @@ class QueryController extends Controller
             'tenants' => $fusion->available(),
             'defaultTenant' => $ownerPreferredTenant ?: $fusion->defaultKey(),
             // Lot chaining — queries the current user may use as chain targets.
-            'accessibleQueries' => \App\Models\Query::query()
+            'accessibleQueries' => Query::query()
                 ->accessibleTo($request->user())
                 ->where('mode', 'single')
                 ->orderBy('name')
                 ->get(['id', 'name'])
-                ->map(fn (\App\Models\Query $q): array => ['id' => $q->id, 'name' => $q->name])
+                ->map(fn (Query $q): array => ['id' => $q->id, 'name' => $q->name])
                 ->values(),
         ]);
     }
@@ -860,7 +949,7 @@ class QueryController extends Controller
         // Lot 10E — server-side offset pagination: merge caller-supplied offset
         // and limit into the query parameters so Oracle advances its cursor.
         $offset = isset($request->validated()['offset']) ? (int) $request->validated()['offset'] : null;
-        $limit  = isset($request->validated()['limit'])  ? (int) $request->validated()['limit']  : null;
+        $limit = isset($request->validated()['limit']) ? (int) $request->validated()['limit'] : null;
 
         if ($offset !== null || $limit !== null) {
             $params = is_array($query->parameters) ? $query->parameters : [];

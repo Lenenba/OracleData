@@ -51,18 +51,22 @@ class ImportQueriesRequest extends FormRequest
                     }
                 },
             ],
-            'collection.info'        => ['nullable', 'array'],
-            'collection.info.name'   => ['nullable', 'string', 'max:255'],
+            'collection.info' => ['nullable', 'array'],
+            'collection.info.name' => ['nullable', 'string', 'max:255'],
             'collection.info.schema' => [
                 'nullable',
                 'string',
                 'max:500',
+                Rule::in([
+                    'https://schema.getpostman.com/json/collection/v2.0.0/collection.json',
+                    'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
+                ]),
             ],
             'collection.item' => ['required', 'array'],
 
             // Zero-based indices selected by the user on the preview screen.
-            // Required only for the store action (preview ignores this field).
-            'selected'   => [$this->routeIs('queries.import') ? 'required' : 'nullable', 'array', 'max:200'],
+            // When omitted, the importer applies each candidate's safe default.
+            'selected' => ['nullable', 'array', 'max:200'],
             'selected.*' => ['integer', 'min:0', 'max:499', 'distinct'],
 
             // Target Oracle environment key — must belong to the current user.

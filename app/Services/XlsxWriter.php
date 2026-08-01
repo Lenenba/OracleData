@@ -2,8 +2,6 @@
 
 namespace App\Services;
 
-use InvalidArgumentException;
-
 /**
  * Lot 10D — Writes a query result set to a SpreadsheetML 2003 XML file, which
  * opens natively in Excel and LibreOffice without any PHP library dependency.
@@ -92,7 +90,7 @@ class XlsxWriter
     }
 
     /**
-     * @return array{string, string}  [SpreadsheetML type, serialised value]
+     * @return array{string, string} [SpreadsheetML type, serialised value]
      */
     private function serialise(mixed $value): array
     {

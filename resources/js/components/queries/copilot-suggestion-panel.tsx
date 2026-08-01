@@ -1,8 +1,7 @@
 import { Bot, ChevronRight, LoaderCircle, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { suggest as suggestCopilot } from '@/actions/App/Http/Controllers/QueryCopilotController';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { useI18n } from '@/i18n/i18n-context';
 import { readCsrfToken } from '@/lib/csrf';
 import type { ResourceSuggestion } from '@/lib/query-spec';
@@ -40,83 +39,83 @@ const MIN_INTENT_LENGTH = 20;
  * Calls the LLM (no Oracle) to suggest matching resources and plan mode.
  * The user can click a suggestion to jump-select it in the builder.
  */
-export function CopilotSuggestionPanel({ intent, allResources, onSelectResource }: Props) {
+export function CopilotSuggestionPanel({
+    intent,
+    allResources,
+    onSelectResource,
+}: Props) {
     const { t } = useI18n();
-    const [loading, setLoading] = useState(false);
-    const [result, setResult] = useState<SuggestionResult | null>(null);
-    const [dismissed, setDismissed] = useState(false);
+    const [loadingIntent, setLoadingIntent] = useState<string | null>(null);
+    const [resultState, setResultState] = useState<{
+        intent: string;
+        value: SuggestionResult;
+    } | null>(null);
+    const [dismissedIntent, setDismissedIntent] = useState<string | null>(null);
     const abortRef = useRef<AbortController | null>(null);
-    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const lastIntentRef = useRef('');
+
+    const fetchSuggestions = useCallback(
+        async (currentIntent: string): Promise<void> => {
+            if (abortRef.current !== null) {
+                abortRef.current.abort();
+            }
+
+            const controller = new AbortController();
+            abortRef.current = controller;
+            setLoadingIntent(currentIntent);
+
+            try {
+                const response = await fetch(suggestCopilot.url(), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-XSRF-TOKEN': readCsrfToken(),
+                    },
+                    credentials: 'same-origin',
+                    signal: controller.signal,
+                    body: JSON.stringify({ intent: currentIntent }),
+                });
+
+                if (!response.ok) {
+                    setResultState(null);
+
+                    return;
+                }
+
+                const data = (await response.json()) as SuggestionResult;
+                setResultState({ intent: currentIntent, value: data });
+            } catch {
+                // AbortError or network hiccup — silently ignore
+            } finally {
+                setLoadingIntent((activeIntent) =>
+                    activeIntent === currentIntent ? null : activeIntent,
+                );
+            }
+        },
+        [],
+    );
 
     useEffect(() => {
-        // Reset dismissed when intent changes significantly
-        if (Math.abs(intent.length - lastIntentRef.current.length) > 10) {
-            setDismissed(false);
-        }
-
-        if (timerRef.current !== null) {
-            clearTimeout(timerRef.current);
-        }
-
         if (intent.trim().length < MIN_INTENT_LENGTH) {
-            setResult(null);
-            setLoading(false);
+            abortRef.current?.abort();
 
             return;
         }
 
-        timerRef.current = setTimeout(() => {
+        const timer = setTimeout(() => {
             void fetchSuggestions(intent);
         }, DEBOUNCE_MS);
 
         return () => {
-            if (timerRef.current !== null) {
-                clearTimeout(timerRef.current);
-            }
+            clearTimeout(timer);
+            abortRef.current?.abort();
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [intent]);
+    }, [fetchSuggestions, intent]);
 
-    async function fetchSuggestions(currentIntent: string): Promise<void> {
-        lastIntentRef.current = currentIntent;
-
-        if (abortRef.current !== null) {
-            abortRef.current.abort();
-        }
-
-        const controller = new AbortController();
-        abortRef.current = controller;
-        setLoading(true);
-
-        try {
-            const response = await fetch(suggestCopilot.url(), {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Accept: 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-XSRF-TOKEN': readCsrfToken(),
-                },
-                credentials: 'same-origin',
-                signal: controller.signal,
-                body: JSON.stringify({ intent: currentIntent }),
-            });
-
-            if (!response.ok) {
-                setResult(null);
-
-                return;
-            }
-
-            const data = (await response.json()) as SuggestionResult;
-            setResult(data);
-        } catch {
-            // AbortError or network hiccup — silently ignore
-        } finally {
-            setLoading(false);
-        }
-    }
+    const loading = loadingIntent === intent;
+    const result = resultState?.intent === intent ? resultState.value : null;
+    const dismissed = dismissedIntent === intent;
 
     if (intent.trim().length < MIN_INTENT_LENGTH || dismissed) {
         return null;
@@ -144,7 +143,7 @@ export function CopilotSuggestionPanel({ intent, allResources, onSelectResource 
                 </div>
                 <button
                     type="button"
-                    onClick={() => setDismissed(true)}
+                    onClick={() => setDismissedIntent(intent)}
                     className="text-muted-foreground hover:text-foreground"
                     aria-label={t('common.dismiss')}
                 >
@@ -183,7 +182,7 @@ export function CopilotSuggestionPanel({ intent, allResources, onSelectResource 
                                             onClick={() => {
                                                 if (full !== undefined) {
                                                     onSelectResource(full);
-                                                    setDismissed(true);
+                                                    setDismissedIntent(intent);
                                                 }
                                             }}
                                             className="group flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs transition-colors hover:border-primary/60 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-40"
@@ -191,7 +190,7 @@ export function CopilotSuggestionPanel({ intent, allResources, onSelectResource 
                                             <span>{r.label}</span>
                                             <Badge
                                                 variant="outline"
-                                                className="text-[10px] py-0"
+                                                className="py-0 text-[10px]"
                                             >
                                                 {r.domain}
                                             </Badge>

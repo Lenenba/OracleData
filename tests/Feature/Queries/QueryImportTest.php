@@ -168,6 +168,18 @@ test('an unsupported Postman schema is rejected', function () {
         ->assertJsonValidationErrors('collection.info.schema');
 });
 
+test('supported Postman schemas are accepted', function (string $schema) {
+    $collection = workersCollection();
+    $collection['info']['schema'] = $schema;
+
+    $this->actingAs($this->owner)
+        ->postJson(route('queries.import.preview'), ['collection' => $collection])
+        ->assertOk();
+})->with([
+    'Postman 2.0' => 'https://schema.getpostman.com/json/collection/v2.0.0/collection.json',
+    'Postman 2.1' => 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
+]);
+
 test('unresolved variables and unsafe resource paths are skipped', function () {
     $collection = [
         'item' => [

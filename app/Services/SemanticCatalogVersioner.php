@@ -4,11 +4,16 @@ namespace App\Services;
 
 use App\Enums\SemanticCatalogVersionStatus;
 use App\Models\SemanticCatalogVersion;
+use App\Models\SemanticField;
+use App\Models\SemanticFieldTranslation;
 use App\Models\SemanticGlossaryTerm;
+use App\Models\SemanticGlossaryTranslation;
+use App\Models\SemanticRelation;
+use App\Models\SemanticRelationTranslation;
 use App\Models\SemanticResource;
+use App\Models\SemanticResourceTranslation;
 use App\Models\User;
 use BackedEnum;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 
 class SemanticCatalogVersioner
@@ -48,8 +53,11 @@ class SemanticCatalogVersioner
                 ])->save();
             }
 
+            $nextVersionNumber = $latest === null
+                ? 1
+                : $latest->version_number + 1;
             $version = SemanticCatalogVersion::query()->create([
-                'version_number' => ($latest?->version_number ?? 0) + 1,
+                'version_number' => $nextVersionNumber,
                 'status' => SemanticCatalogVersionStatus::Published,
                 'open_slot' => null,
                 'published_slot' => SemanticCatalogVersion::PUBLISHED_SLOT,
@@ -80,13 +88,13 @@ class SemanticCatalogVersioner
     {
         $resources = SemanticResource::query()
             ->with([
-                'translations' => fn (HasMany $query) => $query->orderBy('locale'),
-                'fields' => fn (HasMany $query) => $query
+                'translations' => fn ($query) => $query->orderBy('locale'),
+                'fields' => fn ($query) => $query
                     ->orderBy('child_key')
                     ->orderBy('source_name'),
-                'fields.translations' => fn (HasMany $query) => $query->orderBy('locale'),
-                'outgoingRelations' => fn (HasMany $query) => $query->orderBy('relation_key'),
-                'outgoingRelations.translations' => fn (HasMany $query) => $query->orderBy('locale'),
+                'fields.translations' => fn ($query) => $query->orderBy('locale'),
+                'outgoingRelations' => fn ($query) => $query->orderBy('relation_key'),
+                'outgoingRelations.translations' => fn ($query) => $query->orderBy('locale'),
                 'outgoingRelations.targetResource:id,resource_key',
             ])
             ->orderBy('resource_key')
@@ -105,14 +113,14 @@ class SemanticCatalogVersioner
                 'sql_mapping_status' => $this->enumValue($resource->sql_mapping_status),
                 'mapping_notes' => $resource->mapping_notes,
                 'is_active' => $resource->is_active,
-                'translations' => $resource->translations->map(fn ($translation): array => [
+                'translations' => $resource->translations->map(fn (SemanticResourceTranslation $translation): array => [
                     'locale' => $translation->locale,
                     'name' => $translation->name,
                     'description' => $translation->description,
                     'synonyms' => $translation->synonyms ?? [],
                     'examples' => $translation->examples ?? [],
                 ])->all(),
-                'fields' => $resource->fields->map(fn ($field): array => [
+                'fields' => $resource->fields->map(fn (SemanticField $field): array => [
                     'child_key' => $field->child_key,
                     'source_name' => $field->source_name,
                     'data_type' => $field->data_type,
@@ -123,7 +131,7 @@ class SemanticCatalogVersioner
                     'is_nullable' => $field->is_nullable,
                     'is_updatable' => $field->is_updatable,
                     'is_active' => $field->is_active,
-                    'translations' => $field->translations->map(fn ($translation): array => [
+                    'translations' => $field->translations->map(fn (SemanticFieldTranslation $translation): array => [
                         'locale' => $translation->locale,
                         'name' => $translation->name,
                         'description' => $translation->description,
@@ -131,7 +139,7 @@ class SemanticCatalogVersioner
                         'examples' => $translation->examples ?? [],
                     ])->all(),
                 ])->all(),
-                'relations' => $resource->outgoingRelations->map(fn ($relation): array => [
+                'relations' => $resource->outgoingRelations->map(fn (SemanticRelation $relation): array => [
                     'relation_key' => $relation->relation_key,
                     'kind' => $this->enumValue($relation->kind),
                     'target_key' => $relation->target_key,
@@ -144,7 +152,7 @@ class SemanticCatalogVersioner
                     'sql_join' => $relation->sql_join,
                     'status' => $this->enumValue($relation->status),
                     'is_active' => $relation->is_active,
-                    'translations' => $relation->translations->map(fn ($translation): array => [
+                    'translations' => $relation->translations->map(fn (SemanticRelationTranslation $translation): array => [
                         'locale' => $translation->locale,
                         'name' => $translation->name,
                         'description' => $translation->description,
@@ -153,7 +161,7 @@ class SemanticCatalogVersioner
             ])
             ->all();
         $glossary = SemanticGlossaryTerm::query()
-            ->with(['translations' => fn (HasMany $query) => $query->orderBy('locale')])
+            ->with(['translations' => fn ($query) => $query->orderBy('locale')])
             ->orderBy('term_key')
             ->get()
             ->map(fn (SemanticGlossaryTerm $term): array => [
@@ -162,7 +170,7 @@ class SemanticCatalogVersioner
                 'classification' => $this->enumValue($term->classification),
                 'data_category' => $this->enumValue($term->data_category),
                 'is_active' => $term->is_active,
-                'translations' => $term->translations->map(fn ($translation): array => [
+                'translations' => $term->translations->map(fn (SemanticGlossaryTranslation $translation): array => [
                     'locale' => $translation->locale,
                     'term' => $translation->term,
                     'definition' => $translation->definition,

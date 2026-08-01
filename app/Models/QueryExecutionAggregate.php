@@ -17,7 +17,7 @@ use Illuminate\Support\Carbon;
  *
  * @property int $id
  * @property int $query_id
- * @property string $period_date   ISO-8601 date string (Y-m-d)
+ * @property string $period_date ISO-8601 date string (Y-m-d)
  * @property int $run_count
  * @property int $rows_min
  * @property int $rows_max

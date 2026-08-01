@@ -21,7 +21,20 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use RuntimeException;
 
-/** @phpstan-import-type OracleResource from OracleResourceCatalog */
+/**
+ * @phpstan-import-type OracleResource from OracleResourceCatalog
+ *
+ * @phpstan-type CreatedCounts array{
+ *     resources: int,
+ *     resource_translations: int,
+ *     fields: int,
+ *     field_translations: int,
+ *     relations: int,
+ *     relation_translations: int,
+ *     glossary_terms: int,
+ *     glossary_translations: int
+ * }
+ */
 class SemanticCatalogSynchronizer
 {
     /** @var list<string> */
@@ -42,7 +55,7 @@ class SemanticCatalogSynchronizer
      *     version: SemanticCatalogVersion,
      *     version_created: bool,
      *     lineage: array{queries: int, template_versions: int},
-     *     created: array{resources: int, resource_translations: int, fields: int, field_translations: int, relations: int, relation_translations: int, glossary_terms: int, glossary_translations: int}
+     *     created: CreatedCounts
      * }
      */
     public function synchronize(?User $actor = null): array
@@ -101,7 +114,7 @@ class SemanticCatalogSynchronizer
 
     /**
      * @param  OracleResource  $source
-     * @param  array<string, int>  $created
+     * @param  CreatedCounts  $created
      */
     private function importResource(array $source, array &$created): void
     {
@@ -175,7 +188,7 @@ class SemanticCatalogSynchronizer
     /**
      * @param  list<string>  $fieldNames
      * @param  array<string, mixed>  $sqlColumns
-     * @param  array<string, int>  $created
+     * @param  CreatedCounts  $created
      */
     private function importFields(
         SemanticResource $resource,
@@ -221,7 +234,7 @@ class SemanticCatalogSynchronizer
     /**
      * @param  OracleResource  $sourceDefinition
      * @param  Collection<string, SemanticResource>  $resources
-     * @param  array<string, int>  $created
+     * @param  CreatedCounts  $created
      */
     private function importRelations(
         SemanticResource $source,
@@ -275,7 +288,10 @@ class SemanticCatalogSynchronizer
         }
     }
 
-    /** @param array<string, mixed> $sqlRelation */
+    /**
+     * @param  array<string, mixed>  $sqlRelation
+     * @param  CreatedCounts  $created
+     */
     private function importRelation(
         SemanticResource $source,
         ?SemanticResource $target,
@@ -321,7 +337,7 @@ class SemanticCatalogSynchronizer
         }
     }
 
-    /** @param array<string, int> $created */
+    /** @param CreatedCounts $created */
     private function importGlossary(array &$created): void
     {
         $path = resource_path('i18n/glossary.json');
@@ -534,7 +550,8 @@ class SemanticCatalogSynchronizer
     }
 
     /**
-     * @param  array<string, int>  $created
+     * @param  CreatedCounts  $created
+     * @param  key-of<CreatedCounts>  $key
      */
     private function incrementIfCreated(object $model, array &$created, string $key): void
     {
@@ -544,7 +561,7 @@ class SemanticCatalogSynchronizer
     }
 
     /**
-     * @return array{resources: int, resource_translations: int, fields: int, field_translations: int, relations: int, relation_translations: int, glossary_terms: int, glossary_translations: int}
+     * @return CreatedCounts
      */
     private function emptyCounts(): array
     {

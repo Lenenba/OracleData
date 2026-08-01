@@ -12,7 +12,6 @@ use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
-use App\Services\WebhookDispatcher;
 
 /**
  * Journalise chaque exécution de requête et maintient atomiquement les
@@ -92,7 +91,6 @@ class QueryExecutionRecorder
                 if ($succeeded) {
                     $this->aggregates->record(
                         queryId: $queryId,
-                        periodDate: Carbon::now('UTC')->toDateString(),
                         rowsCount: count((array) ($payload['items'] ?? [])),
                         durationMs: max(0, $durationMs),
                         ranAt: Carbon::instance($finishedAt),
@@ -110,7 +108,6 @@ class QueryExecutionRecorder
 
         return $execution;
     }
-
 
     /**
      * Record a direct preview or run of a predefined template.

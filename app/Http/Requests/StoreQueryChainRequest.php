@@ -27,14 +27,14 @@ class StoreQueryChainRequest extends FormRequest
                 'integer',
                 'exists:queries,id',
             ],
-            'extraction_field'   => ['required', 'string', 'max:100'],
-            'injection_param'    => ['required', 'string', 'max:100'],
+            'extraction_field' => ['required', 'string', 'max:100'],
+            'injection_param' => ['required', 'string', 'max:100'],
             'injection_operator' => [
                 'required',
                 Rule::in(QueryChain::ALLOWED_OPERATORS),
             ],
-            'label'              => ['nullable', 'string', 'max:255'],
-            'position'           => ['nullable', 'integer', 'min:0', 'max:255'],
+            'label' => ['nullable', 'string', 'max:255'],
+            'position' => ['nullable', 'integer', 'min:0', 'max:255'],
         ];
     }
 }

@@ -41,6 +41,7 @@ function InstanceStatusBadge({ status }: { status: string }) {
             </Badge>
         );
     }
+
     if (status === 'FAILED') {
         return (
             <Badge className="bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-400">
@@ -49,6 +50,7 @@ function InstanceStatusBadge({ status }: { status: string }) {
             </Badge>
         );
     }
+
     if (status === 'ABORTED') {
         return (
             <Badge className="bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400">
@@ -56,6 +58,7 @@ function InstanceStatusBadge({ status }: { status: string }) {
             </Badge>
         );
     }
+
     if (status === 'PROCESSING') {
         return (
             <Badge className="bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400">
@@ -64,14 +67,25 @@ function InstanceStatusBadge({ status }: { status: string }) {
             </Badge>
         );
     }
+
     return <Badge variant="outline">{status}</Badge>;
 }
 
 function duration(start: string | null, end: string | null): string {
-    if (!start || !end) return '—';
+    if (!start || !end) {
+        return '—';
+    }
+
     const ms = new Date(end).getTime() - new Date(start).getTime();
-    if (ms < 1000) return `${ms} ms`;
-    if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
+
+    if (ms < 1000) {
+        return `${ms} ms`;
+    }
+
+    if (ms < 60_000) {
+        return `${(ms / 1000).toFixed(1)} s`;
+    }
+
     return `${Math.floor(ms / 60_000)} min ${Math.round((ms % 60_000) / 1000)} s`;
 }
 
@@ -119,13 +133,13 @@ export default function OicMonitorShow({
             {/* Quick stats */}
             <div className="mb-6 flex flex-wrap gap-4 text-sm">
                 <span>
-                    <span className="font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                    <span className="font-semibold text-emerald-600 tabular-nums dark:text-emerald-400">
                         {completed}
                     </span>{' '}
                     {t('oic.completed')}
                 </span>
                 <span>
-                    <span className="font-semibold tabular-nums text-red-600 dark:text-red-400">
+                    <span className="font-semibold text-red-600 tabular-nums dark:text-red-400">
                         {failed}
                     </span>{' '}
                     {t('oic.failed')}
@@ -160,7 +174,7 @@ export default function OicMonitorShow({
                                             status={inst.status}
                                         />
                                     </td>
-                                    <td className="tabular-nums text-sm text-muted-foreground">
+                                    <td className="text-sm text-muted-foreground tabular-nums">
                                         {inst.started_at
                                             ? formatDate(inst.started_at, {
                                                   dateStyle: 'medium',
@@ -168,7 +182,7 @@ export default function OicMonitorShow({
                                               })
                                             : '—'}
                                     </td>
-                                    <td className="tabular-nums text-sm">
+                                    <td className="text-sm tabular-nums">
                                         {duration(
                                             inst.started_at,
                                             inst.finished_at,
@@ -199,8 +213,7 @@ OicMonitorShow.layout = {
             href: oicMonitor.index(page.props.tenant.id),
         },
         {
-            title:
-                page.props.integration?.name ?? page.props.integration_id,
+            title: page.props.integration?.name ?? page.props.integration_id,
             href: '',
         },
     ],

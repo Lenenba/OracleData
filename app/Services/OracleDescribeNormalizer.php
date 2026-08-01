@@ -72,7 +72,10 @@ class OracleDescribeNormalizer
         ];
     }
 
-    /** @param array<string, mixed> $payload */
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>|null
+     */
     private function resourceNode(array $payload, string $resourceKey): ?array
     {
         foreach (['Resources', 'resources'] as $containerKey) {

@@ -15,7 +15,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $user_id
  * @property string $key
- * @property string $type  'fusion'|'oic'
+ * @property string $type 'fusion'|'oic'
  * @property string $label
  * @property string $base_url
  * @property bool $is_default

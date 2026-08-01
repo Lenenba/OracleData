@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Query;
 use App\Models\QueryExecutionAggregate;
+use Carbon\CarbonInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -31,7 +32,7 @@ class QueryAggregateController extends Controller
             ->orderBy('period_date')
             ->get(['period_date', 'run_count', 'rows_min', 'rows_max', 'duration_min_ms', 'duration_max_ms', 'duration_avg_ms', 'last_run_at'])
             ->map(fn (QueryExecutionAggregate $row): array => [
-                'date' => $row->period_date->toDateString(),
+                'date' => $this->dateString($row->period_date),
                 'run_count' => $row->run_count,
                 'rows_min' => $row->rows_min,
                 'rows_max' => $row->rows_max,
@@ -42,5 +43,10 @@ class QueryAggregateController extends Controller
             ]);
 
         return response()->json($rows);
+    }
+
+    private function dateString(CarbonInterface|string $value): string
+    {
+        return $value instanceof CarbonInterface ? $value->toDateString() : $value;
     }
 }

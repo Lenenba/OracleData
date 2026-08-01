@@ -472,6 +472,7 @@ export function generateBipSql(
     [...expand, ...joins].forEach((related) => {
         const relation =
             sqlSource?.child_tables?.[related] ?? sqlSource?.joins?.[related];
+
         if (relation === undefined) {
             return;
         }
@@ -496,6 +497,7 @@ export function generateBipSql(
 
     expand.forEach((child) => {
         const relation = sqlSource?.child_tables?.[child];
+
         if (relation === undefined) {
             return;
         }
@@ -510,6 +512,7 @@ export function generateBipSql(
 
     joins.forEach((target) => {
         const relation = sqlSource?.joins?.[target];
+
         if (relation === undefined) {
             return;
         }

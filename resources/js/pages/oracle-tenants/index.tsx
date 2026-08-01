@@ -126,7 +126,9 @@ export default function OracleTenantsIndex({
     const { t, formatDate } = useI18n();
     const [addDialogOpen, setAddDialogOpen] = useState(false);
     const [isDefault, setIsDefault] = useState(false);
-    const [newTenantType, setNewTenantType] = useState<'fusion' | 'oic'>('fusion');
+    const [newTenantType, setNewTenantType] = useState<'fusion' | 'oic'>(
+        'fusion',
+    );
     const [testRevision, setTestRevision] = useState(0);
     const activeConnectionCount = tenants.filter(
         (tenant) => tenant.is_active,
@@ -152,7 +154,11 @@ export default function OracleTenantsIndex({
                         <div className="flex items-center gap-2 font-medium">
                             {tenant.label}
                             <Badge
-                                variant={tenant.type === 'oic' ? 'secondary' : 'outline'}
+                                variant={
+                                    tenant.type === 'oic'
+                                        ? 'secondary'
+                                        : 'outline'
+                                }
                                 className="text-[10px]"
                             >
                                 {tenant.type === 'oic' ? 'OIC' : 'Fusion'}
@@ -524,11 +530,17 @@ export default function OracleTenantsIndex({
                                         <Label htmlFor="new-type">
                                             {t('connections.type')}
                                         </Label>
-                                        <input type="hidden" name="type" value={newTenantType} />
+                                        <input
+                                            type="hidden"
+                                            name="type"
+                                            value={newTenantType}
+                                        />
                                         <Select
                                             value={newTenantType}
                                             onValueChange={(v) =>
-                                                setNewTenantType(v as 'fusion' | 'oic')
+                                                setNewTenantType(
+                                                    v as 'fusion' | 'oic',
+                                                )
                                             }
                                         >
                                             <SelectTrigger id="new-type">
@@ -536,7 +548,9 @@ export default function OracleTenantsIndex({
                                             </SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="fusion">
-                                                    {t('connections.typeFusion')}
+                                                    {t(
+                                                        'connections.typeFusion',
+                                                    )}
                                                 </SelectItem>
                                                 <SelectItem value="oic">
                                                     {t('connections.typeOic')}

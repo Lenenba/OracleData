@@ -14,7 +14,7 @@ class GroupSeeder extends Seeder
      */
     public function run(): void
     {
-        $admin   = User::query()->where('email', 'test@example.com')->firstOrFail();
+        $admin = User::query()->where('email', 'test@example.com')->firstOrFail();
         $analyst = User::query()->where('email', 'analyste@oracledata.test')->firstOrFail();
         $finance = User::query()->where('email', 'finance@oracledata.test')->firstOrFail();
 
@@ -25,7 +25,7 @@ class GroupSeeder extends Seeder
         );
 
         $financeGroup->members()->syncWithoutDetaching([
-            $admin->id  => ['role' => GroupRole::OWNER->value],
+            $admin->id => ['role' => GroupRole::OWNER->value],
             $finance->id => ['role' => GroupRole::MANAGER->value],
             $analyst->id => ['role' => GroupRole::MEMBER->value],
         ]);
@@ -38,7 +38,7 @@ class GroupSeeder extends Seeder
 
         $analyticsGroup->members()->syncWithoutDetaching([
             $analyst->id => ['role' => GroupRole::OWNER->value],
-            $admin->id   => ['role' => GroupRole::MANAGER->value],
+            $admin->id => ['role' => GroupRole::MANAGER->value],
         ]);
 
         // ── Administrateurs plateforme ──────────────────────────────────────

@@ -74,7 +74,9 @@ class NotificationController extends Controller
             ->whereKey($queryIds)
             ->pluck('id')
             ->map(static fn (mixed $id): int => (int) $id)
+            ->values()
             ->all();
+        $accessibleQueryIds = [...$accessibleQueryIds];
 
         $payload = [
             'notifications' => [
@@ -260,13 +262,15 @@ class NotificationController extends Controller
      */
     private function technicalIds(Collection $notifications, string $key): array
     {
-        return $notifications
+        $ids = $notifications
             ->map(fn (DatabaseNotification $notification): mixed => $notification->data[$key] ?? null)
             ->filter(fn (mixed $id): bool => is_int($id) || ctype_digit((string) $id))
             ->map(fn (mixed $id): int => (int) $id)
             ->unique()
             ->values()
             ->all();
+
+        return [...$ids];
     }
 
     /**

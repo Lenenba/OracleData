@@ -70,28 +70,32 @@ function DisplayValue({ value }: { value: unknown }) {
 
     if (value === null || value === undefined) {
         return (
-            <span className="italic text-muted-foreground">
+            <span className="text-muted-foreground italic">
                 {t('templateGovernance.compareAbsentValue')}
             </span>
         );
     }
 
     if (typeof value === 'string') {
-        return <span className="whitespace-pre-wrap break-words">{value}</span>;
+        return <span className="break-words whitespace-pre-wrap">{value}</span>;
     }
 
     if (typeof value === 'number' || typeof value === 'boolean') {
-        return <code className="break-words text-xs">{String(value)}</code>;
+        return <code className="text-xs break-words">{String(value)}</code>;
     }
 
     return (
-        <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 text-xs">
+        <pre className="max-h-64 overflow-auto rounded-md bg-muted p-3 text-xs break-words whitespace-pre-wrap">
             {JSON.stringify(orderedValue(value), null, 2)}
         </pre>
     );
 }
 
-function VersionContext({ version }: { version: QueryTemplateGovernanceVersion }) {
+function VersionContext({
+    version,
+}: {
+    version: QueryTemplateGovernanceVersion;
+}) {
     const { t, formatDate } = useI18n();
 
     return (
@@ -158,9 +162,7 @@ export function TemplateVersionComparison({ slug, versions }: Props) {
     const [fromId, setFromId] = useState<number | null>(
         versions.length > 1 ? versions[1].id : (versions[0]?.id ?? null),
     );
-    const [toId, setToId] = useState<number | null>(
-        versions[0]?.id ?? null,
-    );
+    const [toId, setToId] = useState<number | null>(versions[0]?.id ?? null);
     const [requestState, setRequestState] = useState<{
         key: string | null;
         comparison: QueryTemplateVersionComparison | null;
@@ -209,7 +211,10 @@ export function TemplateVersionComparison({ slug, versions }: Props) {
                 }),
             )
             .catch((caught: unknown) => {
-                if (caught instanceof DOMException && caught.name === 'AbortError') {
+                if (
+                    caught instanceof DOMException &&
+                    caught.name === 'AbortError'
+                ) {
                     return;
                 }
 
@@ -227,7 +232,10 @@ export function TemplateVersionComparison({ slug, versions }: Props) {
     }, [fromId, requestKey, slug, t, toId]);
 
     const changesBySection = useMemo(() => {
-        const groups = new Map<string, QueryTemplateVersionComparisonChange[]>();
+        const groups = new Map<
+            string,
+            QueryTemplateVersionComparisonChange[]
+        >();
 
         comparison?.changes.forEach((change) => {
             groups.set(change.section, [
@@ -273,7 +281,9 @@ export function TemplateVersionComparison({ slug, versions }: Props) {
                             {t('templateGovernance.compareUnavailableTitle')}
                         </AlertTitle>
                         <AlertDescription>
-                            {t('templateGovernance.compareUnavailableDescription')}
+                            {t(
+                                'templateGovernance.compareUnavailableDescription',
+                            )}
                         </AlertDescription>
                     </Alert>
                 ) : (
@@ -301,10 +311,18 @@ export function TemplateVersionComparison({ slug, versions }: Props) {
                                             value={version.id}
                                             disabled={version.id === toId}
                                         >
-                                            {t('templateGovernance.versionOption', {
-                                                version: version.version_number,
-                                                status: t(STATUS_LABELS[version.status]),
-                                            })}
+                                            {t(
+                                                'templateGovernance.versionOption',
+                                                {
+                                                    version:
+                                                        version.version_number,
+                                                    status: t(
+                                                        STATUS_LABELS[
+                                                            version.status
+                                                        ],
+                                                    ),
+                                                },
+                                            )}
                                         </option>
                                     ))}
                                 </select>
@@ -332,10 +350,18 @@ export function TemplateVersionComparison({ slug, versions }: Props) {
                                             value={version.id}
                                             disabled={version.id === fromId}
                                         >
-                                            {t('templateGovernance.versionOption', {
-                                                version: version.version_number,
-                                                status: t(STATUS_LABELS[version.status]),
-                                            })}
+                                            {t(
+                                                'templateGovernance.versionOption',
+                                                {
+                                                    version:
+                                                        version.version_number,
+                                                    status: t(
+                                                        STATUS_LABELS[
+                                                            version.status
+                                                        ],
+                                                    ),
+                                                },
+                                            )}
                                         </option>
                                     ))}
                                 </select>
@@ -365,11 +391,15 @@ export function TemplateVersionComparison({ slug, versions }: Props) {
                                         size="sm"
                                         variant="outline"
                                         onClick={() =>
-                                            setReloadKey((current) => current + 1)
+                                            setReloadKey(
+                                                (current) => current + 1,
+                                            )
                                         }
                                     >
                                         <RefreshCw aria-hidden="true" />
-                                        {t('templateGovernance.retryComparison')}
+                                        {t(
+                                            'templateGovernance.retryComparison',
+                                        )}
                                     </Button>
                                 </AlertDescription>
                             </Alert>
@@ -388,19 +418,30 @@ export function TemplateVersionComparison({ slug, versions }: Props) {
 
                                 <div className="flex flex-wrap gap-2 text-sm">
                                     <Badge variant="outline">
-                                        {t('templateGovernance.compareAddedCount', {
-                                            count: comparison.summary.added,
-                                        })}
+                                        {t(
+                                            'templateGovernance.compareAddedCount',
+                                            {
+                                                count: comparison.summary.added,
+                                            },
+                                        )}
                                     </Badge>
                                     <Badge variant="outline">
-                                        {t('templateGovernance.compareRemovedCount', {
-                                            count: comparison.summary.removed,
-                                        })}
+                                        {t(
+                                            'templateGovernance.compareRemovedCount',
+                                            {
+                                                count: comparison.summary
+                                                    .removed,
+                                            },
+                                        )}
                                     </Badge>
                                     <Badge variant="outline">
-                                        {t('templateGovernance.compareChangedCount', {
-                                            count: comparison.summary.changed,
-                                        })}
+                                        {t(
+                                            'templateGovernance.compareChangedCount',
+                                            {
+                                                count: comparison.summary
+                                                    .changed,
+                                            },
+                                        )}
                                     </Badge>
                                 </div>
 
@@ -408,7 +449,9 @@ export function TemplateVersionComparison({ slug, versions }: Props) {
                                     <Alert>
                                         <CircleHelp aria-hidden="true" />
                                         <AlertTitle>
-                                            {t('templateGovernance.compareIdenticalTitle')}
+                                            {t(
+                                                'templateGovernance.compareIdenticalTitle',
+                                            )}
                                         </AlertTitle>
                                         <AlertDescription>
                                             {t(
@@ -417,109 +460,123 @@ export function TemplateVersionComparison({ slug, versions }: Props) {
                                         </AlertDescription>
                                     </Alert>
                                 ) : (
-                                    changesBySection.map(([section, changes]) => (
-                                        <section
-                                            key={section}
-                                            className="space-y-3"
-                                            aria-labelledby={`comparison-section-${section}`}
-                                        >
-                                            <h3
-                                                id={`comparison-section-${section}`}
-                                                className="font-semibold"
+                                    changesBySection.map(
+                                        ([section, changes]) => (
+                                            <section
+                                                key={section}
+                                                className="space-y-3"
+                                                aria-labelledby={`comparison-section-${section}`}
                                             >
-                                                {sectionLabel(section, t)}
-                                            </h3>
-                                            <div className="overflow-x-auto rounded-lg border">
-                                                <table className="w-full min-w-[48rem] text-left text-sm">
-                                                    <caption className="sr-only">
-                                                        {t(
-                                                            'templateGovernance.compareTableCaption',
-                                                            {
-                                                                section:
-                                                                    sectionLabel(
-                                                                        section,
-                                                                        t,
-                                                                    ),
-                                                            },
-                                                        )}
-                                                    </caption>
-                                                    <thead className="bg-muted/70">
-                                                        <tr>
-                                                            <th
-                                                                scope="col"
-                                                                className="w-1/4 px-4 py-3 font-medium"
-                                                            >
-                                                                {t(
-                                                                    'templateGovernance.compareField',
-                                                                )}
-                                                            </th>
-                                                            <th
-                                                                scope="col"
-                                                                className="w-[37.5%] px-4 py-3 font-medium"
-                                                            >
-                                                                {t(
-                                                                    'templateGovernance.compareBefore',
-                                                                    {
-                                                                        version:
-                                                                            comparison
-                                                                                .from_version
-                                                                                .version_number,
-                                                                    },
-                                                                )}
-                                                            </th>
-                                                            <th
-                                                                scope="col"
-                                                                className="w-[37.5%] px-4 py-3 font-medium"
-                                                            >
-                                                                {t(
-                                                                    'templateGovernance.compareAfter',
-                                                                    {
-                                                                        version:
-                                                                            comparison
-                                                                                .to_version
-                                                                                .version_number,
-                                                                    },
-                                                                )}
-                                                            </th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y">
-                                                        {changes.map((change) => (
-                                                            <tr key={change.path}>
-                                                                <th
-                                                                    scope="row"
-                                                                    className="align-top px-4 py-3 font-normal"
-                                                                >
-                                                                    <code className="break-all text-xs">
-                                                                        {change.path}
-                                                                    </code>
-                                                                    <Badge
-                                                                        variant="outline"
-                                                                        className="mt-2 block w-fit"
-                                                                    >
-                                                                        {changeKindLabel(
-                                                                            change,
+                                                <h3
+                                                    id={`comparison-section-${section}`}
+                                                    className="font-semibold"
+                                                >
+                                                    {sectionLabel(section, t)}
+                                                </h3>
+                                                <div className="overflow-x-auto rounded-lg border">
+                                                    <table className="w-full min-w-[48rem] text-left text-sm">
+                                                        <caption className="sr-only">
+                                                            {t(
+                                                                'templateGovernance.compareTableCaption',
+                                                                {
+                                                                    section:
+                                                                        sectionLabel(
+                                                                            section,
                                                                             t,
-                                                                        )}
-                                                                    </Badge>
+                                                                        ),
+                                                                },
+                                                            )}
+                                                        </caption>
+                                                        <thead className="bg-muted/70">
+                                                            <tr>
+                                                                <th
+                                                                    scope="col"
+                                                                    className="w-1/4 px-4 py-3 font-medium"
+                                                                >
+                                                                    {t(
+                                                                        'templateGovernance.compareField',
+                                                                    )}
                                                                 </th>
-                                                                <td className="align-top px-4 py-3">
-                                                                    <DisplayValue
-                                                                        value={change.before}
-                                                                    />
-                                                                </td>
-                                                                <td className="align-top bg-muted/25 px-4 py-3">
-                                                                    <DisplayValue
-                                                                        value={change.after}
-                                                                    />
-                                                                </td>
+                                                                <th
+                                                                    scope="col"
+                                                                    className="w-[37.5%] px-4 py-3 font-medium"
+                                                                >
+                                                                    {t(
+                                                                        'templateGovernance.compareBefore',
+                                                                        {
+                                                                            version:
+                                                                                comparison
+                                                                                    .from_version
+                                                                                    .version_number,
+                                                                        },
+                                                                    )}
+                                                                </th>
+                                                                <th
+                                                                    scope="col"
+                                                                    className="w-[37.5%] px-4 py-3 font-medium"
+                                                                >
+                                                                    {t(
+                                                                        'templateGovernance.compareAfter',
+                                                                        {
+                                                                            version:
+                                                                                comparison
+                                                                                    .to_version
+                                                                                    .version_number,
+                                                                        },
+                                                                    )}
+                                                                </th>
                                                             </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </section>
-                                    ))
+                                                        </thead>
+                                                        <tbody className="divide-y">
+                                                            {changes.map(
+                                                                (change) => (
+                                                                    <tr
+                                                                        key={
+                                                                            change.path
+                                                                        }
+                                                                    >
+                                                                        <th
+                                                                            scope="row"
+                                                                            className="px-4 py-3 align-top font-normal"
+                                                                        >
+                                                                            <code className="text-xs break-all">
+                                                                                {
+                                                                                    change.path
+                                                                                }
+                                                                            </code>
+                                                                            <Badge
+                                                                                variant="outline"
+                                                                                className="mt-2 block w-fit"
+                                                                            >
+                                                                                {changeKindLabel(
+                                                                                    change,
+                                                                                    t,
+                                                                                )}
+                                                                            </Badge>
+                                                                        </th>
+                                                                        <td className="px-4 py-3 align-top">
+                                                                            <DisplayValue
+                                                                                value={
+                                                                                    change.before
+                                                                                }
+                                                                            />
+                                                                        </td>
+                                                                        <td className="bg-muted/25 px-4 py-3 align-top">
+                                                                            <DisplayValue
+                                                                                value={
+                                                                                    change.after
+                                                                                }
+                                                                            />
+                                                                        </td>
+                                                                    </tr>
+                                                                ),
+                                                            )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </section>
+                                        ),
+                                    )
                                 )}
                             </div>
                         )}

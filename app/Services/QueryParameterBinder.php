@@ -45,12 +45,6 @@ class QueryParameterBinder
         $normalised = [];
 
         foreach ($definitions as $index => $raw) {
-            if (! is_array($raw)) {
-                throw ValidationException::withMessages([
-                    "parameter_definitions.{$index}" => __('La definition du parametre est invalide.'),
-                ]);
-            }
-
             $key = (string) ($raw['key'] ?? '');
 
             if (preg_match('/^[a-z][a-z0-9_]{0,63}$/', $key) !== 1) {

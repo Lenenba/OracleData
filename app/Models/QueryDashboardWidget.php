@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Database\Factories\QueryDashboardWidgetFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -12,7 +13,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $dashboard_id
  * @property int $query_id
- * @property string $widget_type  kpi | table | chart
+ * @property string $widget_type kpi | table | chart
  * @property string|null $title
  * @property int $position
  * @property array<string, mixed>|null $widget_options
@@ -24,6 +25,7 @@ use Illuminate\Support\Carbon;
 #[Fillable(['dashboard_id', 'query_id', 'widget_type', 'title', 'position', 'widget_options'])]
 class QueryDashboardWidget extends Model
 {
+    /** @use HasFactory<QueryDashboardWidgetFactory> */
     use HasFactory;
 
     protected function casts(): array

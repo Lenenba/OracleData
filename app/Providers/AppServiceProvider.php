@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Models\User;
 use App\Services\FusionManager;
+use App\Services\ResourceDefinitionRegistry;
+use App\Services\Workers\WorkersResourceRegistry;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -19,6 +21,10 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->scoped(FusionManager::class);
+
+        // Registry des ResourceDefinitions — partagé pour la durée de la requête.
+        $this->app->scoped(WorkersResourceRegistry::class);
+        $this->app->scoped(ResourceDefinitionRegistry::class);
     }
 
     /**

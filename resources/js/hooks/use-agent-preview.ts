@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { store as storeAgentPreview } from '@/actions/App/Http/Controllers/QueryAgentPreviewController';
 import type { AgentRunStatus } from '@/hooks/use-agent-run';
 import { readCsrfToken } from '@/lib/csrf';
 import {
     cancel as cancelAgentRun,
     show as showAgentRun,
 } from '@/routes/agent-runs';
-import { store as storeAgentPreview } from '@/actions/App/Http/Controllers/QueryAgentPreviewController';
 
 const POLL_INTERVAL_MS = 2000;
 const TERMINAL = ['completed', 'failed', 'cancelled'] as const;

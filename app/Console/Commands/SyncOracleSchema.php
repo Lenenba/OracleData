@@ -22,7 +22,7 @@ class SyncOracleSchema extends Command
         $userEmail = $this->option('user');
         $resourceKey = $this->option('resource');
         $resources = is_string($resourceKey) && $resourceKey !== ''
-            ? array_values(array_filter([$catalog->find($resourceKey)]))
+            ? array_filter([$catalog->find($resourceKey)])
             : $catalog->all();
 
         if ($resources === []) {

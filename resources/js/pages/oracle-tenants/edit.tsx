@@ -29,7 +29,9 @@ export default function EditOracleTenant({ tenant }: TenantEditProps) {
     const { t, formatDate } = useI18n();
     const [isDefault, setIsDefault] = useState(tenant.is_default);
     const [isActive, setIsActive] = useState(tenant.is_active);
-    const [tenantType, setTenantType] = useState<'fusion' | 'oic'>(tenant.type ?? 'fusion');
+    const [tenantType, setTenantType] = useState<'fusion' | 'oic'>(
+        tenant.type ?? 'fusion',
+    );
 
     return (
         <>
@@ -109,7 +111,11 @@ export default function EditOracleTenant({ tenant }: TenantEditProps) {
                                 <Label htmlFor="type">
                                     {t('connections.type')}
                                 </Label>
-                                <input type="hidden" name="type" value={tenantType} />
+                                <input
+                                    type="hidden"
+                                    name="type"
+                                    value={tenantType}
+                                />
                                 <Select
                                     value={tenantType}
                                     onValueChange={(v) =>

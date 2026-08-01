@@ -17,13 +17,13 @@ class SemanticCatalogReader
     public function suggestions(string $locale, ?string $search = null): array
     {
         $catalog = $this->catalog();
-        $resourceIndex = collect($catalog['resources'] ?? [])
-            ->filter(fn (mixed $resource): bool => is_array($resource))
+        $resources = $this->arrayItems($catalog['resources'] ?? null);
+        $resourceIndex = collect($resources)
             ->keyBy(fn (array $resource): string => (string) ($resource['resource_key'] ?? ''));
         $suggestions = [];
 
-        foreach ($catalog['resources'] ?? [] as $resource) {
-            if (! is_array($resource) || ($resource['is_active'] ?? false) !== true) {
+        foreach ($resources as $resource) {
+            if (($resource['is_active'] ?? false) !== true) {
                 continue;
             }
 
@@ -33,8 +33,8 @@ class SemanticCatalogReader
             $description = $this->localizedString($translations, $locale, 'description');
             $synonyms = $this->localizedList($translations, $locale, 'synonyms');
             $fields = array_values(array_filter(
-                $resource['fields'] ?? [],
-                fn (mixed $field): bool => is_array($field) && ($field['is_active'] ?? false) === true,
+                $this->arrayItems($resource['fields'] ?? null),
+                fn (array $field): bool => ($field['is_active'] ?? false) === true,
             ));
             $rootFields = [];
             $childFields = [];
@@ -70,10 +70,9 @@ class SemanticCatalogReader
             $joinKeys = [];
             $localizedRelations = [];
 
-            foreach ($resource['relations'] ?? [] as $relation) {
+            foreach ($this->arrayItems($resource['relations'] ?? null) as $relation) {
                 if (
-                    ! is_array($relation)
-                    || ($relation['is_active'] ?? false) !== true
+                    ($relation['is_active'] ?? false) !== true
                     || ($relation['status'] ?? null) !== SemanticRelationStatus::Published->value
                 ) {
                     continue;
@@ -150,8 +149,8 @@ class SemanticCatalogReader
     {
         $terms = [];
 
-        foreach ($this->catalog()['glossary'] ?? [] as $term) {
-            if (! is_array($term) || ($term['is_active'] ?? false) !== true) {
+        foreach ($this->arrayItems($this->catalog()['glossary'] ?? null) as $term) {
+            if (($term['is_active'] ?? false) !== true) {
                 continue;
             }
 
@@ -200,7 +199,7 @@ class SemanticCatalogReader
     {
         $resources = collect($this->suggestions($locale))
             ->map(function (array $resource): string {
-                $relations = collect($resource['relations'])
+                $relations = collect($this->arrayItems($resource['relations'] ?? null))
                     ->map(fn (array $relation): string => $relation['label'])
                     ->implode(', ');
                 $line = sprintf(
@@ -234,7 +233,15 @@ class SemanticCatalogReader
     /** @return array<string, mixed> */
     public function catalog(): array
     {
-        return $this->currentVersion()?->catalog ?? [];
+        $version = $this->currentVersion();
+
+        if ($version === null) {
+            return [];
+        }
+
+        $catalog = $version->getAttribute('catalog');
+
+        return is_array($catalog) ? $catalog : [];
     }
 
     /**
@@ -243,10 +250,25 @@ class SemanticCatalogReader
      */
     private function translations(array $entity): array
     {
-        return array_values(array_filter(
-            $entity['translations'] ?? [],
-            fn (mixed $translation): bool => is_array($translation),
-        ));
+        return $this->arrayItems($entity['translations'] ?? null);
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function arrayItems(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $items = [];
+
+        foreach ($value as $item) {
+            if (is_array($item)) {
+                $items[] = $item;
+            }
+        }
+
+        return $items;
     }
 
     /** @param list<array<string, mixed>> $translations */

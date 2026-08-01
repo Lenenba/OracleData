@@ -29,6 +29,7 @@ use Illuminate\Support\Carbon;
  * @property OracleExecutionPolicy $execution_policy
  * @property array<string, mixed>|null $parameters
  * @property list<array<string, mixed>>|null $parameter_definitions
+ * @property array<string, mixed>|null $query_graph
  * @property QueryAccessLevel $access_level
  * @property int|null $category_id
  * @property int|null $query_template_id
@@ -54,7 +55,7 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, QuerySemanticResource> $semanticResources
  * @property-read Collection<int, OracleSchemaImpact> $schemaImpacts
  */
-#[Fillable(['name', 'description', 'resource_path', 'tenant_key', 'oracle_tenant_id', 'mode', 'execution_policy', 'parameters', 'parameter_definitions', 'access_level', 'category_id', 'query_template_id', 'query_template_version_id'])]
+#[Fillable(['name', 'description', 'resource_path', 'query_graph', 'tenant_key', 'oracle_tenant_id', 'mode', 'execution_policy', 'parameters', 'parameter_definitions', 'access_level', 'category_id', 'query_template_id', 'query_template_version_id'])]
 class Query extends Model
 {
     /** @use HasFactory<QueryFactory> */
@@ -70,6 +71,7 @@ class Query extends Model
         return [
             'parameters' => 'array',
             'parameter_definitions' => 'array',
+            'query_graph' => 'array',
             'execution_policy' => OracleExecutionPolicy::class,
             'access_level' => QueryAccessLevel::class,
             'execution_count' => 'integer',

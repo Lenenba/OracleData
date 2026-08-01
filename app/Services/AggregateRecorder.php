@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\QueryExecutionAggregate;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Lot 10C — upserts the daily execution aggregate for a personal query after
@@ -21,19 +20,17 @@ class AggregateRecorder
 {
     /**
      * Update or create the daily aggregate row for the given query.
-     *
-     * @param  non-empty-string  $periodDate  ISO date string in UTC (Y-m-d).
      */
     public function record(
         int $queryId,
-        string $periodDate,
         int $rowsCount,
         int $durationMs,
         Carbon $ranAt,
     ): void {
+        $periodDate = $ranAt->copy()->utc()->toDateString();
         $existing = QueryExecutionAggregate::query()
             ->where('query_id', $queryId)
-            ->where('period_date', $periodDate)
+            ->whereDate('period_date', $periodDate)
             ->lockForUpdate()
             ->first();
 

@@ -147,7 +147,7 @@ class QueryExportController extends Controller
             Response::HTTP_NOT_FOUND,
         );
 
-        $format = $queryExport->format ?: 'csv';
+        $format = $queryExport->format;
 
         [$mime, $extension] = match ($format) {
             'xlsx' => ['application/vnd.ms-excel', 'xls'],

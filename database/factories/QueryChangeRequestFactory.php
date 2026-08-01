@@ -28,7 +28,7 @@ class QueryChangeRequestFactory extends Factory
     {
         return $this->state(fn (): array => [
             'status' => QueryChangeRequestStatus::ACCEPTED,
-            'status_changed_by_user_id' => $actor?->id ?? User::factory(),
+            'status_changed_by_user_id' => $actor->id ?? User::factory(),
             'status_changed_at' => now(),
         ]);
     }
@@ -37,7 +37,7 @@ class QueryChangeRequestFactory extends Factory
     {
         return $this->state(fn (): array => [
             'status' => QueryChangeRequestStatus::COMPLETED,
-            'status_changed_by_user_id' => $actor?->id ?? User::factory(),
+            'status_changed_by_user_id' => $actor->id ?? User::factory(),
             'status_changed_at' => now(),
         ]);
     }

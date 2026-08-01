@@ -444,6 +444,7 @@ class QueryTemplateGovernanceService
     /**
      * @param  array<string, mixed>  $definition
      * @param  array<string, array<string, mixed>>  $translations
+     * @param  list<array<string, mixed>>|null  $qualityRules
      */
     public function updateDraft(
         QueryTemplate $template,
@@ -1071,9 +1072,7 @@ class QueryTemplateGovernanceService
         $allowedFields = $this->qualityOutputFields($definition);
 
         foreach ($rules as $index => $rule) {
-            if (! is_array($rule)
-                || array_is_list($rule)
-                || array_diff(array_keys($rule), self::QUALITY_RULE_KEYS) !== []) {
+            if (array_diff(array_keys($rule), self::QUALITY_RULE_KEYS) !== []) {
                 throw ValidationException::withMessages([
                     "quality_rules.{$index}" => __('La définition de cette assertion contient des clés non autorisées.'),
                 ]);
@@ -1235,7 +1234,10 @@ class QueryTemplateGovernanceService
         return $fields;
     }
 
-    /** @param array<string, mixed> $definition @return list<string> */
+    /**
+     * @param  array<string, mixed>  $definition
+     * @return list<string>
+     */
     private function qualityOutputFields(array $definition): array
     {
         $parameters = is_array($definition['parameters'] ?? null) ? $definition['parameters'] : [];
@@ -1250,7 +1252,7 @@ class QueryTemplateGovernanceService
 
         if ($fields === []) {
             $resource = $this->catalog->find((string) ($definition['resource_key'] ?? ''));
-            $fields = is_array($resource['fields'] ?? null) ? $resource['fields'] : [];
+            $fields = $this->normalizeStringList($resource['fields'] ?? []);
         }
 
         return array_values(array_unique($fields));

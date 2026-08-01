@@ -27,7 +27,7 @@ class RuntimeQueryParameterBinder
      * stored parameters, honouring the binding rules defined by the owner.
      *
      * @param  array<string, mixed>  $input  User-supplied key-value map.
-     * @return array<string, mixed>  Merged Oracle parameter array.
+     * @return array<string, mixed> Merged Oracle parameter array.
      *
      * @throws ValidationException
      * @throws InvalidArgumentException

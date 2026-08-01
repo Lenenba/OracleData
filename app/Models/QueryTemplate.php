@@ -220,7 +220,7 @@ class QueryTemplate extends Model
         return $this->belongsTo(User::class, 'technical_owner_user_id');
     }
 
-    /** @return BelongsToMany<User, $this> */
+    /** @return BelongsToMany<User, $this, QueryTemplateRoleAssignment, 'pivot'> */
     public function governanceUsers(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'query_template_role_user')

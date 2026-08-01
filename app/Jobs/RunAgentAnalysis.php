@@ -67,7 +67,7 @@ class RunAgentAnalysis implements ShouldQueue
         $intentOverride = is_array($run->result) ? ($run->result['_intent_override'] ?? null) : null;
         $intent = is_string($intentOverride) && $intentOverride !== ''
             ? $intentOverride
-            : (string) ($query?->description ?? '');
+            : (string) ($query->description ?? '');
 
         // A cancellation requested before the worker picked the job up resolves
         // immediately, without any Oracle or LLM call.
@@ -164,14 +164,14 @@ class RunAgentAnalysis implements ShouldQueue
 
             $run->forceFill([
                 'query_execution_id' => $execution->id,
-                'oracle_tenant_id'   => $execution->oracle_tenant_id,
+                'oracle_tenant_id' => $execution->oracle_tenant_id,
                 'auth_connection_id' => $execution->auth_connection_id,
             ])->save();
         }
 
         $run->forceFill([
-            'status'    => AgentAnalysisRunStatus::Completed,
-            'result'    => $storedResult,
+            'status' => AgentAnalysisRunStatus::Completed,
+            'result' => $storedResult,
             'row_count' => $rowCount,
             'finished_at' => now(),
         ])->save();
@@ -211,14 +211,14 @@ class RunAgentAnalysis implements ShouldQueue
 
             $run->forceFill([
                 'query_execution_id' => $execution->id,
-                'oracle_tenant_id'   => $execution->oracle_tenant_id,
+                'oracle_tenant_id' => $execution->oracle_tenant_id,
                 'auth_connection_id' => $execution->auth_connection_id,
             ])->save();
         }
 
         $run->forceFill([
-            'status'      => AgentAnalysisRunStatus::Failed,
-            'error_code'  => 'agent_error',
+            'status' => AgentAnalysisRunStatus::Failed,
+            'error_code' => 'agent_error',
             'finished_at' => now(),
         ])->save();
 
@@ -254,28 +254,28 @@ class RunAgentAnalysis implements ShouldQueue
      * Lot 11B — inclut confidence et sources_used dans le payload pour l'affichage
      * de la provenance et du niveau de confiance dans le frontend.
      *
-     * @param  array{columns: list<string>, rows: array<int, mixed>, analysis: string, confidence: string, sources_used: list<string>, oracleCalls: list<array{resource: string, params: array<string, mixed>, count: int}>}  $result
+     * @param  array{columns: list<string>, rows: array<int, mixed>, analysis: string, confidence?: string, sources_used?: list<string>, oracleCalls: list<array{resource: string, params: array<string, mixed>, count: int}>}  $result
      * @param  array<int, mixed>  $rows
      * @return array<string, mixed>
      */
     private function normalizedResult(array $result, array $rows, int $rowCount, ?string $error): array
     {
         return [
-            'mode'          => 'agent',
-            'tenant'        => $this->tenantKey,
-            'resource'      => null,
-            'parameters'    => null,
-            'columns'       => $result['columns'],
-            'analysis'      => $result['analysis'],
-            'confidence'    => $result['confidence'] ?? 'medium',
-            'sources_used'  => $result['sources_used'] ?? [],
-            'items'         => array_slice($rows, 0, AgentAnalysisRun::MAX_RESULT_ROWS),
-            'count'         => $rowCount,
-            'hasMore'       => false,
-            'oracleCalls'   => $result['oracleCalls'],
+            'mode' => 'agent',
+            'tenant' => $this->tenantKey,
+            'resource' => null,
+            'parameters' => null,
+            'columns' => $result['columns'],
+            'analysis' => $result['analysis'],
+            'confidence' => $result['confidence'] ?? 'medium',
+            'sources_used' => $result['sources_used'] ?? [],
+            'items' => array_slice($rows, 0, AgentAnalysisRun::MAX_RESULT_ROWS),
+            'count' => $rowCount,
+            'hasMore' => false,
+            'oracleCalls' => $result['oracleCalls'],
             'clarification' => null,
-            'error'         => $error,
-            'truncated'     => $rowCount > AgentAnalysisRun::MAX_RESULT_ROWS,
+            'error' => $error,
+            'truncated' => $rowCount > AgentAnalysisRun::MAX_RESULT_ROWS,
         ];
     }
 

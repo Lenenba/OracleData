@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AuthConnection;
 use App\Models\OracleTenant;
 use App\Services\OicClient;
 use Illuminate\Http\Request;
@@ -36,10 +37,10 @@ class OicMonitorController extends Controller
 
         try {
             $raw = $client->integrations();
-            $integrations = $raw['items'] ?? [];
+            $integrations = $this->items($raw);
 
             $statsRaw = $client->monitoringIntegrations();
-            $monitoringStats = collect($statsRaw['items'] ?? [])
+            $monitoringStats = collect($this->items($statsRaw))
                 ->keyBy('id')
                 ->all();
         } catch (RuntimeException $e) {
@@ -51,24 +52,24 @@ class OicMonitorController extends Controller
             $stats = $monitoringStats[$integration['id'] ?? ''] ?? [];
 
             return [
-                'id'               => $integration['id'] ?? null,
-                'code'             => $integration['code'] ?? null,
-                'name'             => $integration['name'] ?? '—',
-                'description'      => $integration['description'] ?? null,
-                'status'           => $integration['status'] ?? null,
-                'style'            => $integration['style'] ?? null,
-                'last_updated'     => $integration['lastUpdatedTime'] ?? null,
-                'completed_count'  => (int) ($stats['completedInstancesCount'] ?? 0),
-                'failed_count'     => (int) ($stats['failedInstancesCount'] ?? 0),
-                'aborted_count'    => (int) ($stats['abortedInstancesCount'] ?? 0),
+                'id' => $integration['id'] ?? null,
+                'code' => $integration['code'] ?? null,
+                'name' => $integration['name'] ?? '—',
+                'description' => $integration['description'] ?? null,
+                'status' => $integration['status'] ?? null,
+                'style' => $integration['style'] ?? null,
+                'last_updated' => $integration['lastUpdatedTime'] ?? null,
+                'completed_count' => (int) ($stats['completedInstancesCount'] ?? 0),
+                'failed_count' => (int) ($stats['failedInstancesCount'] ?? 0),
+                'aborted_count' => (int) ($stats['abortedInstancesCount'] ?? 0),
                 'processing_count' => (int) ($stats['processingInstancesCount'] ?? 0),
             ];
         }, $integrations);
 
         return Inertia::render('oic-monitor/index', [
-            'tenant'       => $this->tenantShape($oracleTenant),
+            'tenant' => $this->tenantShape($oracleTenant),
             'integrations' => $rows,
-            'error'        => $error,
+            'error' => $error,
         ]);
     }
 
@@ -88,29 +89,29 @@ class OicMonitorController extends Controller
         try {
             // Load integration metadata.
             $allRaw = $client->integrations(['q' => 'id='.$integrationId]);
-            $integration = collect($allRaw['items'] ?? [])
+            $integration = collect($this->items($allRaw))
                 ->firstWhere('id', $integrationId);
 
             // Load the 50 most recent instances.
             $instRaw = $client->instances($integrationId, ['limit' => 50]);
             $instances = array_map(fn (array $inst): array => [
-                'id'          => $inst['id'] ?? null,
-                'status'      => $inst['status'] ?? null,
-                'started_at'  => $inst['startTime'] ?? null,
+                'id' => $inst['id'] ?? null,
+                'status' => $inst['status'] ?? null,
+                'started_at' => $inst['startTime'] ?? null,
                 'finished_at' => $inst['endTime'] ?? null,
-                'error'       => $inst['errorMessage'] ?? null,
+                'error' => $inst['errorMessage'] ?? null,
                 'business_id' => $inst['businessIdentifiers'][0]['value'] ?? null,
-            ], $instRaw['items'] ?? []);
+            ], $this->items($instRaw));
         } catch (RuntimeException $e) {
             $error = $e->getMessage();
         }
 
         return Inertia::render('oic-monitor/show', [
-            'tenant'         => $this->tenantShape($oracleTenant),
+            'tenant' => $this->tenantShape($oracleTenant),
             'integration_id' => $integrationId,
-            'integration'    => $integration,
-            'instances'      => $instances,
-            'error'          => $error,
+            'integration' => $integration,
+            'instances' => $instances,
+            'error' => $error,
         ]);
     }
 
@@ -129,12 +130,12 @@ class OicMonitorController extends Controller
         try {
             $raw = $client->errors();
             $errors = array_map(fn (array $e): array => [
-                'instance_id'      => $e['id'] ?? null,
-                'integration_id'   => $e['integrationId'] ?? null,
+                'instance_id' => $e['id'] ?? null,
+                'integration_id' => $e['integrationId'] ?? null,
                 'integration_name' => $e['integrationName'] ?? null,
-                'error_message'    => $e['errorMessage'] ?? null,
-                'started_at'       => $e['startTime'] ?? null,
-            ], $raw['items'] ?? []);
+                'error_message' => $e['errorMessage'] ?? null,
+                'started_at' => $e['startTime'] ?? null,
+            ], $this->items($raw));
         } catch (RuntimeException $e) {
             $error = $e->getMessage();
         }
@@ -142,13 +143,13 @@ class OicMonitorController extends Controller
         return Inertia::render('oic-monitor/errors', [
             'tenant' => $this->tenantShape($oracleTenant),
             'errors' => $errors,
-            'error'  => $error,
+            'error' => $error,
         ]);
     }
 
     private function buildClient(OracleTenant $tenant): OicClient
     {
-        /** @var \App\Models\AuthConnection|null $connection */
+        /** @var AuthConnection|null $connection */
         $connection = $tenant->authConnections()
             ->where('auth_type', 'basic')
             ->where('is_active', true)
@@ -173,9 +174,34 @@ class OicMonitorController extends Controller
     private function tenantShape(OracleTenant $tenant): array
     {
         return [
-            'id'    => $tenant->id,
-            'key'   => $tenant->key,
+            'id' => $tenant->id,
+            'key' => $tenant->key,
             'label' => $tenant->label,
         ];
+    }
+
+    /**
+     * Normalize the untyped OIC envelope before using its items in collections.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return list<array<string, mixed>>
+     */
+    private function items(array $payload): array
+    {
+        $items = $payload['items'] ?? null;
+
+        if (! is_array($items)) {
+            return [];
+        }
+
+        $normalized = [];
+
+        foreach ($items as $item) {
+            if (is_array($item)) {
+                $normalized[] = $item;
+            }
+        }
+
+        return $normalized;
     }
 }

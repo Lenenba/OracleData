@@ -8,13 +8,11 @@ use App\Models\QueryChain;
 use App\Services\FusionManager;
 use App\Services\QueryChainService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Gate;
-use Inertia\Inertia;
-use RuntimeException;
 use InvalidArgumentException;
+use RuntimeException;
 
 /**
  * Lot chaining — CRUD des chaînes de requêtes + exécution du chaînage.
@@ -38,14 +36,14 @@ class QueryChainController extends Controller
             ->with(['secondaryQuery:id,name,resource_path'])
             ->get()
             ->map(fn (QueryChain $c): array => [
-                'id'                 => $c->id,
+                'id' => $c->id,
                 'secondary_query_id' => $c->secondary_query_id,
-                'secondary_name'     => $c->secondaryQuery?->name,
-                'extraction_field'   => $c->extraction_field,
-                'injection_param'    => $c->injection_param,
+                'secondary_name' => $c->secondaryQuery->name,
+                'extraction_field' => $c->extraction_field,
+                'injection_param' => $c->injection_param,
                 'injection_operator' => $c->injection_operator,
-                'label'              => $c->label,
-                'position'           => $c->position,
+                'label' => $c->label,
+                'position' => $c->position,
             ]);
 
         return response()->json($chains);
@@ -78,24 +76,24 @@ class QueryChainController extends Controller
         );
 
         $chain = QueryChain::create([
-            'primary_query_id'   => $query->id,
+            'primary_query_id' => $query->id,
             'secondary_query_id' => $secondaryId,
-            'user_id'            => $request->user()->id,
-            'extraction_field'   => $v['extraction_field'],
-            'injection_param'    => $v['injection_param'],
+            'user_id' => $request->user()->id,
+            'extraction_field' => $v['extraction_field'],
+            'injection_param' => $v['injection_param'],
             'injection_operator' => $v['injection_operator'],
-            'label'              => $v['label'] ?? null,
-            'position'           => $v['position'] ?? ($count),
+            'label' => $v['label'] ?? null,
+            'position' => $v['position'] ?? ($count),
         ]);
 
         return response()->json([
-            'id'                 => $chain->id,
+            'id' => $chain->id,
             'secondary_query_id' => $chain->secondary_query_id,
-            'extraction_field'   => $chain->extraction_field,
-            'injection_param'    => $chain->injection_param,
+            'extraction_field' => $chain->extraction_field,
+            'injection_param' => $chain->injection_param,
             'injection_operator' => $chain->injection_operator,
-            'label'              => $chain->label,
-            'position'           => $chain->position,
+            'label' => $chain->label,
+            'position' => $chain->position,
         ], Response::HTTP_CREATED);
     }
 
@@ -110,11 +108,11 @@ class QueryChainController extends Controller
 
         $v = $request->validated();
         $chain->update([
-            'extraction_field'   => $v['extraction_field'],
-            'injection_param'    => $v['injection_param'],
+            'extraction_field' => $v['extraction_field'],
+            'injection_param' => $v['injection_param'],
             'injection_operator' => $v['injection_operator'],
-            'label'              => $v['label'] ?? null,
-            'position'           => $v['position'] ?? $chain->position,
+            'label' => $v['label'] ?? null,
+            'position' => $v['position'] ?? $chain->position,
         ]);
 
         return response()->json(['ok' => true]);
@@ -152,10 +150,18 @@ class QueryChainController extends Controller
 
         $validated = $request->validate([
             'primary_items' => ['required', 'array', 'max:500'],
-            'tenant'        => ['required', 'string'],
+            'primary_items.*' => ['array'],
+            'tenant' => ['required', 'string'],
         ]);
 
         $tenantKey = (string) $validated['tenant'];
+        $primaryItems = [];
+
+        foreach ($validated['primary_items'] as $item) {
+            if (is_array($item)) {
+                $primaryItems[] = $item;
+            }
+        }
 
         abort_unless(
             $fusion->forUser($request->user())->has($tenantKey),
@@ -166,7 +172,7 @@ class QueryChainController extends Controller
         try {
             $result = $service->runSecondary(
                 $chain,
-                (array) $validated['primary_items'],
+                $primaryItems,
                 $tenantKey,
                 $request->user(),
             );

@@ -78,7 +78,7 @@ class QueryCopilotController extends Controller
 
         return response()->json([
             'suggestion' => $resolution,
-            'resources' => array_values(array_slice($scored, 0, 6)),
+            'resources' => array_slice($scored, 0, 6),
         ]);
     }
 }

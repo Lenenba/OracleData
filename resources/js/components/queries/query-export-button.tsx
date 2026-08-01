@@ -56,11 +56,7 @@ export function QueryExportButton({
                     onClick={() => startExport(format)}
                     disabled={disabled || exporter.isActive}
                 >
-                    {exporter.isActive ? (
-                        <Spinner />
-                    ) : (
-                        FORMAT_ICONS[format]
-                    )}
+                    {exporter.isActive ? <Spinner /> : FORMAT_ICONS[format]}
                     {t('queries.exportServer')}
                 </Button>
 
@@ -74,8 +70,12 @@ export function QueryExportButton({
                             disabled={disabled || exporter.isActive}
                             aria-label={t('queries.exportFormatChoose')}
                         >
-                            <span className="sr-only">{t('queries.exportFormatChoose')}</span>
-                            <span className="text-xs text-muted-foreground">▾</span>
+                            <span className="sr-only">
+                                {t('queries.exportFormatChoose')}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                                ▾
+                            </span>
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">

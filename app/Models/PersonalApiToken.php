@@ -44,18 +44,18 @@ class PersonalApiToken extends Model
 {
     public const string SCOPE_READ_QUERIES = 'read:queries';
 
-    public const string SCOPE_RUN_QUERIES  = 'run:queries';
+    public const string SCOPE_RUN_QUERIES = 'run:queries';
 
     /** @return array<string, string> */
     protected function casts(): array
     {
         return [
-            'scopes'               => 'array',
-            'is_active'            => 'boolean',
-            'requests_today'       => 'integer',
-            'daily_limit'          => 'integer',
-            'last_used_at'         => 'datetime',
-            'expires_at'           => 'datetime',
+            'scopes' => 'array',
+            'is_active' => 'boolean',
+            'requests_today' => 'integer',
+            'daily_limit' => 'integer',
+            'last_used_at' => 'datetime',
+            'expires_at' => 'datetime',
         ];
     }
 
@@ -101,7 +101,7 @@ class PersonalApiToken extends Model
 
         if ($this->requests_today_date !== $today) {
             $this->forceFill([
-                'requests_today'      => 0,
+                'requests_today' => 0,
                 'requests_today_date' => $today,
             ])->save();
         }

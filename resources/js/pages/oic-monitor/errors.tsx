@@ -73,7 +73,7 @@ export default function OicMonitorErrors({ tenant, errors, error }: Props) {
                                             {err.integration_id}
                                         </code>
                                     </td>
-                                    <td className="tabular-nums text-sm text-muted-foreground">
+                                    <td className="text-sm text-muted-foreground tabular-nums">
                                         {err.started_at
                                             ? formatDate(err.started_at, {
                                                   dateStyle: 'medium',
