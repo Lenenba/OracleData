@@ -7,15 +7,14 @@ use App\Models\OracleTenant;
 use App\Rules\SafeOracleBaseUrl;
 use App\Services\FusionClient;
 use App\Services\FusionManager;
-use App\Services\OicClient;
 use App\Services\TenantConnectionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
-use RuntimeException;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
 
 class OracleTenantController extends Controller
 {
@@ -58,19 +57,19 @@ class OracleTenantController extends Controller
             'base_url' => ['required', 'url', 'max:2048', new SafeOracleBaseUrl],
             'username' => ['required', 'string'],
             'password' => ['required', 'string'],
-            'type'     => ['nullable', 'in:fusion,oic'],
+            'type' => ['nullable', 'in:fusion,oic'],
         ]);
 
-        $baseUrl  = rtrim($validated['base_url'], '/');
+        $baseUrl = rtrim($validated['base_url'], '/');
         $username = $validated['username'];
         $password = $validated['password'];
-        $type     = $validated['type'] ?? 'fusion';
+        $type = $validated['type'] ?? 'fusion';
 
         // OIC credentials cannot be probed via the admin REST API without an
         // OAuth token. We accept them as-is and verify on the first real call.
         if ($type === 'oic') {
             return response()->json([
-                'ok'      => true,
+                'ok' => true,
                 'message' => __('Identifiants OIC enregistrés. La connexion sera vérifiée lors du premier accès au monitoring.'),
             ]);
         }
@@ -82,7 +81,7 @@ class OracleTenantController extends Controller
         }
 
         return response()->json([
-            'ok'      => $ok,
+            'ok' => $ok,
             'message' => $ok
                 ? __('Connexion Oracle réussie.')
                 : __("Impossible de joindre cet environnement Oracle. Vérifiez l'URL et les identifiants."),

@@ -267,6 +267,6 @@ test('dashboard query count stays bounded with many accessible rows', function (
     $queryCount = count(DB::getQueryLog());
     DB::disableQueryLog();
 
-    // Two bounded queries resolve current group IDs and applicable group grants.
-    expect($queryCount)->toBeLessThanOrEqual(13);
+    // The global Inertia props also resolve accessible Oracle and OIC tenants.
+    expect($queryCount)->toBeLessThanOrEqual(14);
 });

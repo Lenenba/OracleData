@@ -215,10 +215,13 @@ class SemanticCatalogGovernanceService
     }
 
     /**
-     * @param  HasMany<Model, *>  $relation
+     * @template TRelatedModel of Model
+     * @template TDeclaringModel of Model
+     *
+     * @param  HasMany<TRelatedModel, TDeclaringModel>  $relation
      * @param  array<string, mixed>  $translations
      */
-    private function syncTranslations($relation, array $translations): void
+    private function syncTranslations(HasMany $relation, array $translations): void
     {
         foreach (self::LOCALES as $locale) {
             $payload = (array) ($translations[$locale] ?? []);

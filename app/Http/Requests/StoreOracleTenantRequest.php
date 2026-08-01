@@ -63,14 +63,14 @@ class StoreOracleTenantRequest extends FormRequest
                 Rule::unique('oracle_tenants', 'key')
                     ->where(fn ($query) => $query->where('user_id', $this->user()?->id)),
             ],
-            'type'      => ['sometimes', Rule::in(['fusion', 'oic'])],
-            'label'     => ['required', 'string', 'max:255'],
-            'base_url'  => ['required', 'url', 'max:2048', new SafeOracleBaseUrl],
-            'username'  => ['required', 'string', 'max:255'],
-            'password'  => ['required', 'string', 'max:1000'],
+            'type' => ['sometimes', Rule::in(['fusion', 'oic'])],
+            'label' => ['required', 'string', 'max:255'],
+            'base_url' => ['required', 'url', 'max:2048', new SafeOracleBaseUrl],
+            'username' => ['required', 'string', 'max:255'],
+            'password' => ['required', 'string', 'max:1000'],
             'auth_type' => ['sometimes', Rule::in(['basic'])],
             'is_default' => ['boolean'],
-            'is_active'  => ['boolean'],
+            'is_active' => ['boolean'],
         ];
     }
 }

@@ -11,6 +11,7 @@ use App\Services\FusionManager;
 use App\Services\PostmanCollectionImporter;
 use App\Services\SemanticLineageService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -116,22 +117,22 @@ class ImportPostmanQueries
                 // Build a readable name — prefix with folder when present.
                 $name = $candidate['name'];
 
-                if (isset($candidate['folder']) && $candidate['folder'] !== '' && $candidate['folder'] !== null) {
-                    $name = \Illuminate\Support\Str::limit((string) $candidate['folder'], 40, '').' / '.$name;
+                if (isset($candidate['folder']) && $candidate['folder'] !== '') {
+                    $name = Str::limit((string) $candidate['folder'], 40, '').' / '.$name;
                 }
 
-                $name = \Illuminate\Support\Str::limit($name, 255, '');
+                $name = Str::limit($name, 255, '');
 
                 $query = $user->queries()->create([
-                    'name'             => $name,
-                    'description'      => null,
-                    'resource_path'    => $candidate['resource_path'],
-                    'mode'             => 'single',
-                    'access_level'     => QueryAccessLevel::PRIVATE,
+                    'name' => $name,
+                    'description' => null,
+                    'resource_path' => $candidate['resource_path'],
+                    'mode' => 'single',
+                    'access_level' => QueryAccessLevel::PRIVATE,
                     'execution_policy' => OracleExecutionPolicy::BEST_EFFORT,
-                    'tenant_key'       => $tenantKey,
+                    'tenant_key' => $tenantKey,
                     'oracle_tenant_id' => $tenantId,
-                    'parameters'       => $candidate['parameters'] !== [] ? $candidate['parameters'] : null,
+                    'parameters' => $candidate['parameters'] !== [] ? $candidate['parameters'] : null,
                 ]);
 
                 $lineageDefinition = (array) $candidate['parameters'];
@@ -146,18 +147,18 @@ class ImportPostmanQueries
             }
 
             $this->audit->record($user, 'query.collection_imported', $user, [
-                'candidates_count'              => count($candidates),
-                'selected_count'                => count($selected),
-                'created_count'                 => $created,
-                'skipped_existing_count'        => $skippedExisting,
+                'candidates_count' => count($candidates),
+                'selected_count' => count($selected),
+                'created_count' => $created,
+                'skipped_existing_count' => $skippedExisting,
                 'skipped_invalid_selection_count' => $skippedInvalidSelection,
             ]);
 
             return [
-                'created'                   => $created,
-                'skipped_existing'          => $skippedExisting,
+                'created' => $created,
+                'skipped_existing' => $skippedExisting,
                 'skipped_invalid_selection' => $skippedInvalidSelection,
-                'selected'                  => count($selected),
+                'selected' => count($selected),
             ];
         });
     }

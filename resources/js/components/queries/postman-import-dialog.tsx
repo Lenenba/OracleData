@@ -505,8 +505,16 @@ export function PostmanImportDialog({ tenants, defaultTenant }: Props) {
                     <div className="flex gap-1 rounded-lg border bg-muted/30 p-1">
                         {(
                             [
-                                { id: 'file', icon: Upload, label: t('queries.importFileTab') },
-                                { id: 'catalog', icon: BookOpen, label: t('queries.importCatalogTab') },
+                                {
+                                    id: 'file',
+                                    icon: Upload,
+                                    label: t('queries.importFileTab'),
+                                },
+                                {
+                                    id: 'catalog',
+                                    icon: BookOpen,
+                                    label: t('queries.importCatalogTab'),
+                                },
                             ] as const
                         ).map(({ id, icon: Icon, label }) => (
                             <button
@@ -575,15 +583,29 @@ export function PostmanImportDialog({ tenants, defaultTenant }: Props) {
                                                 name="catalog-entry"
                                                 value={entry.id}
                                                 checked={catalogId === entry.id}
-                                                disabled={previewing || importing}
-                                                onChange={() => setCatalogId(entry.id)}
+                                                disabled={
+                                                    previewing || importing
+                                                }
+                                                onChange={() =>
+                                                    setCatalogId(entry.id)
+                                                }
                                                 className="mt-1"
                                             />
                                             <span className="min-w-0 flex-1">
-                                                <span className="block text-sm font-medium">{entry.label}</span>
-                                                <span className="block text-xs text-muted-foreground">{entry.description}</span>
+                                                <span className="block text-sm font-medium">
+                                                    {entry.label}
+                                                </span>
                                                 <span className="block text-xs text-muted-foreground">
-                                                    {entry.itemCount} {t('queries.importPreviewSummary', { count: entry.itemCount })}
+                                                    {entry.description}
+                                                </span>
+                                                <span className="block text-xs text-muted-foreground">
+                                                    {entry.itemCount}{' '}
+                                                    {t(
+                                                        'queries.importPreviewSummary',
+                                                        {
+                                                            count: entry.itemCount,
+                                                        },
+                                                    )}
                                                 </span>
                                             </span>
                                         </label>
@@ -594,7 +616,12 @@ export function PostmanImportDialog({ tenants, defaultTenant }: Props) {
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                disabled={catalogId === '' || previewing || importing || catalogLoading}
+                                disabled={
+                                    catalogId === '' ||
+                                    previewing ||
+                                    importing ||
+                                    catalogLoading
+                                }
                                 onClick={() => void loadFromCatalog()}
                             >
                                 {catalogLoading ? (

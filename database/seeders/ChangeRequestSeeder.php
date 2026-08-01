@@ -16,23 +16,23 @@ class ChangeRequestSeeder extends Seeder
      */
     public function run(): void
     {
-        $admin   = User::query()->where('email', 'test@example.com')->firstOrFail();
+        $admin = User::query()->where('email', 'test@example.com')->firstOrFail();
         $analyst = User::query()->where('email', 'analyste@oracledata.test')->firstOrFail();
         $finance = User::query()->where('email', 'finance@oracledata.test')->firstOrFail();
 
-        $poQuery      = Query::query()->where('name', 'Bons de commande ouverts')->first();
+        $poQuery = Query::query()->where('name', 'Bons de commande ouverts')->first();
         $invoiceQuery = Query::query()->where('name', 'Factures fournisseurs à payer')->first();
-        $suppQuery    = Query::query()->where('name', 'Fournisseurs actifs avec sites')->first();
-        $hcmQuery     = Query::query()->where('name', 'Employés HCM actifs')->first();
-        $reqQuery     = Query::query()->where('name', "Demandes d'achat récentes")->first();
+        $suppQuery = Query::query()->where('name', 'Fournisseurs actifs avec sites')->first();
+        $hcmQuery = Query::query()->where('name', 'Employés HCM actifs')->first();
+        $reqQuery = Query::query()->where('name', "Demandes d'achat récentes")->first();
 
         // ── PENDING — awaiting owner decision ────────────────────────────────
         if ($poQuery) {
             $cr = QueryChangeRequest::query()->firstOrCreate(
                 [
-                    'query_id'              => $poQuery->id,
-                    'requested_by_user_id'  => $analyst->id,
-                    'title'                 => 'Ajouter le champ "Description" aux PO',
+                    'query_id' => $poQuery->id,
+                    'requested_by_user_id' => $analyst->id,
+                    'title' => 'Ajouter le champ "Description" aux PO',
                 ],
                 ['status' => QueryChangeRequestStatus::PENDING],
             );
@@ -51,10 +51,10 @@ class ChangeRequestSeeder extends Seeder
 
             if (! $cr) {
                 $cr = QueryChangeRequest::create([
-                    'query_id'             => $invoiceQuery->id,
+                    'query_id' => $invoiceQuery->id,
                     'requested_by_user_id' => $analyst->id,
-                    'title'                => 'Filtrer aussi sur la devise EUR',
-                    'status'               => QueryChangeRequestStatus::PENDING,
+                    'title' => 'Filtrer aussi sur la devise EUR',
+                    'status' => QueryChangeRequestStatus::PENDING,
                 ]);
 
                 $cr->transitionTo(QueryChangeRequestStatus::ACCEPTED, $finance);
@@ -74,10 +74,10 @@ class ChangeRequestSeeder extends Seeder
 
             if (! $cr) {
                 $cr = QueryChangeRequest::create([
-                    'query_id'             => $suppQuery->id,
+                    'query_id' => $suppQuery->id,
                     'requested_by_user_id' => $finance->id,
-                    'title'                => 'Inclure PrimaryPaySite dans les sites',
-                    'status'               => QueryChangeRequestStatus::PENDING,
+                    'title' => 'Inclure PrimaryPaySite dans les sites',
+                    'status' => QueryChangeRequestStatus::PENDING,
                 ]);
 
                 $cr->transitionTo(QueryChangeRequestStatus::ACCEPTED, $admin);
@@ -85,7 +85,7 @@ class ChangeRequestSeeder extends Seeder
             }
 
             $cr->comments()->firstOrCreate(
-                ['user_id' => $admin->id, 'body' => "Modification appliquée — PrimaryPaySite ajouté dans child_fields.sites."],
+                ['user_id' => $admin->id, 'body' => 'Modification appliquée — PrimaryPaySite ajouté dans child_fields.sites.'],
             );
         }
 
@@ -98,10 +98,10 @@ class ChangeRequestSeeder extends Seeder
 
             if (! $cr) {
                 $cr = QueryChangeRequest::create([
-                    'query_id'             => $hcmQuery->id,
+                    'query_id' => $hcmQuery->id,
                     'requested_by_user_id' => $finance->id,
-                    'title'                => 'Étendre la limite à 500 lignes',
-                    'status'               => QueryChangeRequestStatus::PENDING,
+                    'title' => 'Étendre la limite à 500 lignes',
+                    'status' => QueryChangeRequestStatus::PENDING,
                 ]);
 
                 $cr->transitionTo(QueryChangeRequestStatus::REJECTED, $analyst);
@@ -121,10 +121,10 @@ class ChangeRequestSeeder extends Seeder
 
             if (! $cr) {
                 $cr = QueryChangeRequest::create([
-                    'query_id'             => $reqQuery->id,
+                    'query_id' => $reqQuery->id,
                     'requested_by_user_id' => $analyst->id,
-                    'title'                => 'Changer le tri par DocumentStatus',
-                    'status'               => QueryChangeRequestStatus::PENDING,
+                    'title' => 'Changer le tri par DocumentStatus',
+                    'status' => QueryChangeRequestStatus::PENDING,
                 ]);
 
                 $cr->transitionTo(QueryChangeRequestStatus::CANCELLED, $analyst);

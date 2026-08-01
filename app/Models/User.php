@@ -85,12 +85,12 @@ class User extends Authenticatable implements HasLocalePreference, PasskeyUser
     /**
      * Public URL of the user's profile photo, without exposing its storage path.
      *
-     * @return Attribute<string|null, never>
+     * @return Attribute<covariant string|null, never>
      */
     protected function avatar(): Attribute
     {
-        return Attribute::get(
-            fn (): ?string => $this->avatar_path === null
+        return Attribute::make(
+            get: fn (): ?string => $this->avatar_path === null
                 ? null
                 : Storage::disk('public')->url($this->avatar_path),
         );
@@ -159,7 +159,7 @@ class User extends Authenticatable implements HasLocalePreference, PasskeyUser
             ->withTimestamps();
     }
 
-    /** @return BelongsToMany<Role, $this> */
+    /** @return BelongsToMany<Role, $this, QueryTemplateRoleAssignment, 'pivot'> */
     public function queryTemplateRoles(): BelongsToMany
     {
         return $this->belongsToMany(Role::class, 'query_template_role_user')
@@ -185,11 +185,12 @@ class User extends Authenticatable implements HasLocalePreference, PasskeyUser
     /** @return list<string> */
     public function queryTemplateRoleNames(QueryTemplate $template): array
     {
-        return $this->queryTemplateRoles()
+        return array_values($this->queryTemplateRoles()
             ->wherePivot('query_template_id', $template->id)
             ->orderBy('roles.name')
-            ->pluck('roles.name')
-            ->all();
+            ->get(['roles.name'])
+            ->map(static fn (Role $role): string => $role->name)
+            ->all());
     }
 
     /**

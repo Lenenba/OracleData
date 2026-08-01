@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\AuthConnection;
 use App\Models\OracleTenant;
 use App\Models\User;
-use App\Services\OicClient;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -72,12 +71,12 @@ class TenantConnectionService
             }
 
             $tenant = $owner->oracleTenants()->create([
-                'key'        => $data['key'],
-                'type'       => $data['type'] ?? 'fusion',
-                'label'      => $data['label'],
-                'base_url'   => rtrim($data['base_url'], '/'),
+                'key' => $data['key'],
+                'type' => $data['type'] ?? 'fusion',
+                'label' => $data['label'],
+                'base_url' => rtrim($data['base_url'], '/'),
                 'is_default' => $makeDefault,
-                'is_active'  => true,
+                'is_active' => true,
             ]);
 
             $tenant->authConnections()->create([

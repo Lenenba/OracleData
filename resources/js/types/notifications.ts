@@ -1,12 +1,12 @@
 import type {
+    QueryChangeRequestStatus,
+    QueryChangeRequestUser,
+} from './change-requests';
+import type {
     QuerySharePermission,
     QueryShareStatus,
     QuerySharingPaginationMeta,
 } from './query-sharing';
-import type {
-    QueryChangeRequestStatus,
-    QueryChangeRequestUser,
-} from './change-requests';
 
 export type NotificationFilter = 'all' | 'unread';
 

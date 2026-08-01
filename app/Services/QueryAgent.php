@@ -179,12 +179,12 @@ class QueryAgent
         $sourcesUsed = $sourcesFromInput !== [] ? $sourcesFromInput : $sourcesFromCalls;
 
         return [
-            'columns'      => $columns,
-            'rows'         => array_values((array) ($input['rows'] ?? [])),
-            'analysis'     => (string) ($input['analysis'] ?? ''),
-            'confidence'   => $confidence,
+            'columns' => $columns,
+            'rows' => array_values((array) ($input['rows'] ?? [])),
+            'analysis' => (string) ($input['analysis'] ?? ''),
+            'confidence' => $confidence,
             'sources_used' => $sourcesUsed,
-            'oracleCalls'  => $oracleCalls,
+            'oracleCalls' => $oracleCalls,
         ];
     }
 

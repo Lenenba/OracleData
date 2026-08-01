@@ -58,17 +58,13 @@ export function ParameterDefinitionEditor({ queryId, definitions }: Props) {
     const { t } = useI18n();
     const [open, setOpen] = useState(false);
     const [items, setItems] = useState<RawDefinition[]>(
-        definitions.length > 0
-            ? (definitions as RawDefinition[])
-            : [],
+        definitions.length > 0 ? (definitions as RawDefinition[]) : [],
     );
     const [saving, setSaving] = useState(false);
 
     function openDialog() {
         setItems(
-            definitions.length > 0
-                ? (definitions as RawDefinition[])
-                : [],
+            definitions.length > 0 ? (definitions as RawDefinition[]) : [],
         );
         setOpen(true);
     }
@@ -97,7 +93,9 @@ export function ParameterDefinitionEditor({ queryId, definitions }: Props) {
         setSaving(true);
         router.put(
             updateParameters.url(queryId),
-            { parameter_definitions: items } as Parameters<typeof router.put>[1],
+            { parameter_definitions: items } as Parameters<
+                typeof router.put
+            >[1],
             {
                 preserveScroll: true,
                 onSuccess: () => setOpen(false),
@@ -396,11 +394,7 @@ export function ParameterDefinitionEditor({ queryId, definitions }: Props) {
                     >
                         {t('queries.parameterCancel')}
                     </Button>
-                    <Button
-                        type="button"
-                        onClick={save}
-                        disabled={saving}
-                    >
+                    <Button type="button" onClick={save} disabled={saving}>
                         {saving && <Spinner />}
                         {t('queries.parameterSave')}
                     </Button>

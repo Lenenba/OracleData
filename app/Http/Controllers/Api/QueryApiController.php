@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\AuthenticateApiToken;
-use App\Models\Query;
 use App\Models\PersonalApiToken;
+use App\Models\Query;
 use App\Services\FusionManager;
 use App\Services\OracleQueryTool;
 use App\Services\RuntimeQueryParameterBinder;
@@ -42,15 +42,15 @@ class QueryApiController extends Controller
 
         return response()->json([
             'data' => $queries->map(fn (Query $q): array => [
-                'id'            => $q->id,
-                'name'          => $q->name,
-                'description'   => $q->description,
+                'id' => $q->id,
+                'name' => $q->name,
+                'description' => $q->description,
                 'resource_path' => $q->resource_path,
-                'mode'          => $q->mode,
-                'access_level'  => $q->access_level->value,
-                'tenant_key'    => $q->tenant_key,
-                'created_at'    => $q->created_at?->toIso8601String(),
-                'updated_at'    => $q->updated_at?->toIso8601String(),
+                'mode' => $q->mode,
+                'access_level' => $q->access_level->value,
+                'tenant_key' => $q->tenant_key,
+                'created_at' => $q->created_at?->toIso8601String(),
+                'updated_at' => $q->updated_at?->toIso8601String(),
             ]),
             'meta' => ['count' => $queries->count()],
         ]);
@@ -64,18 +64,18 @@ class QueryApiController extends Controller
         $this->authorizeReadAccess($request, $query);
 
         return response()->json([
-            'id'                   => $query->id,
-            'name'                 => $query->name,
-            'description'          => $query->description,
-            'resource_path'        => $query->resource_path,
-            'mode'                 => $query->mode,
-            'access_level'         => $query->access_level->value,
-            'tenant_key'           => $query->tenant_key,
-            'parameters'           => $query->parameters,
-            'execution_count'      => $query->execution_count,
-            'last_successful_at'   => $query->last_successful_execution_at?->toIso8601String(),
-            'created_at'           => $query->created_at?->toIso8601String(),
-            'updated_at'           => $query->updated_at?->toIso8601String(),
+            'id' => $query->id,
+            'name' => $query->name,
+            'description' => $query->description,
+            'resource_path' => $query->resource_path,
+            'mode' => $query->mode,
+            'access_level' => $query->access_level->value,
+            'tenant_key' => $query->tenant_key,
+            'parameters' => $query->parameters,
+            'execution_count' => $query->execution_count,
+            'last_successful_at' => $query->last_successful_execution_at?->toIso8601String(),
+            'created_at' => $query->created_at?->toIso8601String(),
+            'updated_at' => $query->updated_at?->toIso8601String(),
         ]);
     }
 
@@ -108,7 +108,7 @@ class QueryApiController extends Controller
         }
 
         $params = $binder->bind($query, (array) $request->query());
-        $limit  = min((int) ($params['limit'] ?? 25), 500);
+        $limit = min((int) ($params['limit'] ?? 25), 500);
         $params['limit'] = $limit;
 
         try {
@@ -118,20 +118,21 @@ class QueryApiController extends Controller
         }
 
         return response()->json([
-            'query_id'  => $query->id,
-            'tenant'    => $tenantKey,
-            'rows'      => $result['items'] ?? [],
-            'count'     => count($result['items'] ?? []),
-            'has_more'  => (bool) ($result['hasMore'] ?? false),
+            'query_id' => $query->id,
+            'tenant' => $tenantKey,
+            'rows' => $result['items'],
+            'count' => count($result['items']),
+            'has_more' => $result['hasMore'],
         ]);
     }
 
     private function authorizeReadAccess(Request $request, Query $query): void
     {
         $user = $request->user();
-        $canRead = $query->user_id === $user->id
-            || $query->access_level->value === 'organization'
-            || $query->shares()->where('user_id', $user->id)->exists();
+        $canRead = Query::query()
+            ->accessibleTo($user)
+            ->whereKey($query->getKey())
+            ->exists();
 
         abort_unless($canRead, Response::HTTP_NOT_FOUND);
     }

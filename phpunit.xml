@@ -26,6 +26,11 @@
         <env name="DB_CONNECTION" value="sqlite"/>
         <env name="DB_DATABASE" value=":memory:"/>
         <env name="DB_URL" value=""/>
+        <env name="FUSION_RESOURCE_GRAPH_ENABLED" value="false"/>
+        <env name="FUSION_QUERY_GRAPH_AUTHORING_ENABLED" value="false"/>
+        <env name="FUSION_QUERY_GRAPH_EXECUTION_ENABLED" value="false"/>
+        <env name="FUSION_QUERY_GRAPH_MAX_DEPTH" value="6"/>
+        <env name="FUSION_QUERY_GRAPH_MAX_NODES" value="50"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>

@@ -1,0 +1,52 @@
+{
+  "Resources": {
+    "workRelationships": {
+      "title": "Work Relationships",
+      "attributes": [
+        {
+          "name": "PeriodOfServiceId",
+          "type": "integer",
+          "mandatory": true,
+          "updatable": false,
+          "queryable": true,
+          "nullable": false
+        },
+        {
+          "name": "LegalEmployerName",
+          "type": "string",
+          "mandatory": false,
+          "updatable": false,
+          "queryable": true,
+          "nullable": true,
+          "maxLength": 240
+        },
+        {
+          "name": "WorkerType",
+          "type": "string",
+          "mandatory": false,
+          "updatable": false,
+          "queryable": true,
+          "nullable": true,
+          "maxLength": 30
+        },
+        {
+          "name": "StartDate",
+          "type": "string",
+          "format": "date",
+          "mandatory": false,
+          "updatable": false,
+          "queryable": true,
+          "nullable": true
+        },
+        {
+          "name": "PrimaryFlag",
+          "type": "boolean",
+          "mandatory": false,
+          "updatable": false,
+          "queryable": true,
+          "nullable": true
+        }
+      ]
+    }
+  }
+}

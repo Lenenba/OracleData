@@ -44,6 +44,7 @@ class QueryChangeRequestService
             $lockedQuery = Query::query()->lockForUpdate()->findOrFail($query->id);
             Gate::forUser($actor)->authorize('requestChange', $lockedQuery);
             $mentionedUsers = $this->resolveMentionedUsers($lockedQuery, $actor, $mentionedUserIds);
+            $mentionedUserIds = $this->userIds($mentionedUsers);
 
             $changeRequest = QueryChangeRequest::query()->create([
                 'query_id' => $lockedQuery->id,
@@ -59,7 +60,7 @@ class QueryChangeRequestService
                 'query_id' => $lockedQuery->id,
                 'requester_user_id' => $actor->id,
                 'comment_id' => $comment->id,
-                'mentioned_user_ids' => $mentionedUsers->modelKeys(),
+                'mentioned_user_ids' => $mentionedUserIds,
                 'status' => QueryChangeRequestStatus::PENDING->value,
             ]);
             $this->notifyActivity(
@@ -68,7 +69,7 @@ class QueryChangeRequestService
                 $actor,
                 $comment,
                 [$lockedQuery->user_id],
-                $mentionedUsers->modelKeys(),
+                $mentionedUserIds,
             );
 
             return $changeRequest
@@ -99,13 +100,14 @@ class QueryChangeRequestService
             [$lockedQuery, $lockedRequest] = $this->lockNested($query, $changeRequest);
             Gate::forUser($actor)->authorize('comment', $lockedRequest);
             $mentionedUsers = $this->resolveMentionedUsers($lockedQuery, $actor, $mentionedUserIds);
+            $mentionedUserIds = $this->userIds($mentionedUsers);
             $comment = $this->persistComment($lockedRequest, $actor, $body, $mentionedUsers);
 
             $audit->record($actor, 'query.change_request_commented', $lockedRequest, [
                 'query_id' => $lockedQuery->id,
                 'comment_id' => $comment->id,
                 'author_user_id' => $actor->id,
-                'mentioned_user_ids' => $mentionedUsers->modelKeys(),
+                'mentioned_user_ids' => $mentionedUserIds,
                 'status' => $lockedRequest->status->value,
             ]);
             $this->notifyActivity(
@@ -114,7 +116,7 @@ class QueryChangeRequestService
                 $actor,
                 $comment,
                 [$lockedQuery->user_id, $lockedRequest->requested_by_user_id],
-                $mentionedUsers->modelKeys(),
+                $mentionedUserIds,
             );
 
             return $comment->load(['author:id,name', 'mentions:id,name']);
@@ -298,9 +300,9 @@ class QueryChangeRequestService
                 ], true),
                 default => false,
             }
-            : $isRequester
-                && $changeRequest->status === QueryChangeRequestStatus::PENDING
-                && $target === QueryChangeRequestStatus::CANCELLED;
+        : $isRequester
+            && $changeRequest->status === QueryChangeRequestStatus::PENDING
+            && $target === QueryChangeRequestStatus::CANCELLED;
 
         abort_unless($allowed, Response::HTTP_CONFLICT, __('Cette transition de demande de modification n’est pas autorisée.'));
     }
@@ -354,6 +356,21 @@ class QueryChangeRequestService
         $comment->mentions()->sync($mentionedUsers->modelKeys());
 
         return $comment;
+    }
+
+    /**
+     * @param  Collection<int, User>  $users
+     * @return list<int>
+     */
+    private function userIds(Collection $users): array
+    {
+        $ids = [];
+
+        foreach ($users as $user) {
+            $ids[] = $user->id;
+        }
+
+        return $ids;
     }
 
     /**

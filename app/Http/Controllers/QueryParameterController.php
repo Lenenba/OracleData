@@ -28,11 +28,20 @@ class QueryParameterController extends Controller
     ): RedirectResponse {
         Gate::authorize('update', $query);
 
-        $raw = $request->validated('parameter_definitions');
+        $rawDefinitions = $request->validated('parameter_definitions');
+        $validatedDefinitions = [];
+
+        if (is_array($rawDefinitions)) {
+            foreach ($rawDefinitions as $definition) {
+                if (is_array($definition)) {
+                    $validatedDefinitions[] = $definition;
+                }
+            }
+        }
 
         // An empty array clears all definitions; null is treated as "no change"
         // but the form always sends an explicit list.
-        $definitions = $binder->validate(is_array($raw) ? $raw : []);
+        $definitions = $binder->validate($validatedDefinitions);
 
         $query->update(['parameter_definitions' => $definitions === [] ? null : $definitions]);
 

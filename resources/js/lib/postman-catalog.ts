@@ -82,7 +82,10 @@ const WORKERS_COLLECTION = {
                     path: ['hcmRestApi', 'resources', '11.13.18.05', 'workers'],
                     query: [
                         { key: 'q', value: 'PersonNumber=25773' },
-                        { key: 'expand', value: 'names,addresses,emails,phones' },
+                        {
+                            key: 'expand',
+                            value: 'names,addresses,emails,phones',
+                        },
                     ],
                 },
             },
@@ -180,7 +183,10 @@ const WORKERS_COLLECTION = {
                     host: ['{{URI}}'],
                     path: ['hcmRestApi', 'resources', '11.13.18.05', 'workers'],
                     query: [
-                        { key: 'expand', value: 'workRelationships.assignments' },
+                        {
+                            key: 'expand',
+                            value: 'workRelationships.assignments',
+                        },
                         { key: 'q', value: 'PersonNumber=25773' },
                     ],
                 },
@@ -210,7 +216,10 @@ const WORKERS_COLLECTION = {
                     host: ['{{URI}}'],
                     path: ['hcmRestApi', 'resources', '11.13.18.05', 'workers'],
                     query: [
-                        { key: 'expand', value: 'workRelationships.assignments' },
+                        {
+                            key: 'expand',
+                            value: 'workRelationships.assignments',
+                        },
                         {
                             key: 'fields',
                             value: 'PersonId,PersonNumber,workRelationships.assignments.AssignmentId,workRelationships.assignments.AssignmentNumber,workRelationships.assignments.PositionCode,workRelationships.assignments.DepartmentName',

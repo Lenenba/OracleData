@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 /**
@@ -28,20 +29,20 @@ class QueryDashboardWidgetController extends Controller
         Gate::authorize('update', $dashboard);
 
         $validated = $request->validate([
-            'query_id'      => ['required', 'integer', 'exists:queries,id'],
-            'widget_type'   => ['required', 'string', 'in:kpi,table,chart'],
-            'title'         => ['nullable', 'string', 'max:255'],
-            'position'      => ['nullable', 'integer', 'min:0'],
+            'query_id' => ['required', 'integer', 'exists:queries,id'],
+            'widget_type' => ['required', 'string', Rule::in(self::ALLOWED_TYPES)],
+            'title' => ['nullable', 'string', 'max:255'],
+            'position' => ['nullable', 'integer', 'min:0'],
             'widget_options' => ['nullable', 'array'],
         ]);
 
         $position = $validated['position'] ?? ($dashboard->widgets()->max('position') + 1);
 
         $dashboard->widgets()->create([
-            'query_id'       => $validated['query_id'],
-            'widget_type'    => $validated['widget_type'],
-            'title'          => $validated['title'] ?? null,
-            'position'       => (int) $position,
+            'query_id' => $validated['query_id'],
+            'widget_type' => $validated['widget_type'],
+            'title' => $validated['title'] ?? null,
+            'position' => (int) $position,
             'widget_options' => $validated['widget_options'] ?? null,
         ]);
 
@@ -59,8 +60,8 @@ class QueryDashboardWidgetController extends Controller
         abort_unless($widget->dashboard_id === $dashboard->id, 404);
 
         $validated = $request->validate([
-            'title'          => ['nullable', 'string', 'max:255'],
-            'position'       => ['nullable', 'integer', 'min:0'],
+            'title' => ['nullable', 'string', 'max:255'],
+            'position' => ['nullable', 'integer', 'min:0'],
             'widget_options' => ['nullable', 'array'],
         ]);
 
@@ -90,8 +91,8 @@ class QueryDashboardWidgetController extends Controller
         Gate::authorize('update', $dashboard);
 
         $validated = $request->validate([
-            'order'           => ['required', 'array'],
-            'order.*.id'      => ['required', 'integer'],
+            'order' => ['required', 'array'],
+            'order.*.id' => ['required', 'integer'],
             'order.*.position' => ['required', 'integer', 'min:0'],
         ]);
 

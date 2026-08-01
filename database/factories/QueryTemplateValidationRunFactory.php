@@ -28,19 +28,23 @@ class QueryTemplateValidationRunFactory extends Factory
         return [
             'query_template_id' => QueryTemplate::factory(),
             'query_template_version_id' => fn (array $attributes): int => QueryTemplate::query()
-                ->findOrFail($attributes['query_template_id'])
+                ->whereKey($attributes['query_template_id'])
+                ->firstOrFail()
                 ->publishedVersion()
                 ->sole()
                 ->id,
             'oracle_tenant_id' => OracleTenant::factory(),
             'auth_connection_id' => function (array $attributes): int {
-                $tenant = OracleTenant::query()->findOrFail($attributes['oracle_tenant_id']);
+                $tenant = OracleTenant::query()
+                    ->whereKey($attributes['oracle_tenant_id'])
+                    ->firstOrFail();
 
                 return $tenant->authConnections()->value('id')
                     ?? AuthConnection::factory()->forTenant($tenant)->create()->id;
             },
             'run_by_user_id' => fn (array $attributes): int => OracleTenant::query()
-                ->findOrFail($attributes['oracle_tenant_id'])
+                ->whereKey($attributes['oracle_tenant_id'])
+                ->firstOrFail()
                 ->user_id,
             'query_template_reference_dataset_id' => fn (array $attributes): int => QueryTemplateReferenceDataset::factory()->create([
                 'query_template_id' => $attributes['query_template_id'],
@@ -52,15 +56,18 @@ class QueryTemplateValidationRunFactory extends Factory
             'purpose' => DataQualityRunPurpose::Manual,
             'status' => DataQualityRunStatus::Passed,
             'version_content_hash' => fn (array $attributes): string => QueryTemplateVersion::query()
-                ->findOrFail($attributes['query_template_version_id'])
+                ->whereKey($attributes['query_template_version_id'])
+                ->firstOrFail()
                 ->content_hash,
             'rules_hash' => fn (array $attributes): string => QueryTemplateVersion::qualityRulesHash(
                 QueryTemplateVersion::query()
-                    ->findOrFail($attributes['query_template_version_id'])
+                    ->whereKey($attributes['query_template_version_id'])
+                    ->firstOrFail()
                     ->quality_rules ?? [],
             ),
             'parameter_hash' => fn (array $attributes): string => QueryTemplateReferenceDataset::query()
-                ->findOrFail($attributes['query_template_reference_dataset_id'])
+                ->whereKey($attributes['query_template_reference_dataset_id'])
+                ->firstOrFail()
                 ->parameter_hash,
             'assertion_results' => [[
                 'index' => 0,
@@ -73,7 +80,8 @@ class QueryTemplateValidationRunFactory extends Factory
             'score' => 100,
             'duration_ms' => $durationMs,
             'row_count' => fn (array $attributes): int => QueryTemplateReferenceDataset::query()
-                ->findOrFail($attributes['query_template_reference_dataset_id'])
+                ->whereKey($attributes['query_template_reference_dataset_id'])
+                ->firstOrFail()
                 ->row_count,
             'error_code' => null,
             'started_at' => $startedAt,

@@ -36,4 +36,3 @@ export function TemplateGovernanceStatusBadge({
 
     return <Badge variant={variants[status]}>{labels[status]}</Badge>;
 }
-

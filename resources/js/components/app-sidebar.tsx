@@ -202,7 +202,9 @@ export function AppSidebar({ collapsed, mobileOpen, onNavigate }: Props) {
 
     const sections = useMemo<PacesNavSection[]>(() => {
         const oicTenants: Array<{ id: number; label: string; key: string }> =
-            (props.oicTenants as Array<{ id: number; label: string; key: string }> | undefined) ?? [];
+            (props.oicTenants as
+                | Array<{ id: number; label: string; key: string }>
+                | undefined) ?? [];
 
         const settingsChildren: PacesNavItem[] = [
             {
@@ -367,7 +369,7 @@ export function AppSidebar({ collapsed, mobileOpen, onNavigate }: Props) {
                 ],
             },
         ];
-    }, [props.auth, t]);
+    }, [props.auth, props.oicTenants, t]);
     const routeOpenMenuKey =
         sections
             .flatMap((section) => section.items)

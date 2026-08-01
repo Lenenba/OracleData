@@ -152,9 +152,7 @@ export function RuntimeParameterForm({
                                     disabled={disabled}
                                     required={definition.required}
                                     aria-invalid={!!error}
-                                    aria-describedby={
-                                        describedBy || undefined
-                                    }
+                                    aria-describedby={describedBy || undefined}
                                     onChange={(event) =>
                                         onChange(
                                             definition.key,

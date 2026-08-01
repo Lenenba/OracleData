@@ -38,7 +38,7 @@ class RunQueryRequest extends FormRequest
             // Lot 10E — server-side offset pagination. `offset` advances the
             // Oracle cursor; `limit` overrides the per-page default (max 500).
             'offset' => ['nullable', 'integer', 'min:0', 'max:2147483647'],
-            'limit'  => ['nullable', 'integer', 'min:1', 'max:500'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:500'],
         ];
     }
 

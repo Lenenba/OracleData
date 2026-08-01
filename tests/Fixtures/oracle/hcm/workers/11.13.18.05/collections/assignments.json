@@ -1,0 +1,40 @@
+{
+  "items": [
+    {
+      "AssignmentId": 300001,
+      "AssignmentNumber": "TEST-ASG-001",
+      "AssignmentName": "Synthetic Assignment",
+      "AssignmentStatusType": "ACTIVE",
+      "EffectiveStartDate": "2024-01-01",
+      "EffectiveEndDate": "4712-12-31",
+      "EffectiveSequence": 1,
+      "EffectiveLatestChange": "Y",
+      "links": [
+        {
+          "rel": "self",
+          "href": "https://oracle.invalid/hcmRestApi/resources/11.13.18.05/workers/WRK_FAKE_HASH_001/child/workRelationships/200001/child/assignments/ASG_FAKE_HASH_001",
+          "name": "assignments",
+          "kind": "item"
+        },
+        {
+          "rel": "child",
+          "href": "https://oracle.invalid/hcmRestApi/resources/11.13.18.05/workers/WRK_FAKE_HASH_001/child/workRelationships/200001/child/assignments/ASG_FAKE_HASH_001/child/managers",
+          "name": "managers",
+          "kind": "collection"
+        }
+      ]
+    }
+  ],
+  "count": 1,
+  "hasMore": false,
+  "limit": 1,
+  "offset": 0,
+  "links": [
+    {
+      "rel": "self",
+      "href": "https://oracle.invalid/hcmRestApi/resources/11.13.18.05/workers/WRK_FAKE_HASH_001/child/workRelationships/200001/child/assignments?limit=1",
+      "name": "assignments",
+      "kind": "collection"
+    }
+  ]
+}

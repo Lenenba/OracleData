@@ -1,0 +1,79 @@
+{
+  "Resources": {
+    "assignments": {
+      "title": "Assignments",
+      "attributes": [
+        {
+          "name": "AssignmentId",
+          "type": "integer",
+          "mandatory": true,
+          "updatable": false,
+          "queryable": true,
+          "nullable": false
+        },
+        {
+          "name": "AssignmentNumber",
+          "type": "string",
+          "mandatory": false,
+          "updatable": false,
+          "queryable": true,
+          "nullable": true,
+          "maxLength": 30
+        },
+        {
+          "name": "AssignmentName",
+          "type": "string",
+          "mandatory": false,
+          "updatable": true,
+          "queryable": true,
+          "nullable": true,
+          "maxLength": 80
+        },
+        {
+          "name": "AssignmentStatusType",
+          "type": "string",
+          "mandatory": false,
+          "updatable": false,
+          "queryable": true,
+          "nullable": true,
+          "maxLength": 30
+        },
+        {
+          "name": "EffectiveStartDate",
+          "type": "string",
+          "format": "date",
+          "mandatory": true,
+          "updatable": false,
+          "queryable": true,
+          "nullable": false
+        },
+        {
+          "name": "EffectiveEndDate",
+          "type": "string",
+          "format": "date",
+          "mandatory": true,
+          "updatable": false,
+          "queryable": true,
+          "nullable": false
+        },
+        {
+          "name": "EffectiveSequence",
+          "type": "integer",
+          "mandatory": true,
+          "updatable": false,
+          "queryable": true,
+          "nullable": false
+        },
+        {
+          "name": "EffectiveLatestChange",
+          "type": "string",
+          "mandatory": true,
+          "updatable": false,
+          "queryable": true,
+          "nullable": false,
+          "maxLength": 1
+        }
+      ]
+    }
+  }
+}

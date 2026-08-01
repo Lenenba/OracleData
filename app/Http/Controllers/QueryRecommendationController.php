@@ -25,7 +25,7 @@ class QueryRecommendationController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $userId = $user->id;
 
         // ── 1. Requêtes personnelles les plus exécutées récemment ──────────
@@ -59,14 +59,14 @@ class QueryRecommendationController extends Controller
 
         return response()->json([
             'recommendations' => $merged->map(fn (Query $q): array => [
-                'id'             => $q->id,
-                'name'           => $q->name,
-                'description'    => $q->description,
-                'resource_path'  => $q->resource_path,
-                'mode'           => $q->mode,
-                'access_level'   => $q->access_level->value,
+                'id' => $q->id,
+                'name' => $q->name,
+                'description' => $q->description,
+                'resource_path' => $q->resource_path,
+                'mode' => $q->mode,
+                'access_level' => $q->access_level->value,
                 'execution_count' => $q->execution_count,
-                'last_run_at'    => $q->last_successful_execution_at?->toIso8601String(),
+                'last_run_at' => $q->last_successful_execution_at?->toIso8601String(),
             ])->values(),
         ]);
     }

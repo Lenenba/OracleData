@@ -31,7 +31,7 @@ class QueryAgentPreviewController extends Controller
         AuditRecorder $audit,
     ): JsonResponse {
         $validated = $request->validate([
-            'intent'     => ['required', 'string', 'min:10', 'max:2000'],
+            'intent' => ['required', 'string', 'min:10', 'max:2000'],
             'tenant_key' => ['nullable', 'string', 'max:100'],
         ]);
 
@@ -49,12 +49,12 @@ class QueryAgentPreviewController extends Controller
 
         /** @var AgentAnalysisRun $run */
         $run = AgentAnalysisRun::create([
-            'user_id'          => $request->user()->id,
-            'query_id'         => null,
+            'user_id' => $request->user()->id,
+            'query_id' => null,
             'oracle_tenant_id' => $tenant?->id,
-            'status'           => AgentAnalysisRunStatus::Queued,
-            'max_iterations'   => $maxIterations,
-            'queued_at'        => now(),
+            'status' => AgentAnalysisRunStatus::Queued,
+            'max_iterations' => $maxIterations,
+            'queued_at' => now(),
         ]);
 
         // Pass the raw intent via the run's result field temporarily so the job
@@ -66,7 +66,7 @@ class QueryAgentPreviewController extends Controller
 
         $audit->record($request->user(), 'query.agent_preview_dispatched', $request->user(), [
             'agent_analysis_run_id' => $run->id,
-            'tenant_key'            => $tenantKey,
+            'tenant_key' => $tenantKey,
         ]);
 
         return response()->json($this->toStatusPayload($run), Response::HTTP_ACCEPTED);
@@ -78,17 +78,17 @@ class QueryAgentPreviewController extends Controller
     private function toStatusPayload(AgentAnalysisRun $run): array
     {
         return [
-            'id'                => $run->id,
-            'status'            => $run->status->value,
-            'iteration'         => $run->iteration,
-            'max_iterations'    => $run->max_iterations,
+            'id' => $run->id,
+            'status' => $run->status->value,
+            'iteration' => $run->iteration,
+            'max_iterations' => $run->max_iterations,
             'oracle_calls_count' => $run->oracle_calls_count,
-            'row_count'         => $run->row_count,
-            'error_code'        => $run->error_code,
-            'result'            => $run->result,
-            'queued_at'         => $run->queued_at->toIso8601String(),
-            'started_at'        => $run->started_at?->toIso8601String(),
-            'finished_at'       => $run->finished_at?->toIso8601String(),
+            'row_count' => $run->row_count,
+            'error_code' => $run->error_code,
+            'result' => $run->result,
+            'queued_at' => $run->queued_at->toIso8601String(),
+            'started_at' => $run->started_at?->toIso8601String(),
+            'finished_at' => $run->finished_at?->toIso8601String(),
         ];
     }
 }

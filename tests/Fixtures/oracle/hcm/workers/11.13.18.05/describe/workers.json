@@ -1,0 +1,61 @@
+{
+  "Resources": {
+    "workers": {
+      "title": "Workers",
+      "attributes": [
+        {
+          "name": "PersonId",
+          "type": "integer",
+          "mandatory": true,
+          "updatable": false,
+          "queryable": true,
+          "nullable": false
+        },
+        {
+          "name": "PersonNumber",
+          "type": "string",
+          "mandatory": false,
+          "updatable": false,
+          "queryable": true,
+          "nullable": true,
+          "maxLength": 30
+        },
+        {
+          "name": "DisplayName",
+          "type": "string",
+          "mandatory": false,
+          "updatable": false,
+          "queryable": true,
+          "nullable": true,
+          "maxLength": 240
+        },
+        {
+          "name": "EffectiveStartDate",
+          "type": "string",
+          "format": "date",
+          "mandatory": false,
+          "updatable": false,
+          "queryable": true,
+          "nullable": true
+        },
+        {
+          "name": "EffectiveEndDate",
+          "type": "string",
+          "format": "date",
+          "mandatory": false,
+          "updatable": false,
+          "queryable": true,
+          "nullable": true
+        }
+      ],
+      "links": [
+        {
+          "rel": "self",
+          "href": "https://oracle.invalid/hcmRestApi/resources/11.13.18.05/workers/describe",
+          "name": "workers",
+          "kind": "describe"
+        }
+      ]
+    }
+  }
+}

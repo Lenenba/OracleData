@@ -1,5 +1,7 @@
 <?php
 
+use App\Domain\Query\QueryTraversalPolicy;
+
 return [
 
     /*
@@ -53,6 +55,25 @@ return [
     */
 
     'fields_ttl_days' => (int) env('FUSION_FIELDS_TTL_DAYS', 7),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Déploiement progressif du Resource Graph et du Query Graph
+    |--------------------------------------------------------------------------
+    |
+    | Ces capacités sont livrées séparément. Elles restent fermées par défaut
+    | afin que le moteur historique conserve exactement son comportement tant
+    | que chaque jalon n'a pas été validé et activé explicitement.
+    |
+    */
+
+    'query_graph' => [
+        'resource_graph_enabled' => (bool) env('FUSION_RESOURCE_GRAPH_ENABLED', false),
+        'authoring_enabled' => (bool) env('FUSION_QUERY_GRAPH_AUTHORING_ENABLED', false),
+        'execution_enabled' => (bool) env('FUSION_QUERY_GRAPH_EXECUTION_ENABLED', false),
+        'max_depth' => (int) env('FUSION_QUERY_GRAPH_MAX_DEPTH', QueryTraversalPolicy::DEFAULT_MAX_DEPTH),
+        'max_nodes' => (int) env('FUSION_QUERY_GRAPH_MAX_NODES', QueryTraversalPolicy::DEFAULT_MAX_NODES),
+    ],
 
     /*
     |--------------------------------------------------------------------------

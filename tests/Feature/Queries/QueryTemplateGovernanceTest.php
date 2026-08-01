@@ -8,7 +8,6 @@ use App\Models\Query;
 use App\Models\QueryExecution;
 use App\Models\QueryTemplate;
 use App\Models\QueryTemplateTranslation;
-use App\Models\QueryTemplateVersion;
 use App\Models\User;
 use App\Services\OracleResourceCatalog;
 use App\Services\QueryExecutionRecorder;

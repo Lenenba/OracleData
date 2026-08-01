@@ -69,7 +69,7 @@ class RunQueryExport implements ShouldQueue
 
         $scopedFusion = $fusion->forUser($user);
         $scopedTool = $tool->forUser($user);
-        $format = $export->format ?: 'csv';
+        $format = $export->format;
         $extension = match ($format) {
             'xlsx' => 'xml', // SpreadsheetML — .xml opens as xlsx in Excel
             'json' => 'json',
@@ -235,7 +235,7 @@ class RunQueryExport implements ShouldQueue
         } while ($page['hasMore']);
 
         match ($format) {
-            'xlsx' => $columns !== null ? $xlsx->writeFooter($handle) : null,
+            'xlsx' => $xlsx->writeFooter($handle),
             'json' => fwrite($handle, json_encode($jsonRows, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)),
             default => null,
         };

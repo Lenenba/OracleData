@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\Query;
+use App\Enums\QuerySharePermission;
 use App\Models\QueryChain;
 use App\Models\User;
 use InvalidArgumentException;
@@ -60,7 +60,7 @@ class QueryChainService
     ): array {
         $secondary = $chain->secondaryQuery;
 
-        if (! $secondary->allows($user, \App\Enums\QuerySharePermission::VIEW)) {
+        if (! $secondary->allows($user, QuerySharePermission::VIEW)) {
             throw new InvalidArgumentException(
                 "La requête secondaire [{$secondary->id}] n'est pas accessible.",
             );
@@ -89,7 +89,7 @@ class QueryChainService
         );
 
         // Construire les paramètres de la requête secondaire en injectant le filtre
-        $params = is_array($secondary->resource_path) ? [] : ($secondary->parameters ?? []);
+        $params = $secondary->parameters ?? [];
         $existing = trim((string) ($params['q'] ?? ''));
         $params['q'] = $existing !== '' ? "({$existing}) AND ({$filterQ})" : $filterQ;
         $params['limit'] = min((int) ($params['limit'] ?? 25), 100);
@@ -110,7 +110,7 @@ class QueryChainService
         }
 
         /** @var list<array<string, mixed>> $items */
-        $items = (array) \App\Services\OracleQueryTool::withoutLinks($payload['items'] ?? []);
+        $items = (array) OracleQueryTool::withoutLinks($payload['items'] ?? []);
 
         return [
             'items' => $items,
@@ -133,10 +133,6 @@ class QueryChainService
         $values = [];
 
         foreach ($items as $item) {
-            if (! is_array($item)) {
-                continue;
-            }
-
             $v = $item[$field] ?? null;
 
             if ($v === null || $v === '') {

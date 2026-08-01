@@ -19,17 +19,17 @@ class SharingSeeder extends Seeder
      */
     public function run(): void
     {
-        $admin   = User::query()->where('email', 'test@example.com')->firstOrFail();
+        $admin = User::query()->where('email', 'test@example.com')->firstOrFail();
         $analyst = User::query()->where('email', 'analyste@oracledata.test')->firstOrFail();
         $finance = User::query()->where('email', 'finance@oracledata.test')->firstOrFail();
 
         // Queries we want to share across users.
-        $poQuery      = Query::query()->where('name', 'Bons de commande ouverts')->first();
+        $poQuery = Query::query()->where('name', 'Bons de commande ouverts')->first();
         $invoiceQuery = Query::query()->where('name', 'Factures fournisseurs à payer')->first();
-        $agentQuery   = Query::query()->where('name', 'Analyse fournisseurs et factures')->first();
+        $agentQuery = Query::query()->where('name', 'Analyse fournisseurs et factures')->first();
 
         // Resolve groups.
-        $financeGroup   = Group::query()->where('name', 'Équipe Finance')->first();
+        $financeGroup = Group::query()->where('name', 'Équipe Finance')->first();
         $analyticsGroup = Group::query()->where('name', 'Analystes Oracle')->first();
 
         // ── Direct user shares ───────────────────────────────────────────────
@@ -39,14 +39,14 @@ class SharingSeeder extends Seeder
             QueryUserShare::query()->firstOrCreate(
                 [
                     'query_id' => $poQuery->id,
-                    'user_id'  => $analyst->id,
+                    'user_id' => $analyst->id,
                 ],
                 [
                     'shared_by_user_id' => $admin->id,
-                    'permission'        => QuerySharePermission::EXECUTE,
-                    'status'            => QueryUserShare::STATUS_ACCEPTED,
-                    'accepted_at'       => now()->subDays(7),
-                    'respond_by'        => null,
+                    'permission' => QuerySharePermission::EXECUTE,
+                    'status' => QueryUserShare::STATUS_ACCEPTED,
+                    'accepted_at' => now()->subDays(7),
+                    'respond_by' => null,
                 ],
             );
         }
@@ -56,14 +56,14 @@ class SharingSeeder extends Seeder
             QueryUserShare::query()->firstOrCreate(
                 [
                     'query_id' => $agentQuery->id,
-                    'user_id'  => $finance->id,
+                    'user_id' => $finance->id,
                 ],
                 [
                     'shared_by_user_id' => $admin->id,
-                    'permission'        => QuerySharePermission::VIEW,
-                    'status'            => QueryUserShare::STATUS_ACCEPTED,
-                    'accepted_at'       => now()->subDays(3),
-                    'respond_by'        => null,
+                    'permission' => QuerySharePermission::VIEW,
+                    'status' => QueryUserShare::STATUS_ACCEPTED,
+                    'accepted_at' => now()->subDays(3),
+                    'respond_by' => null,
                 ],
             );
         }
@@ -78,12 +78,12 @@ class SharingSeeder extends Seeder
 
             if (! $existing) {
                 QueryUserShare::create([
-                    'query_id'          => $invoiceQuery->id,
-                    'user_id'           => $analyst->id,
+                    'query_id' => $invoiceQuery->id,
+                    'user_id' => $analyst->id,
                     'shared_by_user_id' => $finance->id,
-                    'permission'        => QuerySharePermission::CLONE,
-                    'status'            => QueryUserShare::STATUS_PENDING,
-                    'respond_by'        => now()->addDays(7),
+                    'permission' => QuerySharePermission::CLONE,
+                    'status' => QueryUserShare::STATUS_PENDING,
+                    'respond_by' => now()->addDays(7),
                 ]);
             }
         }
@@ -100,12 +100,12 @@ class SharingSeeder extends Seeder
 
             if (! $exists) {
                 QueryGroupShare::create([
-                    'query_id'          => $poQuery->id,
-                    'group_id'          => $financeGroup->id,
-                    'group_name'        => $financeGroup->name,
+                    'query_id' => $poQuery->id,
+                    'group_id' => $financeGroup->id,
+                    'group_name' => $financeGroup->name,
                     'shared_by_user_id' => $admin->id,
-                    'permission'        => QuerySharePermission::EXECUTE,
-                    'status'            => QueryGroupShare::STATUS_ACCEPTED,
+                    'permission' => QuerySharePermission::EXECUTE,
+                    'status' => QueryGroupShare::STATUS_ACCEPTED,
                 ]);
             }
         }
@@ -120,12 +120,12 @@ class SharingSeeder extends Seeder
 
             if (! $exists) {
                 QueryGroupShare::create([
-                    'query_id'          => $agentQuery->id,
-                    'group_id'          => $analyticsGroup->id,
-                    'group_name'        => $analyticsGroup->name,
+                    'query_id' => $agentQuery->id,
+                    'group_id' => $analyticsGroup->id,
+                    'group_name' => $analyticsGroup->name,
                     'shared_by_user_id' => $admin->id,
-                    'permission'        => QuerySharePermission::VIEW,
-                    'status'            => QueryGroupShare::STATUS_ACCEPTED,
+                    'permission' => QuerySharePermission::VIEW,
+                    'status' => QueryGroupShare::STATUS_ACCEPTED,
                 ]);
             }
         }
@@ -141,10 +141,10 @@ class SharingSeeder extends Seeder
         SavedQueryView::query()->firstOrCreate(
             ['user_id' => $user->id, 'name' => 'Mes requêtes Finance'],
             [
-                'filters'    => [
+                'filters' => [
                     'category' => 'finance',
-                    'mode'     => 'single',
-                    'mine'     => 'true',
+                    'mode' => 'single',
+                    'mine' => 'true',
                 ],
                 'is_default' => false,
             ],
@@ -153,7 +153,7 @@ class SharingSeeder extends Seeder
         SavedQueryView::query()->firstOrCreate(
             ['user_id' => $user->id, 'name' => 'Tout le catalogue'],
             [
-                'filters'    => [
+                'filters' => [
                     'access_level' => 'organization',
                 ],
                 'is_default' => true,

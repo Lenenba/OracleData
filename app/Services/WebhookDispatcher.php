@@ -46,18 +46,14 @@ class WebhookDispatcher
      */
     public function dispatchRunCompleted(QueryExecution $execution): void
     {
-        if ($execution->user_id === null) {
-            return;
-        }
-
         $this->dispatch($execution->user_id, WebhookEvent::RunCompleted->value, [
-            'event'        => WebhookEvent::RunCompleted->value,
+            'event' => WebhookEvent::RunCompleted->value,
             'execution_id' => $execution->id,
-            'query_id'     => $execution->query_id,
-            'tenant_key'   => $execution->oracleTenant?->key,
-            'rows_count'   => $execution->rows_count,
-            'duration_ms'  => $execution->duration_ms,
-            'finished_at'  => $execution->finished_at->toIso8601String(),
+            'query_id' => $execution->query_id,
+            'tenant_key' => $execution->oracleTenant?->key,
+            'rows_count' => $execution->rows_count,
+            'duration_ms' => $execution->duration_ms,
+            'finished_at' => $execution->finished_at->toIso8601String(),
         ]);
     }
 
@@ -67,12 +63,12 @@ class WebhookDispatcher
     public function dispatchExportReady(QueryExport $export): void
     {
         $this->dispatch($export->user_id, WebhookEvent::ExportReady->value, [
-            'event'      => WebhookEvent::ExportReady->value,
-            'export_id'  => $export->id,
-            'query_id'   => $export->query_id,
-            'format'     => $export->format,
-            'row_count'  => $export->row_count,
-            'file_size'  => $export->file_size,
+            'event' => WebhookEvent::ExportReady->value,
+            'export_id' => $export->id,
+            'query_id' => $export->query_id,
+            'format' => $export->format,
+            'row_count' => $export->row_count,
+            'file_size' => $export->file_size,
             'expires_at' => $export->expires_at?->toIso8601String(),
         ]);
     }
@@ -83,14 +79,14 @@ class WebhookDispatcher
     public function dispatchAgentCompleted(AgentAnalysisRun $run): void
     {
         $this->dispatch($run->user_id, WebhookEvent::AgentCompleted->value, [
-            'event'              => WebhookEvent::AgentCompleted->value,
-            'run_id'             => $run->id,
-            'query_id'           => $run->query_id,
-            'iteration'          => $run->iteration,
+            'event' => WebhookEvent::AgentCompleted->value,
+            'run_id' => $run->id,
+            'query_id' => $run->query_id,
+            'iteration' => $run->iteration,
             'oracle_calls_count' => $run->oracle_calls_count,
-            'row_count'          => $run->row_count,
-            'confidence'         => $run->result['confidence'] ?? null,
-            'finished_at'        => $run->finished_at?->toIso8601String(),
+            'row_count' => $run->row_count,
+            'confidence' => $run->result['confidence'] ?? null,
+            'finished_at' => $run->finished_at?->toIso8601String(),
         ]);
     }
 

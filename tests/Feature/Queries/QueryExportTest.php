@@ -38,6 +38,40 @@ function runExportJob(QueryExport $export): void
     app()->call([new RunQueryExport($export, 'client_x'), 'handle']);
 }
 
+/**
+ * @return array{content: string, document: DOMDocument, xpath: DOMXPath}
+ */
+function spreadsheetXmlFor(QueryExport $export): array
+{
+    $path = $export->file_path;
+
+    expect($path)->not->toBeNull();
+
+    $content = Storage::disk(QueryExport::DISK)->get($path);
+
+    expect($content)
+        ->toStartWith('<?xml version="1.0" encoding="UTF-8"?>')
+        ->toEndWith("</Workbook>\n")
+        ->and(substr_count($content, '<Workbook'))->toBe(1)
+        ->and(substr_count($content, '</Workbook>'))->toBe(1)
+        ->and(substr_count($content, '<Worksheet'))->toBe(1)
+        ->and(substr_count($content, '</Worksheet>'))->toBe(1)
+        ->and(substr_count($content, '<Table>'))->toBe(1)
+        ->and(substr_count($content, '</Table>'))->toBe(1);
+
+    $document = new DOMDocument;
+
+    expect($document->loadXML($content, LIBXML_NONET))->toBeTrue()
+        ->and($document->documentElement?->localName)->toBe('Workbook')
+        ->and($document->documentElement?->namespaceURI)
+        ->toBe('urn:schemas-microsoft-com:office:spreadsheet');
+
+    $xpath = new DOMXPath($document);
+    $xpath->registerNamespace('ss', 'urn:schemas-microsoft-com:office:spreadsheet');
+
+    return compact('content', 'document', 'xpath');
+}
+
 test('the owner queues a server export and receives a queued record', function () {
     Queue::fake();
     $query = exportableQueryFor($this->runner, $this->clientX->id);
@@ -150,6 +184,100 @@ test('the job streams the full result to a CSV file and records completion', fun
         ->and($content)->toContain('2');
 
     expect(AuditEvent::query()->where('action', 'query.export_completed')->exists())->toBeTrue();
+});
+
+test('the job writes a well formed SpreadsheetML document for an empty XLSX export', function () {
+    Storage::fake('local');
+    Http::fake(['client-x.fa.oraclecloud.com/*' => Http::response([
+        'items' => [],
+        'count' => 0,
+        'hasMore' => false,
+    ])]);
+    $query = exportableQueryFor($this->runner, $this->clientX->id);
+    $query->update([
+        'parameters' => [
+            'limit' => 25,
+            'fields' => ['PersonId', 'DisplayName'],
+        ],
+    ]);
+    $export = QueryExport::factory()->for($this->runner)->create([
+        'query_id' => $query->id,
+        'oracle_tenant_id' => $this->clientX->id,
+        'format' => 'xlsx',
+    ]);
+
+    runExportJob($export);
+
+    $export->refresh();
+    expect($export->status)->toBe(QueryExportStatus::Completed)
+        ->and($export->row_count)->toBe(0)
+        ->and($export->file_path)->toEndWith('.xml');
+
+    ['xpath' => $xpath] = spreadsheetXmlFor($export);
+    $rows = $xpath->query('/ss:Workbook/ss:Worksheet/ss:Table/ss:Row');
+    $headerCells = $xpath->query('/ss:Workbook/ss:Worksheet/ss:Table/ss:Row[1]/ss:Cell/ss:Data');
+
+    expect($rows)->not->toBeFalse()
+        ->and($rows->length)->toBe(1)
+        ->and($headerCells)->not->toBeFalse()
+        ->and($headerCells->length)->toBe(2)
+        ->and($headerCells->item(0)?->textContent)->toBe('PersonId')
+        ->and($headerCells->item(1)?->textContent)->toBe('DisplayName');
+});
+
+test('the job writes complete rows and escaped values in a non empty XLSX export', function () {
+    Storage::fake('local');
+    Http::fake(['client-x.fa.oraclecloud.com/*' => Http::response([
+        'items' => [
+            ['PersonId' => 101, 'DisplayName' => 'A&B <Admin>', 'Active' => true],
+            ['PersonId' => 102, 'DisplayName' => 'Zoë', 'Active' => false],
+        ],
+        'count' => 2,
+        'hasMore' => false,
+    ])]);
+    $query = exportableQueryFor($this->runner, $this->clientX->id);
+    $query->update([
+        'parameters' => [
+            'limit' => 25,
+            'fields' => ['PersonId', 'DisplayName', 'Active'],
+        ],
+    ]);
+    $export = QueryExport::factory()->for($this->runner)->create([
+        'query_id' => $query->id,
+        'oracle_tenant_id' => $this->clientX->id,
+        'format' => 'xlsx',
+        'export_options' => ['sheet_name' => 'People & access'],
+    ]);
+
+    runExportJob($export);
+
+    $export->refresh();
+    expect($export->status)->toBe(QueryExportStatus::Completed)
+        ->and($export->row_count)->toBe(2);
+
+    ['content' => $content, 'xpath' => $xpath] = spreadsheetXmlFor($export);
+    $rows = $xpath->query('/ss:Workbook/ss:Worksheet/ss:Table/ss:Row');
+    $firstDataCells = $xpath->query('/ss:Workbook/ss:Worksheet/ss:Table/ss:Row[2]/ss:Cell/ss:Data');
+    $secondDataCells = $xpath->query('/ss:Workbook/ss:Worksheet/ss:Table/ss:Row[3]/ss:Cell/ss:Data');
+
+    expect($content)->toContain('A&amp;B &lt;Admin&gt;')
+        ->and($content)->not->toContain('A&B <Admin>')
+        ->and($rows)->not->toBeFalse()
+        ->and($rows->length)->toBe(3)
+        ->and($firstDataCells)->not->toBeFalse()
+        ->and($firstDataCells->length)->toBe(3)
+        ->and($firstDataCells->item(0)?->textContent)->toBe('101')
+        ->and($firstDataCells->item(1)?->textContent)->toBe('A&B <Admin>')
+        ->and($firstDataCells->item(2)?->textContent)->toBe('1')
+        ->and($secondDataCells)->not->toBeFalse()
+        ->and($secondDataCells->length)->toBe(3)
+        ->and($secondDataCells->item(0)?->textContent)->toBe('102')
+        ->and($secondDataCells->item(1)?->textContent)->toBe('Zoë')
+        ->and($secondDataCells->item(2)?->textContent)->toBe('0')
+        ->and($xpath->evaluate('string(/ss:Workbook/ss:Worksheet/@ss:Name)'))
+        ->toBe('People & access')
+        ->and($xpath->evaluate('string(/ss:Workbook/ss:Worksheet/ss:Table/ss:Row[2]/ss:Cell[1]/ss:Data/@ss:Type)'))
+        ->toBe('Number');
 });
 
 test('the job paginates Oracle across multiple pages', function () {

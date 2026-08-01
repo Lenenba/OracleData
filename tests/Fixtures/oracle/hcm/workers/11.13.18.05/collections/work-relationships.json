@@ -1,0 +1,37 @@
+{
+  "items": [
+    {
+      "PeriodOfServiceId": 200001,
+      "LegalEmployerName": "Example Legal Employer",
+      "WorkerType": "E",
+      "StartDate": "2024-01-01",
+      "PrimaryFlag": true,
+      "links": [
+        {
+          "rel": "self",
+          "href": "https://oracle.invalid/hcmRestApi/resources/11.13.18.05/workers/WRK_FAKE_HASH_001/child/workRelationships/200001",
+          "name": "workRelationships",
+          "kind": "item"
+        },
+        {
+          "rel": "child",
+          "href": "https://oracle.invalid/hcmRestApi/resources/11.13.18.05/workers/WRK_FAKE_HASH_001/child/workRelationships/200001/child/assignments",
+          "name": "assignments",
+          "kind": "collection"
+        }
+      ]
+    }
+  ],
+  "count": 1,
+  "hasMore": false,
+  "limit": 1,
+  "offset": 0,
+  "links": [
+    {
+      "rel": "self",
+      "href": "https://oracle.invalid/hcmRestApi/resources/11.13.18.05/workers/WRK_FAKE_HASH_001/child/workRelationships?limit=1",
+      "name": "workRelationships",
+      "kind": "collection"
+    }
+  ]
+}

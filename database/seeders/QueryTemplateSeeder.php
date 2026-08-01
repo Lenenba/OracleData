@@ -379,7 +379,7 @@ class QueryTemplateSeeder extends Seeder
 
             $definition = [
                 'name' => $template['name'],
-                'description' => $template['description'] ?? null,
+                'description' => $template['description'],
                 'category_id' => $template['category_id'] ?? null,
                 'resource_key' => $template['resource_key'],
                 'resource_path' => $template['resource_path'],

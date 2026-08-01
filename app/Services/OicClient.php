@@ -162,8 +162,8 @@ class OicClient
             $response->throw();
 
             Log::info('oic.request.completed', [
-                'path'        => $path,
-                'status'      => $response->status(),
+                'path' => $path,
+                'status' => $response->status(),
                 'duration_ms' => $this->elapsedMs($startedAt),
             ]);
 
@@ -171,28 +171,28 @@ class OicClient
 
         } catch (RuntimeException $e) {
             Log::warning('oic.request.failed', [
-                'path'        => $path,
-                'status'      => null,
+                'path' => $path,
+                'status' => null,
                 'duration_ms' => $this->elapsedMs($startedAt),
-                'message'     => $e->getMessage(),
+                'message' => $e->getMessage(),
             ]);
             throw $e;
         } catch (Throwable $e) {
             Log::warning('oic.request.failed', [
-                'path'        => $path,
-                'status'      => $e instanceof RequestException ? $e->response->status() : null,
+                'path' => $path,
+                'status' => $e instanceof RequestException ? $e->response->status() : null,
                 'duration_ms' => $this->elapsedMs($startedAt),
-                'exception'   => $e::class,
+                'exception' => $e::class,
             ]);
 
             throw new RuntimeException(
                 $e instanceof RequestException
                     ? match ($e->response->status()) {
-                        403  => __("Accès refusé : le compte OIC ne dispose pas des droits de monitoring (rôle ServiceAdministrator requis)."),
-                        429  => __('OIC reçoit trop de demandes. Réessayez dans quelques instants.'),
+                        403 => __('Accès refusé : le compte OIC ne dispose pas des droits de monitoring (rôle ServiceAdministrator requis).'),
+                        429 => __('OIC reçoit trop de demandes. Réessayez dans quelques instants.'),
                         default => __('Oracle Integration Cloud est temporairement indisponible.'),
                     }
-                    : __('Oracle Integration Cloud ne répond pas dans le délai attendu.'),
+                : __('Oracle Integration Cloud ne répond pas dans le délai attendu.'),
                 previous: $e,
             );
         }

@@ -27,6 +27,7 @@ class UpdateQueryParametersRequest extends FormRequest
     {
         return [
             'parameter_definitions' => ['present', 'array', 'max:20'],
+            'parameter_definitions.*' => ['array'],
             'parameter_definitions.*.key' => ['required', 'string', 'max:64'],
             'parameter_definitions.*.type' => ['required', 'string', 'max:20'],
             'parameter_definitions.*.label' => ['required', 'string', 'max:255'],

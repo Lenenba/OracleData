@@ -7,13 +7,17 @@ use App\Enums\SemanticSqlMappingStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UpdateSemanticResourceRequest;
 use App\Models\SemanticField;
+use App\Models\SemanticFieldTranslation;
 use App\Models\SemanticGlossaryTerm;
 use App\Models\SemanticRelation;
+use App\Models\SemanticRelationTranslation;
 use App\Models\SemanticResource;
+use App\Models\SemanticResourceTranslation;
 use App\Models\User;
 use App\Services\OracleResourceCatalog;
 use App\Services\SemanticCatalogGovernanceService;
 use BackedEnum;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -107,9 +111,9 @@ class SemanticCatalogController extends Controller
             'resource' => [
                 ...$this->resource($semanticResource),
                 'fields' => $semanticResource->fields
-                    ->sortBy(fn ($field): string => $field->child_key.'.'.$field->source_name)
+                    ->sortBy(fn (SemanticField $field): string => $field->child_key.'.'.$field->source_name)
                     ->values()
-                    ->map(fn ($field): array => [
+                    ->map(fn (SemanticField $field): array => [
                         'id' => $field->id,
                         'child_key' => $field->child_key,
                         'source_name' => $field->source_name,
@@ -121,20 +125,21 @@ class SemanticCatalogController extends Controller
                         'is_nullable' => (bool) $field->is_nullable,
                         'is_updatable' => (bool) $field->is_updatable,
                         'is_active' => $field->is_active,
-                        'last_seen_at' => $field->last_seen_at?->toISOString(),
+                        'last_seen_at' => $this->isoDate($field->last_seen_at),
                         'lock_version' => $field->lock_version,
-                        'translations' => $field->translations->map(fn ($translation): array => [
+                        'translations' => $field->translations->map(fn (SemanticFieldTranslation $translation): array => [
                             'locale' => $translation->locale,
                             'name' => $translation->name,
                             'description' => $translation->description,
                             'synonyms' => $translation->synonyms ?? [],
                             'examples' => $translation->examples ?? [],
-                        ])->values(),
-                    ]),
+                        ])->values()->all(),
+                    ])
+                    ->all(),
                 'relations' => $semanticResource->outgoingRelations
                     ->sortBy('relation_key')
                     ->values()
-                    ->map(fn ($relation): array => [
+                    ->map(fn (SemanticRelation $relation): array => [
                         'id' => $relation->id,
                         'relation_key' => $relation->relation_key,
                         'kind' => $this->value($relation->kind),
@@ -148,12 +153,13 @@ class SemanticCatalogController extends Controller
                         'status' => $this->value($relation->status),
                         'is_active' => $relation->is_active,
                         'lock_version' => $relation->lock_version,
-                        'translations' => $relation->translations->map(fn ($translation): array => [
+                        'translations' => $relation->translations->map(fn (SemanticRelationTranslation $translation): array => [
                             'locale' => $translation->locale,
                             'name' => $translation->name,
                             'description' => $translation->description,
-                        ])->values(),
-                    ]),
+                        ])->values()->all(),
+                    ])
+                    ->all(),
             ],
             'ownerCandidates' => $this->owners(),
             'targetResources' => SemanticResource::query()
@@ -165,10 +171,7 @@ class SemanticCatalogController extends Controller
                 ->map(fn (SemanticResource $resource): array => [
                     'id' => $resource->id,
                     'resource_key' => $resource->resource_key,
-                    'name' => $resource->translations
-                        ->firstWhere('locale', $locale)?->name
-                        ?? $resource->translations->firstWhere('locale', 'fr')?->name
-                        ?? $resource->source_name,
+                    'name' => $this->resourceName($resource, $locale),
                     'fields' => $resource->fields->pluck('source_name')->unique()->values(),
                     'local_key' => (string) ($allowedJoins[$resource->resource_key]['local_key'] ?? ''),
                     'remote_key' => (string) ($allowedJoins[$resource->resource_key]['remote_key'] ?? ''),
@@ -249,15 +252,53 @@ class SemanticCatalogController extends Controller
     /** @return list<array{id: int, name: string, email: string}> */
     private function owners(): array
     {
-        return User::query()->orderBy('name')->get(['id', 'name', 'email'])
-            ->map(fn (User $user): array => $this->owner($user) ?? [])
+        $owners = User::query()->orderBy('name')->get(['id', 'name', 'email'])
+            ->map(fn (User $user): array => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+            ])
+            ->values()
             ->all();
+
+        return [...$owners];
     }
 
     /** @return array{id: int, name: string, email: string}|null */
     private function owner(?User $user): ?array
     {
         return $user === null ? null : ['id' => $user->id, 'name' => $user->name, 'email' => $user->email];
+    }
+
+    private function resourceName(SemanticResource $resource, string $locale): string
+    {
+        $translation = $this->translationForLocale($resource->translations, $locale)
+            ?? $this->translationForLocale($resource->translations, 'fr');
+
+        return $translation === null ? $resource->source_name : $translation->name;
+    }
+
+    /**
+     * @param  iterable<SemanticResourceTranslation>  $translations
+     */
+    private function translationForLocale(iterable $translations, string $locale): ?SemanticResourceTranslation
+    {
+        foreach ($translations as $translation) {
+            if ($translation->locale === $locale) {
+                return $translation;
+            }
+        }
+
+        return null;
+    }
+
+    private function isoDate(mixed $value): ?string
+    {
+        if ($value instanceof CarbonInterface) {
+            return $value->toISOString();
+        }
+
+        return is_string($value) && $value !== '' ? $value : null;
     }
 
     /** @return array<string, bool> */

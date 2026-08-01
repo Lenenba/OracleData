@@ -16,7 +16,7 @@ use Illuminate\Support\Carbon;
  * @property int $user_id
  * @property string $extraction_field
  * @property string $injection_param
- * @property string $injection_operator  'equals'|'in'
+ * @property string $injection_operator 'equals'|'in'
  * @property string|null $label
  * @property int $position
  * @property Carbon|null $created_at

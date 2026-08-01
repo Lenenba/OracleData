@@ -60,7 +60,7 @@ class AuthenticateApiToken
     {
         $header = $request->header('Authorization', '');
 
-        if (! is_string($header) || ! str_starts_with($header, 'Bearer ')) {
+        if (! str_starts_with($header, 'Bearer ')) {
             return null;
         }
 

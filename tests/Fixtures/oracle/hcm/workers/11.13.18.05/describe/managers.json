@@ -1,0 +1,61 @@
+{
+  "Resources": {
+    "managers": {
+      "title": "Managers",
+      "attributes": [
+        {
+          "name": "AssignmentSupervisorId",
+          "type": "integer",
+          "mandatory": true,
+          "updatable": false,
+          "queryable": true,
+          "nullable": false
+        },
+        {
+          "name": "ManagerAssignmentId",
+          "type": "integer",
+          "mandatory": false,
+          "updatable": true,
+          "queryable": true,
+          "nullable": true
+        },
+        {
+          "name": "ManagerAssignmentNumber",
+          "type": "string",
+          "mandatory": false,
+          "updatable": false,
+          "queryable": true,
+          "nullable": true,
+          "maxLength": 30
+        },
+        {
+          "name": "ManagerType",
+          "type": "string",
+          "mandatory": false,
+          "updatable": true,
+          "queryable": true,
+          "nullable": true,
+          "maxLength": 30
+        },
+        {
+          "name": "EffectiveStartDate",
+          "type": "string",
+          "format": "date",
+          "mandatory": false,
+          "updatable": true,
+          "queryable": true,
+          "nullable": true
+        },
+        {
+          "name": "EffectiveEndDate",
+          "type": "string",
+          "format": "date",
+          "mandatory": false,
+          "updatable": true,
+          "queryable": true,
+          "nullable": true
+        }
+      ]
+    }
+  }
+}
