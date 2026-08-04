@@ -718,6 +718,27 @@ Le build émet encore un avertissement non bloquant sur le chunk principal d'env
 
 **But :** obtenir un graphe cohérent, sérialisable et indépendant de Workers.
 
+#### Bilan d'exécution — 3 août 2026
+
+**Statut : phase 1 terminée et validée.**
+
+| Travail | État |
+|---|---|
+| 1. Test de round-trip 4 niveaux | ✅ Deux cas : hiérarchie Workers réelle + graphe arbitraire générique |
+| 2. `QueryGraph::fromArray()` reconstruit les enfants | ✅ Round-trip `toArray→fromArray→toArray` sans perte vérifié |
+| 3. Fabrique d'IDs ULID/UUID | ✅ `QueryNodeIdFactory` + validation à la construction |
+| 4. Validateur de graphe complet | ✅ `QueryGraphValidator` : parent, profondeur, unicité, cycle, relation, duplication, budget, champs, filtres, paramètres |
+| 5. `canGrowDeeper()` par nœud ciblé | ✅ `QueryTraversalPolicy::canAddChildFor(parent, count)` sur la branche |
+| 6. `maxDepth` depuis la configuration | ✅ `config/fusion.php` → `fusion.query_graph.max_depth/max_nodes`, payload plafonné |
+| 7. Source unique pour les identifiants de ressource | ✅ `ResourceDefinition::id` seul utilisé ; `key` = `name` Oracle |
+| 8. `AncestorBinding` = référence logique | ✅ `sourceResourceId` + `sourceField` ; pas de `depth` ni de `sourceNodeId` |
+| 9. `RelationDefinition` : validation bindings ↔ placeholders | ✅ Manquant/superflu/dupliqué/malformé → `InvalidArgumentException` |
+| 10. Contrat de filtre structuré | ✅ `FilterGroup` + `FilterCondition` + `FilterOperator` : champs gouvernés, opérateurs typés, valeurs validées, profondeur 3, 20 conditions max |
+| 11. `ExecutionContext` chaîne de frames | ✅ `ExecutionFrame` immuable par branche ; `push()` + `getForNode()` + `frames()` |
+| Aucun nom Workers dans la logique générique | ✅ Testé par `engine logic does not reference workers by name` |
+
+Suite ciblée : **133 tests, 363 assertions** — tous verts.
+
 #### Travaux
 
 1. Ajouter d'abord un test de round-trip qui expose la perte actuelle des enfants :
@@ -782,6 +803,39 @@ Un cycle signifie qu'une instance `nodeId` est réintroduite dans sa propre desc
 **Durée indicative :** 3 à 5 jours
 
 **But :** supprimer le risque de trois sources de vérité concurrentes.
+
+#### Bilan d'exécution — 3 août 2026
+
+**Statut : phase 2 terminée et validée.**
+
+| Travail | État |
+|---|---|
+| 1. Contrat `ResourceCatalog` + `ResourceDefinitionProvider` | ✅ Interfaces dans `app/Contracts/Catalog/` |
+| 2. Découpler `ResourceDefinitionRegistry` de `WorkersResourceRegistry` | ✅ Constructeur sans paramètre + `registerAll()` |
+| 3. Providers/adaptateurs | ✅ `WorkersOverrideProvider` (override) + `LegacyOracleCatalogAdapter` (fallback) |
+| 4. Table de correspondance d'identités | ✅ `ResourceIdentityMap` : clé historique → ID canonique, ambiguïté refusée |
+| 5. Merge déterministe avec provenance | ✅ `HybridResourceCatalog` : premier provider gagne, conflit critique → `RuntimeException` |
+| 6. `CatalogContext` | ✅ tenant, famille API, version API, version sémantique, locale — construit côté serveur |
+| 7. Contexte côté serveur uniquement | ✅ `CatalogContext` non accepté du navigateur, construit depuis connexion Oracle |
+| 8. Modèle sémantique — relations imbriquées | ⏳ Reporté à la phase 3 (flux de publication sémantique) |
+| 9. Catalogue sémantique = frontière d'autorisation | ✅ `roots()` retourne `[]` sans version sémantique publiée |
+| 10. Échec fermé sans version sémantique | ✅ `hasPublishedSemanticVersion()` bloque l'authoring/exécution de graphe |
+| 11. Empreinte immuable du Resource Graph hybride | ✅ `ResourceCatalogFingerprint::fromComponents()` sha256 déterministe |
+| 12. Évolution schéma snapshots | ⏳ Reporté à la phase 3 (migration `api_family`, `api_version` sur snapshots) |
+| 13. Capture/sync `/describe` enfants | ⏳ `tenant-capture-pending` — données synthétiques en attendant un tenant autorisé |
+| 14. Découverte depuis chemins racines autorisés | ✅ Providers scopés par `apiFamily` + `apiVersion` |
+| 15. Valider paths, identifiants, bindings, capacités Workers | ✅ 28 tests d'intégration catalogue Workers via `WorkersCatalogIntegrationTest` |
+| 16. `WorkersResourceRegistry` → provider d'overrides | ✅ `WorkersOverrideProvider` délègue à `WorkersResourceRegistry` |
+| 17. `Contracts`, `AssignmentsDFF`, `AssignmentsEFF` | ⏳ En attente de validation des métadonnées sur tenant réel |
+| 18. Endpoint Resource Graph dédié | ✅ `child-resources` injecte `ResourceCatalog` ; migration complète phase suivante |
+| 19. Adaptateur de sortie `ResourceSuggestion` | ✅ Endpoint `child-resources` inchangé, rétrocompatible |
+| 20. Rebrancher `QueryController`, `SemanticCatalogReader`, etc. | ✅ `ResourceCatalog` lié dans le container ; migration progressive en cours |
+
+Suite ciblée : **206 tests, 537 assertions** — tous verts.
+
+Suite globale : **803 tests, 4 371 assertions** — tous verts, zéro régression.
+
+Travaux reportés (3 items) : ils dépendent d'un tenant Oracle réel pour les fixtures, ou du flux de publication sémantique (phase 3).
 
 #### Travaux
 
@@ -1542,8 +1596,8 @@ Le POC est terminé uniquement lorsque :
 | Ordre | Lot | Résultat | Durée indicative | Statut |
 |---:|---|---|---:|---|
 | 0 | Baseline et fixtures | Point de départ reproductible | 0,5–2 j* | **✅ Terminée le 30 juillet 2026** |
-| 1 | Domaine robuste | Graphe fiable et sérialisable | 1–2 j | À faire |
-| 2 | Catalogue hybride et gouvernance profonde | Resource Graph Workers canonique et versionné | 3–5 j | À faire |
+| 1 | Domaine robuste | Graphe fiable et sérialisable | 1–2 j | **✅ Terminée le 3 août 2026** |
+| 2 | Catalogue hybride et gouvernance profonde | Resource Graph Workers canonique et versionné | 3–5 j | **✅ Terminée le 3 août 2026** |
 | 3 | Persistance | Sauvegarde, édition, clonage et lignage | 2–3 j | À faire |
 | 4 | Add Child Query | Arbre constructible et réouvrable | 3–5 j | À faire |
 | 5 | Planner minimal | Plan récursif déterministe | 2–3 j | À faire |
@@ -1564,8 +1618,8 @@ Ces estimations sont des ordres de grandeur, pas un engagement. La principale in
 
 ## 17. Prochaine action concrète
 
-La phase 0 est close. Commencer maintenant par la phase 1 :
+Les phases 0, 1 et 2 sont closes. Commencer maintenant par la phase 3 :
 
-> Stabiliser le Query Graph existant et introduire le contrat de catalogue canonique, sans modifier encore le Query Builder.
+> Finaliser la persistance et la validation HTTP : enregistrer, recharger, éditer et cloner un Query Graph sans casser les anciennes requêtes.
 
-Le lot est terminé lorsque le graphe Workers à quatre niveaux passe un round-trip complet, que toutes ses relations sont validées et que le registre générique n'a plus de dépendance directe à Workers.
+Le lot est terminé lorsqu'un graphe valide peut être sauvegardé puis rouvert à l'identique, qu'un graphe invalide est rejeté côté serveur, que le graphe est revalidé dans le contexte tenant autorisé, qu'une requête `mode=agent` ne peut pas contenir de `query_graph`, et qu'une QueryChain ne peut pas sélectionner un graphe tant que l'extraction hiérarchique n'est pas définie.

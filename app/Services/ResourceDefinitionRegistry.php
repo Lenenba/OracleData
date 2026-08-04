@@ -4,19 +4,15 @@ namespace App\Services;
 
 use App\Domain\Resource\RelationDefinition;
 use App\Domain\Resource\ResourceDefinition;
-use App\Services\Workers\WorkersResourceRegistry;
 
 /**
  * Registre central de toutes les ResourceDefinitions.
  *
- * Point unique de lookup pour le Query Builder.
- * Chaque module (HCM, Procurement, Financials…) enregistre ses definitions ici.
+ * Point unique de lookup pour le Query Builder (endpoint child-resources).
+ * Chaque provider enregistre ses définitions via register() ou registerAll().
  *
- * Actuellement peuplé manuellement par les registries de modules.
- * Plus tard, OracleMetadataProvider pourra enrichir ce registre
- * avec des définitions découvertes dynamiquement.
- *
- * @see WorkersResourceRegistry  Preuve de concept Workers
+ * Ce registre est découplé de tout module concret (Workers, Procurement…).
+ * L'injection de providers se fait dans AppServiceProvider.
  */
 class ResourceDefinitionRegistry
 {
@@ -26,9 +22,16 @@ class ResourceDefinitionRegistry
     /** @var array<string, RelationDefinition>  [id → RelationDefinition] */
     private array $relations = [];
 
-    public function __construct(WorkersResourceRegistry $workers)
+    public function __construct() {}
+
+    /**
+     * Enregistre toutes les définitions d'un ensemble.
+     *
+     * @param  list<ResourceDefinition>  $definitions
+     */
+    public function registerAll(array $definitions): void
     {
-        foreach ($workers->all() as $def) {
+        foreach ($definitions as $def) {
             $this->register($def);
         }
     }

@@ -188,7 +188,12 @@ test('QueryNode::descendants returns all descendants in DFS', function () {
 // ──────────────────────────────────────────────────────────────────────────────
 
 test('QueryGraph round-trips the Workers to Managers hierarchy without loss', function () {
-    $registry = new ResourceDefinitionRegistry(new WorkersResourceRegistry);
+    $registry = (function () {
+        $r = new ResourceDefinitionRegistry;
+        $r->registerAll((new WorkersResourceRegistry)->all());
+
+        return $r;
+    })();
     $workersResource = $registry->findOrFail('hcm.workers');
     $relationshipsResource = $registry->findOrFail('hcm.workers.workRelationships');
     $assignmentsResource = $registry->findOrFail('hcm.workers.workRelationships.assignments');
@@ -262,7 +267,12 @@ test('QueryGraph round-trips an arbitrary four-level payload without losing chil
         [FieldDefinition::identifier('fourthId'), FieldDefinition::string('fourthName')],
     );
 
-    $registry = new ResourceDefinitionRegistry(new WorkersResourceRegistry);
+    $registry = (function () {
+        $r = new ResourceDefinitionRegistry;
+        $r->registerAll((new WorkersResourceRegistry)->all());
+
+        return $r;
+    })();
     foreach ([$rootResource, $secondResource, $thirdResource, $fourthResource] as $resource) {
         $registry->register($resource);
     }
@@ -496,7 +506,12 @@ test('managers path resolves correctly from full context', function () {
 // ──────────────────────────────────────────────────────────────────────────────
 
 test('ResourceDefinitionRegistry finds workers by id', function () {
-    $registry = new ResourceDefinitionRegistry(new WorkersResourceRegistry);
+    $registry = (function () {
+        $r = new ResourceDefinitionRegistry;
+        $r->registerAll((new WorkersResourceRegistry)->all());
+
+        return $r;
+    })();
 
     $workers = $registry->find('hcm.workers');
 
@@ -505,7 +520,12 @@ test('ResourceDefinitionRegistry finds workers by id', function () {
 });
 
 test('ResourceDefinitionRegistry::childrenOf returns workRelationships for workers', function () {
-    $registry = new ResourceDefinitionRegistry(new WorkersResourceRegistry);
+    $registry = (function () {
+        $r = new ResourceDefinitionRegistry;
+        $r->registerAll((new WorkersResourceRegistry)->all());
+
+        return $r;
+    })();
     $children = $registry->childrenOf('hcm.workers');
 
     expect(collect($children)->pluck('id')->toArray())
@@ -513,28 +533,48 @@ test('ResourceDefinitionRegistry::childrenOf returns workRelationships for worke
 });
 
 test('ResourceDefinitionRegistry::childrenOf returns five children for assignments', function () {
-    $registry = new ResourceDefinitionRegistry(new WorkersResourceRegistry);
+    $registry = (function () {
+        $r = new ResourceDefinitionRegistry;
+        $r->registerAll((new WorkersResourceRegistry)->all());
+
+        return $r;
+    })();
     $children = $registry->childrenOf('hcm.workers.workRelationships.assignments');
 
     expect($children)->toHaveCount(5);
 });
 
 test('ResourceDefinitionRegistry::childrenOf returns empty for leaf', function () {
-    $registry = new ResourceDefinitionRegistry(new WorkersResourceRegistry);
+    $registry = (function () {
+        $r = new ResourceDefinitionRegistry;
+        $r->registerAll((new WorkersResourceRegistry)->all());
+
+        return $r;
+    })();
     $children = $registry->childrenOf('hcm.workers.workRelationships.assignments.managers');
 
     expect($children)->toBeEmpty();
 });
 
 test('ResourceDefinitionRegistry::findOrFail throws for unknown id', function () {
-    $registry = new ResourceDefinitionRegistry(new WorkersResourceRegistry);
+    $registry = (function () {
+        $r = new ResourceDefinitionRegistry;
+        $r->registerAll((new WorkersResourceRegistry)->all());
+
+        return $r;
+    })();
 
     expect(fn () => $registry->findOrFail('unknown.resource'))
         ->toThrow(RuntimeException::class);
 });
 
 test('ResourceDefinitionRegistry::forModule returns only hcm resources', function () {
-    $registry = new ResourceDefinitionRegistry(new WorkersResourceRegistry);
+    $registry = (function () {
+        $r = new ResourceDefinitionRegistry;
+        $r->registerAll((new WorkersResourceRegistry)->all());
+
+        return $r;
+    })();
     $hcm = $registry->forModule('hcm');
 
     expect($hcm)->not->toBeEmpty();
@@ -545,7 +585,12 @@ test('ResourceDefinitionRegistry::forModule returns only hcm resources', functio
 
 test('engine logic does not reference workers by name — registry is generic', function () {
     // Le moteur doit fonctionner via IDs génériques, pas via "if resource == workers"
-    $registry = new ResourceDefinitionRegistry(new WorkersResourceRegistry);
+    $registry = (function () {
+        $r = new ResourceDefinitionRegistry;
+        $r->registerAll((new WorkersResourceRegistry)->all());
+
+        return $r;
+    })();
 
     // Un registre fictif avec le même schéma que Workers mais des noms différents
     $fakeParent = new ResourceDefinition(

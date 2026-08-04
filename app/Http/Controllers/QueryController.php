@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Contracts\Catalog\ResourceCatalog;
 use App\Domain\Query\QueryTraversalPolicy;
 use App\Domain\Resource\FieldDefinition;
 use App\Domain\Resource\RelationDefinition;
@@ -694,8 +695,11 @@ class QueryController extends Controller
      *   "policy": { maxDepth: 6 }
      * }
      */
-    public function childResources(Request $request, ResourceDefinitionRegistry $registry): JsonResponse
-    {
+    public function childResources(
+        Request $request,
+        ResourceDefinitionRegistry $registry,
+        ResourceCatalog $catalog,
+    ): JsonResponse {
         abort_unless(
             (bool) config('fusion.query_graph.resource_graph_enabled', false),
             404,
@@ -712,6 +716,10 @@ class QueryController extends Controller
         $depth = (int) ($validated['depth'] ?? 1);
         $nodeCount = (int) ($validated['node_count'] ?? 1);
 
+        // Le ResourceDefinitionRegistry reste la source courante pour cet endpoint.
+        // Le catalogue canonique (ResourceCatalog) est injecté pour un usage futur.
+        // Un refactoring ultérieur migrera entièrement vers ResourceCatalog
+        // lorsque le CatalogContext sera résolu depuis la connexion de l'utilisateur.
         $resource = $registry->find($resourceId);
 
         if ($resource === null) {
