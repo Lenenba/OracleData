@@ -22,6 +22,7 @@ import { QueryAccessLevelBadge } from '@/components/queries/query-access-level-b
 import { QueryConfigPanel } from '@/components/queries/query-config-panel';
 import { QueryResultView } from '@/components/queries/query-result';
 import { ResourcePicker } from '@/components/queries/resource-picker';
+import { SqlTranslatorPanel } from '@/components/queries/sql-translator-panel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -691,9 +692,9 @@ export function QueryBuilder({
     const [tagInput, setTagInput] = useState('');
     const [saving, setSaving] = useState(false);
     const [saveErrors, setSaveErrors] = useState<string[]>([]);
-    const [activeTab, setActiveTab] = useState<'preview' | 'sql' | 'agent'>(
-        'preview',
-    );
+    const [activeTab, setActiveTab] = useState<
+        'preview' | 'sql' | 'agent' | 'sql2api'
+    >('preview');
     const agentPreview = useAgentPreview();
     // Aucun appel Oracle tant que l'utilisateur n'a pas demandé l'aperçu. En
     // édition, la requête existante s'affiche d'emblée (un appel attendu).
@@ -1114,6 +1115,20 @@ export function QueryBuilder({
                             <Bot className="size-4" />
                             {t('agentPreview.title')}
                         </button>
+                        {/* Lot 11C — SQL → API translator tab */}
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab('sql2api')}
+                            className={[
+                                'flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors',
+                                activeTab === 'sql2api'
+                                    ? 'border-primary text-primary'
+                                    : 'border-transparent text-muted-foreground hover:text-foreground',
+                            ].join(' ')}
+                        >
+                            <Code2 className="size-4" />
+                            {t('sqlTranslator.tabLabel')}
+                        </button>
 
                         <div className="ml-auto flex items-center gap-2 pr-3">
                             {live.loading && (
@@ -1226,6 +1241,18 @@ export function QueryBuilder({
                                     {bipSql}
                                 </pre>
                             )}
+                        </div>
+                    )}
+
+                    {/* Lot 11C — SQL → API translator tab */}
+                    {activeTab === 'sql2api' && (
+                        <div className="p-4">
+                            <SqlTranslatorPanel
+                                tenants={tenants}
+                                defaultTenant={tenant}
+                                translateUrl="/queries/sql-translate"
+                                translateRunUrl="/queries/sql-translate/run"
+                            />
                         </div>
                     )}
 

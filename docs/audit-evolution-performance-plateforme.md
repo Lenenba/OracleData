@@ -2253,8 +2253,20 @@ Le dashboard fixe optimisé de l'étape 4, les paramètres de templates de l'ét
 - `RunAgentAnalysis::normalizedResult()` inclut ces champs dans le payload stocké et exposé via l'API.
 - `QueryResult` TypeScript : badge de confiance (`ShieldCheck` / `Shield` / `ShieldAlert`) + sources affichées sur les résultats agent.
 
-#### Lot 11C — SQL → API (différé — spécification uniquement)
-Reporté à l'étape 12. La couche sémantique (`SemanticSqlMappingResolver`) pose la fondation ; la traduction bidirectionnelle SQL ↔ REST nécessite un travail de catalogue plus large.
+#### Lot 11C — SQL → API ✅
+
+**Livré et validé le 3 août 2026.**
+
+- `SqlQueryParser` : parseur déterministe d'un SELECT ANSI (colonnes, FROM, JOINs, WHERE, ORDER BY, LIMIT/OFFSET) ; refus immédiat de toute instruction de mutation, CTE, sous-requête corrélée, UNION, fonctions fenêtres et requêtes multiples.
+- `SqlToApiPlanBuilder` : résolution des tables/colonnes/jointures via `SemanticSqlMappingResolver` ; production d'un plan `ApiCall` avec équivalence `exact`, `partial` ou `impossible` et liste des fragments non convertis.
+- `SqlTranslationController` : deux endpoints sous groupe `throttle:15,1` :
+  - `POST /queries/sql-translate` → plan + diagnostic, aucun appel Oracle ;
+  - `POST /queries/sql-translate/run` → plan + exécution Oracle REST après validation du niveau d'équivalence accepté par l'appelant.
+- Onglet **« SQL → API »** dans le `QueryBuilder` (nouvel onglet `sql2api` aux côtés de Aperçu live, SQL BIP et Analyser avec l'IA).
+- Composant `SqlTranslatorPanel` : saisie SQL, bouton Traduire, badge d'équivalence (vert/orange/rouge), plan détaillé repliable, liste des fragments de compatibilité partielle, sélecteur de tenant, sélecteur d'équivalence acceptée, bouton Exécuter avec résultats inline.
+- Audit de chaque traduction et exécution sans données sensibles (`AuditRecorder`).
+- 41 clés `sqlTranslator.*` × 3 langues (FR/EN/ES).
+- `wayfinder:generate` régénéré ; `npx tsc --noEmit` : zéro nouvelle erreur introduite (25 erreurs `.form` pré-existantes inchangées) ; build Vite de production réussi, 2 406 modules transformés.
 
 #### Lot 11D — Suggestions copilote dans le builder ✅
 - `QueryCopilotController::suggest` : `POST /queries/copilot-suggest` — appelle `QueryResolver` (LLM uniquement, sans Oracle), renvoie `{ suggestion, resources[0..5] }` triées par score de pertinence.
@@ -2280,6 +2292,8 @@ Reporté à l'étape 12. La couche sémantique (`SemanticSqlMappingResolver`) po
 - `php artisan wayfinder:generate` : actions générées pour `QueryCopilotController` et `QueryAgentPreviewController`.
 - `npx tsc --noEmit` : zéro nouvelle erreur introduite (22 erreurs `.form` pré-existantes inchangées).
 - `npm run build` : build de production réussi, 2 405 modules transformés.
+
+**L'étape 11 est entièrement livrée au 3 août 2026 (lots 11A, 11B, 11C, 11D, 11E).**
 
 ### Étape 12 — Extensibilité et écosystème — **TERMINÉE le 22 juillet 2026**
 

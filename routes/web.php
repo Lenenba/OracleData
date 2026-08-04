@@ -29,6 +29,7 @@ use App\Http\Controllers\QueryShareController;
 use App\Http\Controllers\QueryShareInvitationController;
 use App\Http\Controllers\QueryTemplateController;
 use App\Http\Controllers\SavedQueryViewController;
+use App\Http\Controllers\SqlTranslationController;
 use App\Http\Middleware\EnsureOnboardingCompleted;
 use Illuminate\Support\Facades\Route;
 
@@ -165,6 +166,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
             // Lot 11D — copilot suggestions for the query builder (LLM only, no Oracle).
             Route::post('queries/copilot-suggest', [QueryCopilotController::class, 'suggest'])
                 ->name('queries.copilot-suggest');
+            // Lot 11C — SQL → API plan translator (no Oracle on translate, Oracle on run).
+            Route::post('queries/sql-translate', [SqlTranslationController::class, 'translate'])
+                ->name('queries.sql-translate');
+            Route::post('queries/sql-translate/run', [SqlTranslationController::class, 'run'])
+                ->name('queries.sql-translate.run');
         });
 
         // Suivi et annulation d'une analyse agent : lectures/écritures DB légères,
